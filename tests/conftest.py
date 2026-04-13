@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
+from db import connect
+from migrations import run_migrations
 
 
 @pytest.fixture
@@ -24,3 +26,14 @@ def tmp_config(tmp_path: Path) -> Config:
         thread_pool=ThreadPoolConfig(max_workers=2),
         scheduler=SchedulerConfig(heartbeat_seconds=60),
     )
+
+
+@pytest.fixture
+def migrated_db(tmp_path: Path) -> Path:
+    db_path = tmp_path / "t.db"
+    conn = connect(db_path)
+    try:
+        run_migrations(conn, Path("migrations"))
+    finally:
+        conn.close()
+    return db_path
