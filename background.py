@@ -41,7 +41,7 @@ class BackgroundServices:
     def _heartbeat(self) -> None:
         self._last_tick = int(time.time())
 
-    def start(self) -> None:
+    def start(self, *, handler=None) -> None:
         if self._started:
             return
         Path(self.config.inbox_dir).mkdir(parents=True, exist_ok=True)
@@ -52,12 +52,16 @@ class BackgroundServices:
             replace_existing=True,
         )
         self.scheduler.start()
-        self.observer.schedule(_NoopHandler(), self.config.inbox_dir, recursive=False)
+        use_handler = handler if handler is not None else _NoopHandler()
+        self.observer.schedule(use_handler, self.config.inbox_dir, recursive=False)
         self.observer.start()
         self._started = True
         log.info(
             "background services started",
-            extra={"max_workers": self.config.thread_pool.max_workers},
+            extra={
+                "max_workers": self.config.thread_pool.max_workers,
+                "handler": type(use_handler).__name__,
+            },
         )
 
     def stop(self) -> None:
