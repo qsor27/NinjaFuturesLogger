@@ -68,8 +68,8 @@ Implementation is split into **phased plans**, one per spec feature, written and
 | Plan | Covers | Status |
 |---|---|---|
 | [00 — Foundation](../superpowers/plans/2026-04-13-00-foundation.md) | Repo skeleton, app factory, `BackgroundServices` (APScheduler + ThreadPoolExecutor + watchdog), SQLite/WAL + migrations, Pydantic `StrictModel`, `compute_session_date`, JSON logging, `/healthz`, Dockerfile, compose | ✅ **Complete** (2026-04-13, 13 commits, 22 tests) |
-| 10 — Import Pipeline | `executions` schema, CSV parser, `ingest_tick`, watchdog handler, `import_runs`/`import_rejects`/`import_cursors`, session archival job, rollback API | ⏳ Next |
-| 11 — Position Building | `build_positions` pure function, reversal splitter, `IntegrityValidator`, `integrity_issues` diff, hooked into import tick | ⏳ |
+| [10 — Import Pipeline](../superpowers/plans/2026-04-13-10-import-pipeline.md) | `executions` schema, CSV parser, `ingest_tick`, watchdog handler, `import_runs`/`import_rejects`/`import_cursors`, session archival job, rollback API | ✅ **Complete** (2026-04-13) |
+| 11 — Position Building | `build_positions` pure function, reversal splitter, `IntegrityValidator`, `integrity_issues` diff, hooked into import tick | ⏳ **Next** |
 | 14 — OHLC Pipeline | `Bar` model, `OhlcSource` protocol, yfinance + Stooq adapters, circuit breaker, fetcher, gap detection, `bars` table, scheduled refresh jobs, fetch job API | ⏳ |
 | 12 — Browsing | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ⏳ |
 | 13 — Charting | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ⏳ |
@@ -85,6 +85,17 @@ Implementation is split into **phased plans**, one per spec feature, written and
 - **Session math.** `services.time_utils.compute_session_date(ts_utc) -> date` implements the 16:00 America/Chicago rollover; tested across DST transitions. Features 10, 15, 17 import it.
 - **Healthz.** `GET /healthz` returns 200 when SQLite reads succeed, the scheduler is running, the watchdog observer is alive, and the thread pool is not saturated; 503 otherwise. This is wired into the Docker healthcheck.
 - **One container.** `docker compose up -d` brings up exactly one service (`futurestradinglog`) that reaches `Up (healthy)` inside ~20s. `docker compose ps` shows one row — the invariant from doc 03 holds.
+
+### What Plan 10 landed
+
+- **Executions table.** `migrations/002_executions.sql` ships `executions`, `import_cursors`, `import_runs`, `import_rejects`. Composite PK `(nt_execution_id, account)` plus `UNIQUE INDEX idx_executions_nt_execution_id` gives plan 12/16 user-metadata tables a clean single-column FK target.
+- **CSV parser.** `services/csv_parser.parse_execution_row` consumes the 15-column format from doc 90, normalizes Action → Side (`Buy`/`BuyToCover` → `Buy`; `Sell`/`SellShort` → `Sell`), and raises `ParseError` per row with a reason suitable for `import_rejects.reason`.
+- **ImportPipeline.** `services/import_pipeline.ImportPipeline` owns `ingest_tick(path)`, `scan_inbox(dir)`, `archive_completed_sessions(...)`, and `rollback(ids)`. A per-path `threading.Lock` registry serializes ticks on one file while leaving different files parallel. The tick transaction contains only cursor/executions/rejects/import_runs writes; integrity diff and OHLC fetch are post-tick hooks that plans 11 and 14 will register.
+- **Watchdog handler.** `services/import_watchdog.TickHandler` replaces the Plan 00 `_NoopHandler`. `BackgroundServices.start(handler=…)` now accepts an injected handler and still defaults to `_NoopHandler` for the foundation tests.
+- **Scheduled jobs.** The app factory registers two jobs on the existing APScheduler: a 5-minute safety sweep that calls `scan_inbox`, and a daily archival job at `config.session.archive_job_time` that moves yesterday's files to `data/archive/YYYY-MM-DD/` after one final safety-net tick.
+- **API surface.** `/api/imports/runs`, `/api/imports/runs/{id}`, `/api/imports/cursors`, `/api/imports/rejects`, `POST /api/imports/scan`, `POST /api/executions/rollback`.
+- **End-to-end verified in Docker.** Dropping a valid CSV into the container's inbox volume causes a row to appear in `executions` within ~1 second without any manual action; `/api/imports/runs` reflects the tick.
+- **No batches, no file tracking, no upload endpoint.** Per doc 10 fragmentation hazards 1–8.
 
 ### What Plan 00 deliberately did NOT land
 
