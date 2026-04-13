@@ -1,5 +1,8 @@
+import time as _time
 from collections.abc import Sequence
+from pathlib import Path as _Path
 
+from db import connect as _connect
 from models.execution import Execution
 from models.position import IntegrityIssue
 
@@ -79,12 +82,6 @@ def cross_check_against_source_position_column(
                 )
             )
     return issues
-
-
-import time as _time
-from pathlib import Path as _Path
-
-from db import connect as _connect
 
 
 def run_integrity_diff(

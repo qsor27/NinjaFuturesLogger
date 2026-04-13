@@ -61,9 +61,7 @@ def test_resolve_issue(app):
         upsert_issue(conn, _issue("a"), now=100)
     finally:
         conn.close()
-    resp = app_.test_client().post(
-        "/api/integrity-issues/1/resolve", json={"note": "fixed"}
-    )
+    resp = app_.test_client().post("/api/integrity-issues/1/resolve", json={"note": "fixed"})
     assert resp.status_code == 200
     resp2 = app_.test_client().get("/api/integrity-issues")
     assert resp2.get_json() == {"issues": []}
@@ -76,9 +74,7 @@ def test_ignore_issue(app):
         upsert_issue(conn, _issue("a"), now=100)
     finally:
         conn.close()
-    resp = app_.test_client().post(
-        "/api/integrity-issues/1/ignore", json={"note": "known noise"}
-    )
+    resp = app_.test_client().post("/api/integrity-issues/1/ignore", json={"note": "known noise"})
     assert resp.status_code == 200
     resp2 = app_.test_client().get("/api/integrity-issues")
     assert resp2.get_json() == {"issues": []}

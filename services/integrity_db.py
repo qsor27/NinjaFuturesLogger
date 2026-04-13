@@ -49,9 +49,7 @@ def auto_resolve_missing(
         "WHERE account = ? AND instrument = ? AND resolved_at IS NULL AND ignored = 0",
         (account, instrument),
     ).fetchall()
-    stale_ids = [
-        r["issue_id"] for r in rows if (r["execution_id"], r["type"]) not in present_keys
-    ]
+    stale_ids = [r["issue_id"] for r in rows if (r["execution_id"], r["type"]) not in present_keys]
     if not stale_ids:
         return
     placeholders = ",".join("?" for _ in stale_ids)

@@ -37,9 +37,7 @@ def _make_position(fills: list[Fill], *, is_open: bool) -> Position:
 
     entry_qty_total = sum(f.quantity for f in entry_fills)
     entry_price = (
-        sum(f.price * f.quantity for f in entry_fills) / entry_qty_total
-        if entry_qty_total
-        else 0.0
+        sum(f.price * f.quantity for f in entry_fills) / entry_qty_total if entry_qty_total else 0.0
     )
 
     if is_open or not exit_fills:
