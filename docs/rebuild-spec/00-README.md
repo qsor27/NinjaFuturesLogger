@@ -69,8 +69,8 @@ Implementation is split into **phased plans**, one per spec feature, written and
 |---|---|---|
 | [00 — Foundation](../superpowers/plans/2026-04-13-00-foundation.md) | Repo skeleton, app factory, `BackgroundServices` (APScheduler + ThreadPoolExecutor + watchdog), SQLite/WAL + migrations, Pydantic `StrictModel`, `compute_session_date`, JSON logging, `/healthz`, Dockerfile, compose | ✅ **Complete** (2026-04-13, 13 commits, 22 tests) |
 | [10 — Import Pipeline](../superpowers/plans/2026-04-13-10-import-pipeline.md) | `executions` schema, CSV parser, `ingest_tick`, watchdog handler, `import_runs`/`import_rejects`/`import_cursors`, session archival job, rollback API | ✅ **Complete** (2026-04-13) |
-| 11 — Position Building | `build_positions` pure function, reversal splitter, `IntegrityValidator`, `integrity_issues` diff, hooked into import tick | ⏳ **Next** |
-| 14 — OHLC Pipeline | `Bar` model, `OhlcSource` protocol, yfinance + Stooq adapters, circuit breaker, fetcher, gap detection, `bars` table, scheduled refresh jobs, fetch job API | ⏳ |
+| [11 — Position Building](../superpowers/plans/2026-04-13-11-position-building.md) | `build_positions` pure function, reversal splitter, `IntegrityValidator`, `integrity_issues` diff, hooked into import tick | ✅ **Complete** (2026-04-13) |
+| 14 — OHLC Pipeline | `Bar` model, `OhlcSource` protocol, yfinance + Stooq adapters, circuit breaker, fetcher, gap detection, `bars` table, scheduled refresh jobs, fetch job API | ⏳ **Next** |
 | 12 — Browsing | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ⏳ |
 | 13 — Charting | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ⏳ |
 | 15 — Statistics | `StatisticsService`, all `/api/stats/*`, `/statistics` and `/reports` pages | ⏳ |
@@ -96,6 +96,18 @@ Implementation is split into **phased plans**, one per spec feature, written and
 - **API surface.** `/api/imports/runs`, `/api/imports/runs/{id}`, `/api/imports/cursors`, `/api/imports/rejects`, `POST /api/imports/scan`, `POST /api/executions/rollback`.
 - **End-to-end verified in Docker.** Dropping a valid CSV into the container's inbox volume causes a row to appear in `executions` within ~1 second without any manual action; `/api/imports/runs` reflects the tick.
 - **No batches, no file tracking, no upload endpoint.** Per doc 10 fragmentation hazards 1–8.
+
+### What Plan 11 landed
+
+- **Pure `build_positions`.** `services/positions.py::build_positions(executions)` sorts by `(timestamp, nt_execution_id)`, walks once, emits one `Position` per quantity-flow cycle plus any trailing open position. Direction-reversing fills are split in-memory into `#close`/`#open` sub-fills with proportional commission. No DB access, no globals, no caching.
+- **`Position` and `IntegrityIssue` models.** Typed Pydantic StrictModels keyed on the natural tuple `(account, instrument, entry_execution_id)`. No `positions` table exists — positions are computed on every read.
+- **Integrity cross-check.** `services/integrity.py::cross_check_against_source_position_column` compares the builder's running quantity to the exporter's `Position` column on every execution and emits a `high`-severity `position_column_mismatch` issue whenever they disagree.
+- **`run_integrity_diff` composer.** Loads executions for one `(account, instrument)`, computes issues, upserts new ones, auto-resolves stale ones (`resolved_by = 'system'`), and leaves ignored rows untouched. Plan 11's one post-tick hook on `ImportPipeline.post_tick_hooks` iterates `affected` and calls this once per pair.
+- **`integrity_issues` table.** Migration 003 adds the table from doc 11 with `UNIQUE(account, instrument, execution_id, type)` and the `idx_integrity_open` partial index on `resolved_at IS NULL AND ignored = 0`.
+- **Instrument multiplier stub.** `services/instruments.py::get_multiplier` ships a small dict of common futures multipliers so `dollars_pnl = points_pnl × multiplier` works today. Plan 16 replaces this with a JSON-backed registry.
+- **API surface.** `/api/positions` (with `account` and `instrument` filters), `/api/positions/{account}/{instrument}/{entry_execution_id}`, `/api/integrity-issues`, `POST /api/integrity-issues/{id}/resolve`, `POST /api/integrity-issues/{id}/ignore`.
+- **End-to-end verified in Docker.** Dropping a CSV with a mismatched `Position` column causes both a position (via `/api/positions`) and an integrity issue (via `/api/integrity-issues`) to appear within ~1 second.
+- **No positions table, no rebuild lifecycle, no stale state.** Per Rule 1.
 
 ### What Plan 00 deliberately did NOT land
 
