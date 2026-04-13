@@ -100,4 +100,7 @@ def build_positions(
             positions.append(_make_position(current, is_open=False))
             current = []
 
+    if current:
+        positions.append(_make_position(current, is_open=True))
+
     return positions, issues
