@@ -15,6 +15,7 @@ from routes import health as health_routes
 from routes.imports import build_imports_blueprint
 from services.import_pipeline import ImportPipeline
 from services.import_watchdog import TickHandler
+from services.integrity import run_integrity_diff
 from services.time_utils import resolve_current_trade_date
 
 log = get_logger("http")
@@ -38,10 +39,21 @@ def create_app(
 
     services = BackgroundServices(config)
     trader_tz = ZoneInfo(config.session.exchange_timezone)
+
+    def _integrity_hook(_result, _parsed, affected):
+        for acct, inst in affected:
+            try:
+                run_integrity_diff(config.db_path, acct, inst)
+            except Exception:
+                log.exception(
+                    "integrity diff failed",
+                    extra={"acct": acct, "inst": inst},
+                )
+
     pipeline = ImportPipeline(
         db_path=config.db_path,
         trader_tz=trader_tz,
-        post_tick_hooks=[],
+        post_tick_hooks=[_integrity_hook],
     )
 
     app = Flask(__name__)
