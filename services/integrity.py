@@ -79,3 +79,77 @@ def cross_check_against_source_position_column(
                 )
             )
     return issues
+
+
+import time as _time
+from pathlib import Path as _Path
+
+from db import connect as _connect
+
+
+def run_integrity_diff(
+    db_path: _Path | str,
+    account: str,
+    instrument: str,
+) -> None:
+    """Load executions for one pair, build positions + issues, diff DB.
+
+    Plan 11's post-tick hook iterates affected `(account, instrument)` pairs
+    and calls this once per pair.
+    """
+    # Deferred imports — services/positions imports from this module at its
+    # top, so top-level imports here would create a cycle.
+    from services.integrity_db import auto_resolve_missing, upsert_issue
+    from services.positions import build_positions
+
+    now = int(_time.time())
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT nt_execution_id, account, instrument, timestamp, side,"
+            " original_action, quantity, price, commission, entry_exit,"
+            " position_after, source_order_id, source_filename, imported_at "
+            "FROM executions WHERE account = ? AND instrument = ? "
+            "ORDER BY timestamp, nt_execution_id",
+            (account, instrument),
+        ).fetchall()
+        executions = [
+            Execution(
+                nt_execution_id=r["nt_execution_id"],
+                account=r["account"],
+                instrument=r["instrument"],
+                timestamp=r["timestamp"],
+                side=r["side"],
+                original_action=r["original_action"],
+                quantity=r["quantity"],
+                price=r["price"],
+                commission=r["commission"],
+                entry_exit=r["entry_exit"],
+                position_after=r["position_after"],
+                source_order_id=r["source_order_id"],
+                source_filename=r["source_filename"],
+                imported_at=r["imported_at"],
+            )
+            for r in rows
+        ]
+        _positions, issues = build_positions(executions)
+
+        present: set[tuple[str, str]] = {(i.execution_id, i.type) for i in issues}
+
+        conn.execute("BEGIN")
+        try:
+            for issue in issues:
+                upsert_issue(conn, issue, now=now)
+            auto_resolve_missing(
+                conn,
+                account=account,
+                instrument=instrument,
+                present_keys=present,
+                now=now,
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
