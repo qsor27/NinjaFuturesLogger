@@ -108,6 +108,7 @@ def build_positions(
     executions: Sequence[Execution],
 ) -> tuple[list[Position], list[IntegrityIssue]]:
     """Pure function: walk executions and emit positions."""
+    executions = sorted(executions, key=lambda e: (e.timestamp, e.nt_execution_id))
     positions: list[Position] = []
     issues: list[IntegrityIssue] = []
     current: list[Fill] = []
