@@ -69,24 +69,39 @@ def fetch_range(
             if timeframe not in source.supported_timeframes:
                 continue
             if not breaker.allows():
-                attempts.append(AttemptRecord(
-                    source=source.name, outcome="skipped", count=0, error=None,
-                ))
+                attempts.append(
+                    AttemptRecord(
+                        source=source.name,
+                        outcome="skipped",
+                        count=0,
+                        error=None,
+                    )
+                )
                 continue
             try:
                 bars = source.fetch(instrument, timeframe, gap_start, gap_end)
                 breaker.record_success()
                 bars_collected.extend(bars)
-                attempts.append(AttemptRecord(
-                    source=source.name, outcome="ok", count=len(bars), error=None,
-                ))
+                attempts.append(
+                    AttemptRecord(
+                        source=source.name,
+                        outcome="ok",
+                        count=len(bars),
+                        error=None,
+                    )
+                )
                 gap_filled = True
                 break
             except Exception as e:
                 breaker.record_failure(e)
-                attempts.append(AttemptRecord(
-                    source=source.name, outcome="failed", count=0, error=repr(e),
-                ))
+                attempts.append(
+                    AttemptRecord(
+                        source=source.name,
+                        outcome="failed",
+                        count=0,
+                        error=repr(e),
+                    )
+                )
                 continue
         if gap_filled:
             any_gap_filled = True

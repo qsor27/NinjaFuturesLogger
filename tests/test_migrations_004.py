@@ -23,9 +23,16 @@ def test_bars_columns(tmp_path: Path):
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(bars)").fetchall()}
         assert cols == {
-            "instrument", "timeframe", "time",
-            "open", "high", "low", "close",
-            "volume", "source", "fetched_at",
+            "instrument",
+            "timeframe",
+            "time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "source",
+            "fetched_at",
         }
     finally:
         conn.close()
@@ -45,9 +52,9 @@ def test_bars_has_lookup_index(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:
         names = {
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master "
-                "WHERE type='index' AND tbl_name='bars'"
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master " "WHERE type='index' AND tbl_name='bars'"
             ).fetchall()
         }
         assert "idx_bars_instrument_tf_time" in names
@@ -60,9 +67,8 @@ def test_no_foreign_keys_to_bars(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:
         tables = [
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         ]
         for tbl in tables:
             for fk in conn.execute(f"PRAGMA foreign_key_list({tbl})").fetchall():

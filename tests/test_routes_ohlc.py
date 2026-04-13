@@ -11,11 +11,22 @@ from services.ohlc.store import insert_many
 def _seed_bar(db_path, t):
     conn = connect(db_path)
     try:
-        insert_many(conn, [Bar(
-            instrument="MNQ", timeframe="1d", time=t,
-            open=1, high=2, low=0.5, close=1.5, volume=10,
-            source="seed",
-        )])
+        insert_many(
+            conn,
+            [
+                Bar(
+                    instrument="MNQ",
+                    timeframe="1d",
+                    time=t,
+                    open=1,
+                    high=2,
+                    low=0.5,
+                    close=1.5,
+                    volume=10,
+                    source="seed",
+                )
+            ],
+        )
     finally:
         conn.close()
 
@@ -50,9 +61,7 @@ def test_get_chart_reads_only(tmp_config):
     app, pool = _make_app(tmp_config)
     try:
         _seed_bar(tmp_config.db_path, 86400)
-        resp = app.test_client().get(
-            "/api/chart/MNQ?timeframe=1d&start=0&end=999999999"
-        )
+        resp = app.test_client().get("/api/chart/MNQ?timeframe=1d&start=0&end=999999999")
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["instrument"] == "MNQ"
@@ -66,9 +75,7 @@ def test_get_chart_reads_only(tmp_config):
 def test_get_chart_empty_window_returns_empty(tmp_config):
     app, pool = _make_app(tmp_config)
     try:
-        resp = app.test_client().get(
-            "/api/chart/MNQ?timeframe=1d&start=0&end=10"
-        )
+        resp = app.test_client().get("/api/chart/MNQ?timeframe=1d&start=0&end=10")
         assert resp.status_code == 200
         assert resp.get_json()["bars"] == []
     finally:
@@ -78,9 +85,7 @@ def test_get_chart_empty_window_returns_empty(tmp_config):
 def test_get_chart_rejects_unknown_timeframe(tmp_config):
     app, pool = _make_app(tmp_config)
     try:
-        resp = app.test_client().get(
-            "/api/chart/MNQ?timeframe=2m&start=0&end=10"
-        )
+        resp = app.test_client().get("/api/chart/MNQ?timeframe=2m&start=0&end=10")
         assert resp.status_code == 400
     finally:
         pool.shutdown(wait=True)

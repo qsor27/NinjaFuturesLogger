@@ -1,5 +1,5 @@
-from models.base import StrictModel
 from models.bar import AttemptRecord, Bar, FetchResult
+from models.base import StrictModel
 from models.execution import Execution, RejectRecord, TickResult
 from models.position import Fill, IntegrityIssue, Position
 

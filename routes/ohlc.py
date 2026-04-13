@@ -47,11 +47,13 @@ def build_ohlc_blueprint() -> Blueprint:
             )
         finally:
             conn.close()
-        return jsonify({
-            "instrument": instrument,
-            "timeframe": timeframe,
-            "bars": [b.model_dump() for b in bars],
-        })
+        return jsonify(
+            {
+                "instrument": instrument,
+                "timeframe": timeframe,
+                "bars": [b.model_dump() for b in bars],
+            }
+        )
 
     @bp.post("/api/chart/<instrument>/fetch")
     def post_chart_fetch(instrument: str):
@@ -91,12 +93,16 @@ def build_ohlc_blueprint() -> Blueprint:
                 end=end,
             )
 
-        job_id = jobs.submit(pool, _run, meta={
-            "instrument": instrument,
-            "timeframe": timeframe,
-            "start": start,
-            "end": end,
-        })
+        job_id = jobs.submit(
+            pool,
+            _run,
+            meta={
+                "instrument": instrument,
+                "timeframe": timeframe,
+                "start": start,
+                "end": end,
+            },
+        )
         return jsonify({"job_id": job_id}), 202
 
     @bp.get("/api/ohlc/jobs/<job_id>")

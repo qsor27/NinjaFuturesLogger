@@ -22,9 +22,15 @@ class _FakeSource:
 
 def _bar(t, src="fake"):
     return Bar(
-        instrument="MNQ", timeframe="1d", time=t,
-        open=1.0, high=1.0, low=1.0, close=float(t),
-        volume=0, source=src,
+        instrument="MNQ",
+        timeframe="1d",
+        time=t,
+        open=1.0,
+        high=1.0,
+        low=1.0,
+        close=float(t),
+        volume=0,
+        source=src,
     )
 
 
@@ -47,10 +53,28 @@ def test_fully_cached_returns_cached_status(migrated_db):
         insert_many(
             conn,
             [
-                Bar(instrument="MNQ", timeframe="1d", time=86400,
-                    open=1, high=1, low=1, close=1, volume=0, source="seed"),
-                Bar(instrument="MNQ", timeframe="1d", time=86400 * 2,
-                    open=1, high=1, low=1, close=1, volume=0, source="seed"),
+                Bar(
+                    instrument="MNQ",
+                    timeframe="1d",
+                    time=86400,
+                    open=1,
+                    high=1,
+                    low=1,
+                    close=1,
+                    volume=0,
+                    source="seed",
+                ),
+                Bar(
+                    instrument="MNQ",
+                    timeframe="1d",
+                    time=86400 * 2,
+                    open=1,
+                    high=1,
+                    low=1,
+                    close=1,
+                    volume=0,
+                    source="seed",
+                ),
             ],
         )
     finally:
