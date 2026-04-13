@@ -13,6 +13,7 @@ from logging_config import configure_logging, get_logger
 from migrations import run_migrations
 from routes import health as health_routes
 from routes.imports import build_imports_blueprint
+from routes.positions import build_positions_blueprint
 from services.import_pipeline import ImportPipeline
 from services.import_watchdog import TickHandler
 from services.integrity import run_integrity_diff
@@ -67,6 +68,7 @@ def create_app(
 
     app.register_blueprint(health_routes.bp)
     app.register_blueprint(build_imports_blueprint())
+    app.register_blueprint(build_positions_blueprint())
 
     services.scheduler.add_job(
         lambda: pipeline.scan_inbox(config.inbox_dir),
