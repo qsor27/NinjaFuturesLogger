@@ -1,0 +1,18 @@
+{
+  "data_dir": "data",
+  "db_path": "data/trading_log.db",
+  "inbox_dir": "data/inbox",
+  "archive_dir": "data/archive",
+  "log_dir": "data/logs",
+  "session": {
+    "exchange_timezone": "America/Chicago",
+    "trade_date_rollover": "16:00",
+    "archive_job_time": "18:00"
+  },
+  "thread_pool": {
+    "max_workers": 4
+  },
+  "scheduler": {
+    "heartbeat_seconds": 60
+  }
+}

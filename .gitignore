@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.db
+*.db-wal
+*.db-shm
+data/inbox/*
+data/archive/*
+data/logs/*
+!data/inbox/.gitkeep
+!data/archive/.gitkeep
+!data/logs/.gitkeep
+.venv/
+.env
