@@ -78,13 +78,36 @@ def _make_position(fills: list[Fill], *, is_open: bool) -> Position:
     )
 
 
+def synthesize_fill(
+    ex: Execution,
+    *,
+    id_suffix: str,
+    split_quantity: int,
+    split_side: str,
+) -> Fill:
+    """Produce a synthetic sub-fill for a direction-reversing execution.
+
+    `split_quantity` is the unsigned size of this half of the reversal.
+    Commission is split proportionally by quantity vs. the parent fill.
+    """
+    proportion = split_quantity / ex.quantity
+    return Fill(
+        execution_id=f"{ex.nt_execution_id}{id_suffix}",
+        account=ex.account,
+        instrument=ex.instrument,
+        timestamp=ex.timestamp,
+        side=split_side,  # type: ignore[arg-type]
+        quantity=split_quantity,
+        price=ex.price,
+        commission=ex.commission * proportion,
+        entry_exit="Exit" if id_suffix == "#close" else "Entry",
+    )
+
+
 def build_positions(
     executions: Sequence[Execution],
 ) -> tuple[list[Position], list[IntegrityIssue]]:
-    """Pure function: walk executions and emit positions.
-
-    Direction-reversing fills and sort stability are handled in later tasks.
-    """
+    """Pure function: walk executions and emit positions."""
     positions: list[Position] = []
     issues: list[IntegrityIssue] = []
     current: list[Fill] = []
@@ -93,6 +116,30 @@ def build_positions(
     for ex in executions:
         signed = ex.quantity if ex.side == "Buy" else -ex.quantity
         new_qty = running_qty + signed
+
+        if running_qty != 0 and new_qty != 0 and _sign(new_qty) != _sign(running_qty):
+            close_qty = abs(running_qty)
+            open_qty = abs(new_qty)
+            close_side = "Sell" if running_qty > 0 else "Buy"
+            open_side = ex.side
+            sub_close = synthesize_fill(
+                ex,
+                id_suffix="#close",
+                split_quantity=close_qty,
+                split_side=close_side,
+            )
+            sub_open = synthesize_fill(
+                ex,
+                id_suffix="#open",
+                split_quantity=open_qty,
+                split_side=open_side,
+            )
+            current.append(sub_close)
+            positions.append(_make_position(current, is_open=False))
+            current = [sub_open]
+            running_qty = new_qty
+            continue
+
         current.append(_fill_from(ex))
         running_qty = new_qty
 
