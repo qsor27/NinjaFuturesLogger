@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    image: futurestradinglog:foundation
+    container_name: futurestradinglog
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ftl_data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  ftl_data:
