@@ -6,6 +6,8 @@ the JSON registry, delete this file and update the imports in
 services/positions.py.
 """
 
+from dataclasses import dataclass
+
 _MULTIPLIERS: dict[str, float] = {
     # CME equity index futures
     "ES": 50.0,
@@ -57,32 +59,50 @@ def get_multiplier(instrument: str) -> float:
 # Plan 16 will replace this whole module with a JSON-backed registry.
 # ---------------------------------------------------------------------------
 
-from dataclasses import dataclass
-
+# 4h is a valid canonical timeframe but is omitted here: it is not useful for
+# intraday futures workflows. Operators who need it can add it to this tuple.
 DEFAULT_TIMEFRAMES: tuple[str, ...] = ("1m", "5m", "15m", "1h", "1d")
 
 _YFINANCE_SYMBOLS: dict[str, str] = {
-    "ES": "ES=F", "MES": "MES=F",
-    "NQ": "NQ=F", "MNQ": "MNQ=F",
-    "RTY": "RTY=F", "M2K": "M2K=F",
-    "YM": "YM=F", "MYM": "MYM=F",
-    "CL": "CL=F", "MCL": "MCL=F",
-    "GC": "GC=F", "MGC": "MGC=F",
-    "SI": "SI=F", "SIL": "SIL=F",
-    "ZN": "ZN=F", "ZB": "ZB=F",
-    "6E": "6E=F", "6B": "6B=F",
+    "ES": "ES=F",
+    "MES": "MES=F",
+    "NQ": "NQ=F",
+    "MNQ": "MNQ=F",
+    "RTY": "RTY=F",
+    "M2K": "M2K=F",
+    "YM": "YM=F",
+    "MYM": "MYM=F",
+    "CL": "CL=F",
+    "MCL": "MCL=F",
+    "GC": "GC=F",
+    "MGC": "MGC=F",
+    "SI": "SI=F",
+    "SIL": "SIL=F",
+    "ZN": "ZN=F",
+    "ZB": "ZB=F",
+    "6E": "6E=F",
+    "6B": "6B=F",
 }
 
 _STOOQ_SYMBOLS: dict[str, str] = {
-    "ES": "es.f", "MES": "mes.f",
-    "NQ": "nq.f", "MNQ": "mnq.f",
-    "RTY": "rty.f", "M2K": "m2k.f",
-    "YM": "ym.f", "MYM": "mym.f",
-    "CL": "cl.f", "MCL": "mcl.f",
-    "GC": "gc.f", "MGC": "mgc.f",
-    "SI": "si.f", "SIL": "sil.f",
-    "ZN": "zn.f", "ZB": "zb.f",
-    "6E": "6e.f", "6B": "6b.f",
+    "ES": "es.f",
+    "MES": "mes.f",
+    "NQ": "nq.f",
+    "MNQ": "mnq.f",
+    "RTY": "rty.f",
+    "M2K": "m2k.f",
+    "YM": "ym.f",
+    "MYM": "mym.f",
+    "CL": "cl.f",
+    "MCL": "mcl.f",
+    "GC": "gc.f",
+    "MGC": "mgc.f",
+    "SI": "si.f",
+    "SIL": "sil.f",
+    "ZN": "zn.f",
+    "ZB": "zb.f",
+    "6E": "6e.f",
+    "6B": "6b.f",
 }
 
 _SOURCE_TABLES: dict[str, dict[str, str]] = {
@@ -113,11 +133,12 @@ class SessionCalendar:
     detection consults to avoid flagging the overnight close as missing.
     Plan 16 replaces this with per-instrument JSON-driven calendars.
     """
+
     timezone: str
-    open: str               # "HH:MM" local
-    close: str              # "HH:MM" local
+    open: str  # "HH:MM" local
+    close: str  # "HH:MM" local
     daily_break_start: str  # "HH:MM" local; "" disables
-    daily_break_end: str    # "HH:MM" local; "" disables
+    daily_break_end: str  # "HH:MM" local; "" disables
 
 
 _DEFAULT_CME_SESSION = SessionCalendar(
