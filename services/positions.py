@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from models.execution import Execution
 from models.position import Fill, IntegrityIssue, Position
 from services.instruments import get_multiplier
+from services.integrity import cross_check_against_source_position_column
 
 
 def _sign(x: int) -> int:
@@ -151,4 +152,5 @@ def build_positions(
     if current:
         positions.append(_make_position(current, is_open=True))
 
+    issues.extend(cross_check_against_source_position_column(executions))
     return positions, issues
