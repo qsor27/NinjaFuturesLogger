@@ -5,3 +5,5 @@ watchdog==4.0.2
 gunicorn==23.0.0
 pytest==8.3.3
 ruff==0.6.9
+requests==2.32.3
+yfinance==0.2.50
