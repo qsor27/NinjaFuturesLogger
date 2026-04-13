@@ -23,13 +23,13 @@ class TickHandler(FileSystemEventHandler):
         self.pipeline = pipeline
 
     def on_created(self, event):
-        if isinstance(event, (DirCreatedEvent, DirModifiedEvent)):
+        if isinstance(event, DirCreatedEvent | DirModifiedEvent):
             return
         if isinstance(event, FileCreatedEvent):
             self._dispatch(event.src_path)
 
     def on_modified(self, event):
-        if isinstance(event, (DirCreatedEvent, DirModifiedEvent)):
+        if isinstance(event, DirCreatedEvent | DirModifiedEvent):
             return
         if isinstance(event, FileModifiedEvent):
             self._dispatch(event.src_path)
@@ -41,5 +41,4 @@ class TickHandler(FileSystemEventHandler):
         try:
             self.pipeline.ingest_tick(p)
         except Exception:
-            log.exception("ingest_tick failed in watchdog thread",
-                          extra={"csv_name": p.name})
+            log.exception("ingest_tick failed in watchdog thread", extra={"csv_name": p.name})

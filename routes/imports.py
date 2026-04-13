@@ -36,9 +36,7 @@ def build_imports_blueprint() -> Blueprint:
     def get_run(tick_id: int):
         conn = _db()
         try:
-            row = conn.execute(
-                "SELECT * FROM import_runs WHERE tick_id = ?", (tick_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM import_runs WHERE tick_id = ?", (tick_id,)).fetchone()
             if row is None:
                 return jsonify({"error": "not found"}), 404
             rejects = conn.execute(
@@ -69,10 +67,12 @@ def build_imports_blueprint() -> Blueprint:
         pipeline = _pipeline()
         inbox = current_app.config["FTL_INBOX_DIR"]
         results = pipeline.scan_inbox(inbox)
-        return jsonify({
-            "ticked": len(results),
-            "results": [r.model_dump() for r in results],
-        })
+        return jsonify(
+            {
+                "ticked": len(results),
+                "results": [r.model_dump() for r in results],
+            }
+        )
 
     @bp.get("/api/imports/rejects")
     def list_rejects():

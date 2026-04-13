@@ -60,14 +60,21 @@ class ImportPipeline:
                 results.append(self.ingest_tick(p))
             except Exception as e:
                 log.exception("scan_inbox: tick failed", extra={"path": str(p)})
-                results.append(TickResult(
-                    filename=p.name,
-                    status="failed",
-                    lines_read=0, rows_parsed=0, rows_inserted=0,
-                    rows_skipped_duplicate=0, rows_rejected=0,
-                    cursor_before=0, cursor_after=0,
-                    tick_id=None, error=str(e),
-                ))
+                results.append(
+                    TickResult(
+                        filename=p.name,
+                        status="failed",
+                        lines_read=0,
+                        rows_parsed=0,
+                        rows_inserted=0,
+                        rows_skipped_duplicate=0,
+                        rows_rejected=0,
+                        cursor_before=0,
+                        cursor_after=0,
+                        tick_id=None,
+                        error=str(e),
+                    )
+                )
         return results
 
     def rollback(self, nt_execution_ids: Sequence[str]) -> int:
@@ -151,8 +158,15 @@ class ImportPipeline:
 
             if size == cursor:
                 return self._finish(
-                    conn, filename, started_at, cursor, cursor,
-                    lines=[], parsed=[], rejects=[], status="ok",
+                    conn,
+                    filename,
+                    started_at,
+                    cursor,
+                    cursor,
+                    lines=[],
+                    parsed=[],
+                    rejects=[],
+                    status="ok",
                     mtime=mtime,
                 )
 
@@ -163,8 +177,15 @@ class ImportPipeline:
             last_nl = chunk.rfind(b"\n")
             if last_nl == -1:
                 return self._finish(
-                    conn, filename, started_at, cursor, cursor,
-                    lines=[], parsed=[], rejects=[], status="partial",
+                    conn,
+                    filename,
+                    started_at,
+                    cursor,
+                    cursor,
+                    lines=[],
+                    parsed=[],
+                    rejects=[],
+                    status="partial",
                     mtime=mtime,
                 )
 
@@ -198,11 +219,17 @@ class ImportPipeline:
                     raise
                 return (
                     TickResult(
-                        filename=filename, status="failed",
-                        lines_read=0, rows_parsed=0, rows_inserted=0,
-                        rows_skipped_duplicate=0, rows_rejected=0,
-                        cursor_before=cursor, cursor_after=new_cursor,
-                        tick_id=tick_id, error=f"decode: {e}",
+                        filename=filename,
+                        status="failed",
+                        lines_read=0,
+                        rows_parsed=0,
+                        rows_inserted=0,
+                        rows_skipped_duplicate=0,
+                        rows_rejected=0,
+                        cursor_before=cursor,
+                        cursor_after=new_cursor,
+                        tick_id=tick_id,
+                        error=f"decode: {e}",
                     ),
                     [],
                 )
@@ -227,13 +254,24 @@ class ImportPipeline:
                         )
                     )
                 except ParseError as e:
-                    rejects.append(RejectRecord(
-                        line_number=i, raw_line=line, reason=str(e),
-                    ))
+                    rejects.append(
+                        RejectRecord(
+                            line_number=i,
+                            raw_line=line,
+                            reason=str(e),
+                        )
+                    )
 
             return self._finish(
-                conn, filename, started_at, cursor, new_cursor,
-                lines=lines, parsed=parsed, rejects=rejects, status="ok",
+                conn,
+                filename,
+                started_at,
+                cursor,
+                new_cursor,
+                lines=lines,
+                parsed=parsed,
+                rejects=rejects,
+                status="ok",
                 mtime=mtime,
             )
         finally:
@@ -314,7 +352,7 @@ def _parse_date_from_filename(name: str) -> date | None:
     suffix = ".csv"
     if not name.startswith(prefix) or not name.endswith(suffix):
         return None
-    core = name[len(prefix):-len(suffix)]
+    core = name[len(prefix) : -len(suffix)]
     if len(core) != 8 or not core.isdigit():
         return None
     try:

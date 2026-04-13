@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from models.execution import Execution, RejectRecord, TickResult
 
@@ -31,21 +32,21 @@ def test_execution_accepts_valid_values():
 def test_execution_rejects_unknown_field():
     kwargs = _valid_execution_kwargs()
     kwargs["bogus"] = 1
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Execution(**kwargs)
 
 
 def test_execution_rejects_invalid_side():
     kwargs = _valid_execution_kwargs()
     kwargs["side"] = "BuyToCover"
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Execution(**kwargs)
 
 
 def test_execution_rejects_zero_quantity():
     kwargs = _valid_execution_kwargs()
     kwargs["quantity"] = 0
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         Execution(**kwargs)
 
 
@@ -74,7 +75,7 @@ def test_tick_result_basic():
 
 
 def test_tick_result_rejects_bad_status():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         TickResult(
             filename="f.csv",
             status="bogus",

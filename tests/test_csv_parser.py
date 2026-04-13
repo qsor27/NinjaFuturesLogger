@@ -38,9 +38,7 @@ def test_parse_basic_buy_row():
     assert e.account == "Sim101"
     assert e.source_filename == SRC
     assert e.imported_at == IMPORTED_AT
-    expected = int(
-        datetime(2025, 1, 15, 14, 45, 30, tzinfo=TRADER_TZ).timestamp()
-    )
+    expected = int(datetime(2025, 1, 15, 14, 45, 30, tzinfo=TRADER_TZ).timestamp())
     assert e.timestamp == expected
 
 
@@ -67,7 +65,7 @@ def test_parse_normalizes_sell_short_to_sell_side():
 
 def test_parse_handles_rfc4180_quoted_field_with_comma():
     line = (
-        'MNQ,Buy,1,4100.00,5/5/2025 10:00:00 AM,qid,Entry,1 L,'
+        "MNQ,Buy,1,4100.00,5/5/2025 10:00:00 AM,qid,Entry,1 L,"
         '1,"Name, with comma",$0.00,1,Sim101,Apex Trader Funding ,'
     )
     e = _parse(line)
@@ -117,10 +115,7 @@ def test_parse_rejects_bad_price():
 
 
 def test_parse_rejects_bad_time():
-    line = (
-        "MNQ,Buy,1,4237.75,yesterday,id,Entry,1 L,"
-        "1,n,$0.00,1,Sim101,Apex Trader Funding ,"
-    )
+    line = "MNQ,Buy,1,4237.75,yesterday,id,Entry,1 L," "1,n,$0.00,1,Sim101,Apex Trader Funding ,"
     with pytest.raises(ParseError, match="time"):
         _parse(line)
 
@@ -145,8 +140,7 @@ def test_parse_rejects_empty_execution_id():
 
 def test_parse_rejects_empty_account():
     line = (
-        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L,"
-        "1,n,$0.00,1,,Apex Trader Funding ,"
+        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L," "1,n,$0.00,1,,Apex Trader Funding ,"
     )
     with pytest.raises(ParseError, match="account"):
         _parse(line)
@@ -163,8 +157,7 @@ def test_parse_commission_with_no_dollar_prefix_still_accepted():
 
 def test_parse_empty_commission_becomes_zero():
     line = (
-        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L,"
-        "1,n,,1,Sim101,Apex Trader Funding ,"
+        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L," "1,n,,1,Sim101,Apex Trader Funding ,"
     )
     e = _parse(line)
     assert e.commission == 0.0

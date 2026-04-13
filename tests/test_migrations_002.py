@@ -23,10 +23,20 @@ def test_executions_table_columns(tmp_path: Path):
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(executions)").fetchall()}
         assert cols == {
-            "nt_execution_id", "account", "instrument", "timestamp",
-            "side", "original_action", "quantity", "price", "commission",
-            "entry_exit", "position_after", "source_order_id",
-            "source_filename", "imported_at",
+            "nt_execution_id",
+            "account",
+            "instrument",
+            "timestamp",
+            "side",
+            "original_action",
+            "quantity",
+            "price",
+            "commission",
+            "entry_exit",
+            "position_after",
+            "source_order_id",
+            "source_filename",
+            "imported_at",
         }
     finally:
         conn.close()
@@ -53,8 +63,22 @@ def test_executions_on_conflict_do_nothing(tmp_path: Path):
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT DO NOTHING"
         )
-        row = ("abc", "Sim101", "MNQ", 1700000000, "Buy", "Buy", 1, 4237.75,
-               0.0, "Entry", "1 L", "order1", "file.csv", 1700000001)
+        row = (
+            "abc",
+            "Sim101",
+            "MNQ",
+            1700000000,
+            "Buy",
+            "Buy",
+            1,
+            4237.75,
+            0.0,
+            "Entry",
+            "1 L",
+            "order1",
+            "file.csv",
+            1700000001,
+        )
         conn.execute(insert, row)
         conn.execute(insert, row)
         count = conn.execute("SELECT COUNT(*) FROM executions").fetchone()[0]
@@ -67,8 +91,7 @@ def test_executions_unique_index_on_nt_execution_id(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:
         indexes = conn.execute(
-            "SELECT name, sql FROM sqlite_master "
-            "WHERE type='index' AND tbl_name='executions'"
+            "SELECT name, sql FROM sqlite_master " "WHERE type='index' AND tbl_name='executions'"
         ).fetchall()
         names = {r[0] for r in indexes}
         assert "idx_executions_nt_execution_id" in names
@@ -91,10 +114,21 @@ def test_import_runs_table(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(import_runs)").fetchall()}
-        assert {"tick_id", "filename", "started_at", "finished_at",
-                "cursor_before", "cursor_after", "lines_read", "rows_parsed",
-                "rows_inserted", "rows_skipped_duplicate", "rows_rejected",
-                "status", "error"}.issubset(cols)
+        assert {
+            "tick_id",
+            "filename",
+            "started_at",
+            "finished_at",
+            "cursor_before",
+            "cursor_after",
+            "lines_read",
+            "rows_parsed",
+            "rows_inserted",
+            "rows_skipped_duplicate",
+            "rows_rejected",
+            "status",
+            "error",
+        }.issubset(cols)
     finally:
         conn.close()
 
@@ -103,7 +137,6 @@ def test_import_rejects_table(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(import_rejects)").fetchall()}
-        assert cols == {"reject_id", "tick_id", "line_number", "raw_line",
-                        "reason", "created_at"}
+        assert cols == {"reject_id", "tick_id", "line_number", "raw_line", "reason", "created_at"}
     finally:
         conn.close()

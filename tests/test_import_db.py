@@ -127,7 +127,8 @@ def test_delete_executions_removes_only_matches(tmp_path: Path):
         deleted = delete_executions(conn, ["id-1", "id-3"])
         assert deleted == 2
         remaining = [
-            r[0] for r in conn.execute(
+            r[0]
+            for r in conn.execute(
                 "SELECT nt_execution_id FROM executions ORDER BY nt_execution_id"
             ).fetchall()
         ]

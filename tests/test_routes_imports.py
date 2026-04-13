@@ -38,11 +38,18 @@ def _seed_run(db_path: Path, filename: str, status: str = "ok") -> int:
     try:
         tid = record_run(
             conn,
-            filename=filename, started_at=100, finished_at=101,
-            cursor_before=0, cursor_after=100,
-            lines_read=1, rows_parsed=1, rows_inserted=1,
-            rows_skipped_duplicate=0, rows_rejected=0,
-            status=status, error=None,
+            filename=filename,
+            started_at=100,
+            finished_at=101,
+            cursor_before=0,
+            cursor_after=100,
+            lines_read=1,
+            rows_parsed=1,
+            rows_inserted=1,
+            rows_skipped_duplicate=0,
+            rows_rejected=0,
+            status=status,
+            error=None,
         )
         return tid
     finally:
@@ -121,9 +128,7 @@ def test_scan_triggers_ingest(app_and_pipeline):
         "MNQ,Buy,1,4000.00,1/15/2025 9:00:00 AM,scanid,Entry,1 L,"
         "1,n,$0.00,1,Sim101,Apex Trader Funding ,\n"
     )
-    (Path(inbox) / "NinjaTrader_Executions_20260413.csv").write_text(
-        header + row, encoding="utf-8"
-    )
+    (Path(inbox) / "NinjaTrader_Executions_20260413.csv").write_text(header + row, encoding="utf-8")
     resp = app.test_client().post("/api/imports/scan")
     assert resp.status_code == 200
     body = resp.get_json()
@@ -139,36 +144,53 @@ def test_rollback_deletes_rows(app_and_pipeline):
     app, pipeline, db_path, inbox = app_and_pipeline
     conn = connect(db_path)
     try:
-        bulk_insert_executions(conn, [
-            Execution(
-                nt_execution_id="del1", account="Sim101", instrument="MNQ",
-                timestamp=1, side="Buy", original_action="Buy",
-                quantity=1, price=1.0, commission=0.0, entry_exit="Entry",
-                position_after="1 L", source_order_id=None,
-                source_filename="f.csv", imported_at=1,
-            ),
-            Execution(
-                nt_execution_id="keep1", account="Sim101", instrument="MNQ",
-                timestamp=2, side="Sell", original_action="Sell",
-                quantity=1, price=2.0, commission=0.0, entry_exit="Exit",
-                position_after="-", source_order_id=None,
-                source_filename="f.csv", imported_at=1,
-            ),
-        ])
+        bulk_insert_executions(
+            conn,
+            [
+                Execution(
+                    nt_execution_id="del1",
+                    account="Sim101",
+                    instrument="MNQ",
+                    timestamp=1,
+                    side="Buy",
+                    original_action="Buy",
+                    quantity=1,
+                    price=1.0,
+                    commission=0.0,
+                    entry_exit="Entry",
+                    position_after="1 L",
+                    source_order_id=None,
+                    source_filename="f.csv",
+                    imported_at=1,
+                ),
+                Execution(
+                    nt_execution_id="keep1",
+                    account="Sim101",
+                    instrument="MNQ",
+                    timestamp=2,
+                    side="Sell",
+                    original_action="Sell",
+                    quantity=1,
+                    price=2.0,
+                    commission=0.0,
+                    entry_exit="Exit",
+                    position_after="-",
+                    source_order_id=None,
+                    source_filename="f.csv",
+                    imported_at=1,
+                ),
+            ],
+        )
     finally:
         conn.close()
-    resp = app.test_client().post(
-        "/api/executions/rollback", json={"execution_ids": ["del1"]}
-    )
+    resp = app.test_client().post("/api/executions/rollback", json={"execution_ids": ["del1"]})
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["deleted"] == 1
     conn = connect(db_path)
     try:
         remaining = [
-            r[0] for r in conn.execute(
-                "SELECT nt_execution_id FROM executions"
-            ).fetchall()
+            r[0] for r in conn.execute("SELECT nt_execution_id FROM executions").fetchall()
         ]
         assert remaining == ["keep1"]
     finally:

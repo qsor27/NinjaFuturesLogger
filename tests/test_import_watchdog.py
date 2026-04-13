@@ -61,8 +61,11 @@ def test_background_services_accepts_injected_handler(tmp_path: Path):
         inbox_dir=str(tmp_path / "inbox"),
         archive_dir=str(tmp_path / "archive"),
         log_dir=str(tmp_path / "logs"),
-        session=SessionConfig(exchange_timezone="America/Chicago",
-                              trade_date_rollover="16:00", archive_job_time="18:00"),
+        session=SessionConfig(
+            exchange_timezone="America/Chicago",
+            trade_date_rollover="16:00",
+            archive_job_time="18:00",
+        ),
         thread_pool=ThreadPoolConfig(max_workers=2),
         scheduler=SchedulerConfig(heartbeat_seconds=60),
     )

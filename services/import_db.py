@@ -60,9 +60,20 @@ def bulk_insert_executions(
         conn.execute(
             _INSERT_EXECUTION_SQL,
             (
-                e.nt_execution_id, e.account, e.instrument, e.timestamp, e.side,
-                e.original_action, e.quantity, e.price, e.commission, e.entry_exit,
-                e.position_after, e.source_order_id, e.source_filename, e.imported_at,
+                e.nt_execution_id,
+                e.account,
+                e.instrument,
+                e.timestamp,
+                e.side,
+                e.original_action,
+                e.quantity,
+                e.price,
+                e.commission,
+                e.entry_exit,
+                e.position_after,
+                e.source_order_id,
+                e.source_filename,
+                e.imported_at,
             ),
         )
         if conn.total_changes > before:
@@ -107,9 +118,18 @@ def record_run(
         " rows_rejected, status, error"
         ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (
-            filename, started_at, finished_at, cursor_before, cursor_after,
-            lines_read, rows_parsed, rows_inserted, rows_skipped_duplicate,
-            rows_rejected, status, error,
+            filename,
+            started_at,
+            finished_at,
+            cursor_before,
+            cursor_after,
+            lines_read,
+            rows_parsed,
+            rows_inserted,
+            rows_skipped_duplicate,
+            rows_rejected,
+            status,
+            error,
         ),
     )
     return int(cur.lastrowid)
