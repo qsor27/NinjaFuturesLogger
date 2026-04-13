@@ -70,8 +70,8 @@ Implementation is split into **phased plans**, one per spec feature, written and
 | [00 — Foundation](../superpowers/plans/2026-04-13-00-foundation.md) | Repo skeleton, app factory, `BackgroundServices` (APScheduler + ThreadPoolExecutor + watchdog), SQLite/WAL + migrations, Pydantic `StrictModel`, `compute_session_date`, JSON logging, `/healthz`, Dockerfile, compose | ✅ **Complete** (2026-04-13, 13 commits, 22 tests) |
 | [10 — Import Pipeline](../superpowers/plans/2026-04-13-10-import-pipeline.md) | `executions` schema, CSV parser, `ingest_tick`, watchdog handler, `import_runs`/`import_rejects`/`import_cursors`, session archival job, rollback API | ✅ **Complete** (2026-04-13) |
 | [11 — Position Building](../superpowers/plans/2026-04-13-11-position-building.md) | `build_positions` pure function, reversal splitter, `IntegrityValidator`, `integrity_issues` diff, hooked into import tick | ✅ **Complete** (2026-04-13) |
-| 14 — OHLC Pipeline | `Bar` model, `OhlcSource` protocol, yfinance + Stooq adapters, circuit breaker, fetcher, gap detection, `bars` table, scheduled refresh jobs, fetch job API | ⏳ **Next** |
-| 12 — Browsing | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ⏳ |
+| [14 — OHLC Pipeline](../superpowers/plans/2026-04-13-14-ohlc-pipeline.md) | `Bar` model, `OhlcSource` protocol, yfinance + Stooq adapters, circuit breaker, fetcher, gap detection, `bars` table, scheduled refresh jobs, fetch job API | ✅ **Complete** (2026-04-13) |
+| 12 — Browsing | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ⏳ **Next** |
 | 13 — Charting | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ⏳ |
 | 15 — Statistics | `StatisticsService`, all `/api/stats/*`, `/statistics` and `/reports` pages | ⏳ |
 | 16 — Settings & Custom Fields | `instruments.json` registry, `chart_defaults`, `custom_fields` + values, `/settings/*` pages | ⏳ |
@@ -108,6 +108,24 @@ Implementation is split into **phased plans**, one per spec feature, written and
 - **API surface.** `/api/positions` (with `account` and `instrument` filters), `/api/positions/{account}/{instrument}/{entry_execution_id}`, `/api/integrity-issues`, `POST /api/integrity-issues/{id}/resolve`, `POST /api/integrity-issues/{id}/ignore`.
 - **End-to-end verified in Docker.** Dropping a CSV with a mismatched `Position` column causes both a position (via `/api/positions`) and an integrity issue (via `/api/integrity-issues`) to appear within ~1 second.
 - **No positions table, no rebuild lifecycle, no stale state.** Per Rule 1.
+
+### What Plan 14 landed
+
+- **`Bar`, `FetchResult`, `AttemptRecord` models.** Pydantic StrictModels exported from `models/__init__.py`. `Timeframe` is the canonical Literal `{1m,5m,15m,1h,4h,1d}`; `volume` is non-nullable.
+- **`bars` table.** Migration 004 ships the composite-key `(instrument, timeframe, time)` table plus `idx_bars_instrument_tf_time`. No FK from any other table points at `bars` — Rule 6 enforced structurally.
+- **Two adapters, one Protocol.** `services/ohlc/yfinance_source.py` (primary, declares `{1m,5m,15m,1h,1d}`) and `services/ohlc/stooq_source.py` (fallback, declares `{1d}` only) implement `services/ohlc/source.py::OhlcSource`. Both lazy-import their transport library so the test suite never imports yfinance/requests; both convert raw responses to `list[Bar]` inside the adapter and never let pandas/CSV leak out.
+- **Per-source circuit breaker.** `services/ohlc/circuit_breaker.py::CircuitBreaker` is closed/open/half_open with the spec's three-failure threshold and per-source cooldowns (yfinance 600s, stooq 1800s). Hardcoded fast-trip on any `HTTPError(429)` or `HTTPError(5xx)` regardless of threshold.
+- **Source registry.** `services/ohlc/registry.py::SourceRegistry` keeps an ordered `[(source, breaker), …]` list and exposes `sources_for(timeframe)` which silently skips sources with open breakers or unsupported timeframes — Rule 5 (no upscaling) holds because the registry hides incompatible sources from the fetcher entirely.
+- **`fetch_range` orchestrator.** `services/ohlc/fetcher.py::fetch_range` is the only function in the app that calls `source.fetch()`. It computes missing ranges via `gap_detection.find_gaps`, walks each gap, tries sources in registry order until one returns bars, UPSERTs the collected bars in a single transaction, and returns a `FetchResult` with one `AttemptRecord` per source touched. Cached, partial, ok, all-sources-unavailable, and no-source-for-timeframe are all explicit statuses.
+- **Session-aware gap detection.** `services/ohlc/gap_detection.py::find_gaps` walks the timeframe-aligned slot grid in `[start, end)`, consults `services.instruments.default_session()` for a CME-default 23h session with a 16:00–17:00 America/Chicago break, and skips any slot inside the daily break so the overnight close is never reported as missing.
+- **Background fetch job registry.** `services/ohlc/jobs.py::FetchJobRegistry` is an in-memory `job_id → Future + meta` map used by both the post-tick hook and the on-demand fetch route. Job state is `pending`, `done`, `failed`, or `not_found`.
+- **API surface.** `GET /api/chart/{instrument}` (read-only, never fetches), `POST /api/chart/{instrument}/fetch` (queues a fetch, returns a job_id, 202), `GET /api/ohlc/jobs/{job_id}` (poll), `GET /api/ohlc/sources` (per-source breaker snapshots for the monitoring page).
+- **Second post-tick hook.** Plan 11's integrity hook stays as the first hook on `ImportPipeline.post_tick_hooks`. Plan 14 appends a second hook that, for each affected `(account, instrument)` and each canonical timeframe in `services.instruments.DEFAULT_TIMEFRAMES`, submits a `fetch_range` job to `BackgroundServices.pool` and returns immediately. Imports never wait on OHLC.
+- **Two scheduled refresh jobs.** Every 15 minutes (`ohlc_refresh_recent`, last 6h) and every 4 hours (`ohlc_refresh_week`, last 7d) for instruments that traded in the last 7 days. Both registered on the existing APScheduler from plan 00.
+- **`services/instruments.py` extended.** `DEFAULT_TIMEFRAMES`, `source_symbol(instrument, source)`, and `default_session(instrument)` are all stubs that plan 16 will replace with the JSON-backed registry. The function names are the seam.
+- **Two new pinned dependencies.** `requirements.txt` adds `requests==2.32.3` and `yfinance==0.2.50`. The Dockerfile rebuild on next `docker compose up -d --build` picks them up automatically.
+- **End-to-end verified in Docker.** `/healthz` stays 200 even when both OHLC sources are unreachable; `/api/chart/{instrument}` returns whatever is in `bars` and never blocks; on-demand `POST /api/chart/{instrument}/fetch` returns a job_id immediately and the client polls.
+- **OHLC stays isolated, per Rule 6.** No FK to `bars`, no route imports `fetch_range` for synchronous use, no positions/stats/notes path depends on chart data being present.
 
 ### What Plan 00 deliberately did NOT land
 
