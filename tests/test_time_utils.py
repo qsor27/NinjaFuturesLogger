@@ -1,10 +1,10 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from services.time_utils import compute_session_date
 
 
 def _utc(year, month, day, hour, minute=0):
-    return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+    return datetime(year, month, day, hour, minute, tzinfo=UTC)
 
 
 def test_pre_rollover_central_time_is_same_day():

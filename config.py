@@ -7,7 +7,7 @@ from models.base import StrictModel
 class SessionConfig(StrictModel):
     exchange_timezone: str
     trade_date_rollover: str  # "HH:MM"
-    archive_job_time: str     # "HH:MM"
+    archive_job_time: str  # "HH:MM"
 
 
 class ThreadPoolConfig(StrictModel):

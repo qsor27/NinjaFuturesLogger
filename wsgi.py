@@ -7,6 +7,7 @@ We pin workers to 1 because BackgroundServices owns in-process state that
 multiple gunicorn workers would each duplicate (two schedulers, two
 watchdog observers, etc.). The app is single-user -- one worker is correct.
 """
+
 import atexit
 
 from app import create_app

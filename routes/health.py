@@ -29,9 +29,8 @@ def healthz():
     # Plan 17 hardens this once real scheduled jobs exist to keep the
     # heartbeat moving under load.
     last_tick = services.last_scheduler_tick()
-    tick_fresh = (
-        last_tick is not None
-        and (int(time.time()) - last_tick) <= max(heartbeat_seconds * 2, 5)
+    tick_fresh = last_tick is not None and (int(time.time()) - last_tick) <= max(
+        heartbeat_seconds * 2, 5
     )
     pool_saturated = False  # plan 10+ submits real work; foundation reports false.
 

@@ -1,7 +1,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -36,7 +35,7 @@ class BackgroundServices:
             thread_name_prefix="ftl-pool",
         )
         self.observer: Observer = Observer()
-        self._last_tick: Optional[int] = None
+        self._last_tick: int | None = None
         self._started: bool = False
 
     def _heartbeat(self) -> None:
@@ -91,5 +90,5 @@ class BackgroundServices:
     def pool_max_workers(self) -> int:
         return self.config.thread_pool.max_workers
 
-    def last_scheduler_tick(self) -> Optional[int]:
+    def last_scheduler_tick(self) -> int | None:
         return self._last_tick
