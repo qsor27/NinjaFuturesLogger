@@ -11,6 +11,22 @@ from models.browsing import (
 from models.execution import Execution, RejectRecord, TickResult
 from models.markers import Marker
 from models.position import Fill, IntegrityIssue, Position
+from models.statistics import (
+    DistributionResponse,
+    EquityCurveResponse,
+    EquityPoint,
+    HistogramBucket,
+    HourBucket,
+    HourBucketResponse,
+    InstrumentBreakdown,
+    InstrumentStats,
+    SideBreakdown,
+    SideStats,
+    StatsFilter,
+    StatsSummary,
+    TimeBucket,
+    TimeBucketResponse,
+)
 
 __all__ = [
     "StrictModel",
@@ -30,4 +46,18 @@ __all__ = [
     "Outcome",
     "PageMeta",
     "PositionListPage",
+    "StatsFilter",
+    "StatsSummary",
+    "InstrumentStats",
+    "InstrumentBreakdown",
+    "TimeBucket",
+    "TimeBucketResponse",
+    "HourBucket",
+    "HourBucketResponse",
+    "SideStats",
+    "SideBreakdown",
+    "EquityPoint",
+    "EquityCurveResponse",
+    "HistogramBucket",
+    "DistributionResponse",
 ]
