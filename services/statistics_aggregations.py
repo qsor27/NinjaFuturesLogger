@@ -11,9 +11,17 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from statistics import median
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from models.position import Position
-from models.statistics import StatsSummary, TimeBucket
+from models.statistics import (
+    EquityPoint,
+    HistogramBucket,
+    HourBucket,
+    InstrumentStats,
+    StatsSummary,
+    TimeBucket,
+)
 from services.outcomes import classify_outcome
 from services.time_utils import compute_session_date
 
@@ -230,3 +238,91 @@ def _enumerate_keys(start: date, end: date, granularity: str) -> list[str]:
                 y += 1
         return out
     raise ValueError(f"unknown granularity: {granularity}")
+
+
+def bucket_by_hour(
+    positions: list[Position],
+    *,
+    display_tz: ZoneInfo,
+) -> list[HourBucket]:
+    """24 buckets, one per hour of day in `display_tz`. Always continuous."""
+    counts = [0] * 24
+    pnls = [0.0] * 24
+    for p in positions:
+        local = datetime.fromtimestamp(p.entry_time, tz=display_tz)
+        h = local.hour
+        counts[h] += 1
+        pnls[h] += p.dollars_pnl or 0.0
+    return [HourBucket(hour=h, position_count=counts[h], total_pnl=pnls[h]) for h in range(24)]
+
+
+def cumulative_equity(positions: list[Position]) -> list[EquityPoint]:
+    """One point per closed position, ordered by exit_time ascending. Open
+    positions (no exit_time / no dollars_pnl) are excluded."""
+    closed = [p for p in positions if p.exit_time is not None and p.dollars_pnl is not None]
+    closed.sort(key=lambda p: p.exit_time or 0)
+    out: list[EquityPoint] = []
+    running = 0.0
+    for p in closed:
+        running += p.dollars_pnl or 0.0
+        out.append(EquityPoint(time=p.exit_time or 0, cumulative_pnl=running))
+    return out
+
+
+def pnl_histogram(
+    positions: list[Position],
+    *,
+    n_buckets: int = 10,
+) -> list[HistogramBucket]:
+    """Always returns `n_buckets` buckets spanning [min, max] of the inputs.
+
+    Empty input -> empty list. Single value -> 10 evenly-spaced degenerate
+    buckets between value-0.5 and value+0.5 (so the count lands in one bucket
+    and the chart still has 10 bars).
+    """
+    pnls = [p.dollars_pnl for p in positions if p.dollars_pnl is not None]
+    if not pnls:
+        return []
+    lo = min(pnls)
+    hi = max(pnls)
+    if lo == hi:
+        lo -= 0.5
+        hi += 0.5
+    width = (hi - lo) / n_buckets
+    edges = [lo + i * width for i in range(n_buckets + 1)]
+    counts = [0] * n_buckets
+    for v in pnls:
+        idx = int((v - lo) / width)
+        if idx >= n_buckets:
+            idx = n_buckets - 1
+        counts[idx] += 1
+    return [
+        HistogramBucket(bucket_min=edges[i], bucket_max=edges[i + 1], count=counts[i])
+        for i in range(n_buckets)
+    ]
+
+
+def split_by_side(positions: list[Position]) -> tuple[list[Position], list[Position]]:
+    longs = [p for p in positions if p.side == "Long"]
+    shorts = [p for p in positions if p.side == "Short"]
+    return longs, shorts
+
+
+def per_instrument(positions: list[Position]) -> list[InstrumentStats]:
+    by_inst: dict[str, list[Position]] = {}
+    for p in positions:
+        by_inst.setdefault(p.instrument, []).append(p)
+    rows: list[InstrumentStats] = []
+    for instrument, group in sorted(by_inst.items()):
+        s = compute_summary(group)
+        avg = s.total_pnl / s.total_positions if s.total_positions else 0.0
+        rows.append(
+            InstrumentStats(
+                instrument=instrument,
+                position_count=s.total_positions,
+                total_pnl=s.total_pnl,
+                win_rate=s.win_rate,
+                avg_pnl_per_position=avg,
+            )
+        )
+    return rows

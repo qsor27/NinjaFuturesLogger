@@ -263,3 +263,130 @@ def test_bucket_uses_session_date_not_calendar():
     positions = [_at(1776115800, eid="rollover", pnl=10.0)]
     result = bucket_by_session_date(positions, granularity="day")
     assert result[0].bucket == "2026-04-14"
+
+
+from zoneinfo import ZoneInfo  # noqa: E402
+
+from services.statistics_aggregations import (  # noqa: E402
+    bucket_by_hour,
+    cumulative_equity,
+    per_instrument,
+    pnl_histogram,
+    split_by_side,
+)
+
+
+def test_bucket_by_hour_returns_24_entries_in_chicago():
+    # 2026-04-13 09:00 UTC = 04:00 America/Chicago (CDT)
+    positions = [_at(1776070800, eid="a", pnl=10.0)]
+    result = bucket_by_hour(positions, display_tz=ZoneInfo("America/Chicago"))
+    assert len(result) == 24
+    assert result[0].hour == 0
+    assert result[23].hour == 23
+    assert result[4].position_count == 1
+    assert result[4].total_pnl == 10.0
+    other_hours = [b for b in result if b.hour != 4]
+    assert all(b.position_count == 0 for b in other_hours)
+
+
+def test_bucket_by_hour_in_tokyo_shifts_the_bucket():
+    # Same UTC moment, in Asia/Tokyo (+09:00) -> 18:00 local
+    positions = [_at(1776070800, eid="a", pnl=10.0)]
+    result = bucket_by_hour(positions, display_tz=ZoneInfo("Asia/Tokyo"))
+    assert result[18].position_count == 1
+    assert result[4].position_count == 0
+
+
+def test_cumulative_equity_orders_by_exit_time():
+    positions = [
+        _pos(eid="b", exit_time=200, dollars_pnl=5.0),
+        _pos(eid="a", exit_time=100, dollars_pnl=10.0),
+        _pos(eid="c", exit_time=300, dollars_pnl=-3.0),
+    ]
+    points = cumulative_equity(positions)
+    assert [p.time for p in points] == [100, 200, 300]
+    assert [p.cumulative_pnl for p in points] == [10.0, 15.0, 12.0]
+
+
+def test_cumulative_equity_skips_open_positions():
+    positions = [
+        _pos(eid="a", exit_time=None, dollars_pnl=None),
+        _pos(eid="b", exit_time=100, dollars_pnl=5.0),
+    ]
+    points = cumulative_equity(positions)
+    assert len(points) == 1
+    assert points[0].cumulative_pnl == 5.0
+
+
+def test_pnl_histogram_ten_buckets():
+    positions = [
+        _pos(eid=str(i), dollars_pnl=float(v))
+        for i, v in enumerate([-100, -80, -60, -40, -20, 0, 20, 40, 60, 100])
+    ]
+    h = pnl_histogram(positions)
+    assert len(h) == 10
+    assert h[0].bucket_min == -100.0
+    assert h[-1].bucket_max == 100.0
+    # All ten positions accounted for
+    assert sum(b.count for b in h) == 10
+
+
+def test_pnl_histogram_empty_input():
+    assert pnl_histogram([]) == []
+
+
+def test_pnl_histogram_single_value_collapses_to_one_loaded_bucket():
+    positions = [_pos(eid="a", dollars_pnl=42.0)]
+    h = pnl_histogram(positions)
+    assert len(h) == 10
+    assert sum(b.count for b in h) == 1
+
+
+def test_split_by_side():
+    longs = [_pos(eid="a", side="Long")]
+    shorts = [_pos(eid="b", side="Short"), _pos(eid="c", side="Short")]
+    ls, ss = split_by_side(longs + shorts)
+    assert len(ls) == 1
+    assert len(ss) == 2
+
+
+def test_per_instrument_one_instrument():
+    positions = [
+        _pos(eid="a", dollars_pnl=10.0, commission=0.0),
+        _pos(eid="b", dollars_pnl=20.0, commission=0.0),
+    ]
+    rows = per_instrument(positions)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.instrument == "MNQ"
+    assert row.position_count == 2
+    assert row.total_pnl == 30.0
+    assert row.win_rate == 1.0
+    assert row.avg_pnl_per_position == 15.0
+
+
+def test_per_instrument_groups_distinct_symbols():
+    a = _pos(eid="a", dollars_pnl=10.0)
+    # Construct a second position via the factory but with a different
+    # instrument by re-creating the model (StrictModel — use Position(...)).
+    from models.position import Position
+
+    b = Position(
+        account="Sim",
+        instrument="ES",
+        entry_execution_id="b",
+        side="Long",
+        entry_time=100,
+        exit_time=200,
+        quantity=1,
+        entry_price=100.0,
+        exit_price=101.0,
+        points_pnl=1.0,
+        dollars_pnl=10.0,
+        commission=0.0,
+        duration_minutes=1.0,
+        execution_ids=["b"],
+    )
+    rows = per_instrument([a, b])
+    instruments = sorted(r.instrument for r in rows)
+    assert instruments == ["ES", "MNQ"]
