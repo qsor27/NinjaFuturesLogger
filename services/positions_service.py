@@ -1,8 +1,12 @@
 from pathlib import Path
 
 from db import connect
+from models.browsing import PageMeta, PositionListPage
 from models.execution import Execution
 from models.position import Position
+from services.flags import list_flags_for_executions
+from services.notes import list_notes_for_executions
+from services.position_filters import PositionFilter, apply_filters, paginate
 from services.positions import build_positions
 
 
@@ -87,3 +91,75 @@ def get_position(
         if p.entry_execution_id == entry_execution_id:
             return p
     return None
+
+
+def list_positions_page(
+    db_path: Path | str,
+    *,
+    filter_: PositionFilter,
+    page: int,
+    page_size: int,
+) -> PositionListPage:
+    """Compute positions for the scope implied by the filter, apply all
+    remaining filters, sort newest-first by entry_time, and paginate.
+
+    Rule 4 from doc 12: this function recomputes positions on every call.
+    No cache, no materialization.
+    """
+    executions = _load_executions(
+        db_path,
+        account=filter_.account,
+        instrument=filter_.instrument,
+    )
+    groups: dict[tuple[str, str], list] = {}
+    for e in executions:
+        groups.setdefault((e.account, e.instrument), []).append(e)
+
+    all_positions = []
+    for _key, group in groups.items():
+        ps, _issues = build_positions(group)
+        all_positions.extend(ps)
+
+    all_positions.sort(key=lambda p: p.entry_time, reverse=True)
+    filtered = apply_filters(all_positions, filter_)
+    slice_, total = paginate(filtered, page=page, page_size=page_size)
+    return PositionListPage(
+        positions=slice_,
+        page=PageMeta(page=max(1, page), page_size=max(1, page_size), total=total),
+    )
+
+
+def get_filter_options(db_path: Path | str) -> dict:
+    """Return the set of accounts and instruments that currently have any
+    execution in the database."""
+    conn = connect(db_path)
+    try:
+        accounts = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT account FROM executions ORDER BY account"
+            ).fetchall()
+        ]
+        instruments = [
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT instrument FROM executions ORDER BY instrument"
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+    return {"accounts": accounts, "instruments": instruments}
+
+
+def attach_metadata(db_path: Path | str, position) -> dict:
+    """Return the detail-response envelope for one position: the position
+    itself, a {execution_id: note} map, a {execution_id: True} reviewed
+    map, and an empty custom_fields placeholder (plan 16 populates)."""
+    notes = list_notes_for_executions(db_path, position.execution_ids)
+    reviewed = list_flags_for_executions(db_path, position.execution_ids)
+    return {
+        "position": position.model_dump(),
+        "notes": notes,
+        "reviewed": reviewed,
+        "custom_fields": {},
+    }
