@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+from datetime import UTC, date, datetime
 
 from models.browsing import Outcome
 from models.position import Position
 from services.outcomes import classify_outcome
+from services.time_utils import compute_session_date
 
 
 @dataclass(frozen=True)
@@ -13,6 +15,7 @@ class PositionFilter:
     outcome: Outcome | None = None  # "winner" | "loser" | "scratch" | "open"
     entry_time_min: int | None = None
     entry_time_max: int | None = None
+    session_date: date | None = None  # plan 15: calendar-cell click target
 
 
 def apply_filters(
@@ -34,6 +37,10 @@ def apply_filters(
             return False
         if filter_.entry_time_max is not None and p.entry_time > filter_.entry_time_max:
             return False
+        if filter_.session_date is not None:
+            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
+            if sd != filter_.session_date:
+                return False
         return True
 
     return [p for p in positions if _keep(p)]

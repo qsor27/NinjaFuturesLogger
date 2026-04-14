@@ -18,6 +18,8 @@ log = get_logger("http.positions")
 
 
 def _parse_filter_from_query(args) -> PositionFilter:
+    from datetime import date
+
     account = args.get("account") or None
     instrument = args.get("instrument") or None
 
@@ -38,6 +40,14 @@ def _parse_filter_from_query(args) -> PositionFilter:
         except ValueError as e:
             raise ValueError(f"{key} must be an integer") from e
 
+    session_date_raw = args.get("session_date") or None
+    session_date = None
+    if session_date_raw is not None:
+        try:
+            session_date = date.fromisoformat(session_date_raw)
+        except ValueError as e:
+            raise ValueError("session_date must be ISO YYYY-MM-DD") from e
+
     return PositionFilter(
         account=account,
         instrument=instrument,
@@ -45,6 +55,7 @@ def _parse_filter_from_query(args) -> PositionFilter:
         outcome=outcome,
         entry_time_min=_int_or_none("entry_time_min"),
         entry_time_max=_int_or_none("entry_time_max"),
+        session_date=session_date,
     )
 
 
