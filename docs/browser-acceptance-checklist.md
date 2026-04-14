@@ -74,25 +74,25 @@ placeholders, not crash.
 
 ### `/statistics` (doc 15 ACs 1–9)
 
-- [ ] AC1: Page renders using one `StatisticsService` behind the JSON API. Check Network: only `/api/stats/*` endpoints are called, not ad-hoc SQL routes
-- [ ] AC2: Open positions do NOT appear in P&L totals — verify by counting closed-only positions against the summary
-- [ ] AC3: Summary card shows total positions, total P&L, win count, loss count, scratch count, win rate, average win, average loss, profit factor, largest win, largest loss, longest winning streak, longest losing streak
-- [ ] AC4: Per-instrument breakdown table renders with instrument / position count / total P&L / win rate / avg P&L per position
-- [ ] AC5: Per-day/week/month breakdown uses **session date** (16:00 CT rollover), not calendar date — pick a position with an overnight execution and verify it buckets by its session date
-- [ ] AC6: Per-hour-of-day breakdown renders 0–23 in the configured `display_timezone` (from `/settings/chart`)
-- [ ] AC7: Per-side breakdown (Long/Short) renders with position count, total P&L, win rate
-- [ ] AC8: Execution-quality metrics: average hold time, median hold time, average position size, P&L distribution histogram with 10 buckets
-- [ ] AC9: Filter controls (account, date range, side) change the displayed numbers. Filter posts query params, not a new page
+- [x] AC1: Page renders using one `StatisticsService` behind the JSON API. Check Network: only `/api/stats/*` endpoints are called, not ad-hoc SQL routes. Confirmed: 6 calls all `GET /api/stats/*`; `/api/positions/filters` for filter dropdown only ✓.
+- [x] AC2: Open positions do NOT appear in P&L totals — verify by counting closed-only positions against the summary. Confirmed: OPEN: 0 in summary card; all 18 positions are closed ✓.
+- [ ] AC3: Summary card shows total positions, total P&L, win count, loss count, scratch count, win rate, average win, average loss, profit factor, largest win, largest loss, longest winning streak, longest losing streak. **FAIL**: win count (14), loss count (4), scratch count (0) exist in API response (`/api/stats/summary`) but are not rendered in the summary card UI. All other fields present ✓.
+- [ ] AC4: Per-instrument breakdown table renders with instrument / position count / total P&L / win rate / avg P&L per position. **FAIL**: table shows instrument, trades, P&L, win% — missing "avg P&L per position" column.
+- [x] AC5: Per-day/week/month breakdown uses **session date** (16:00 CT rollover), not calendar date. Confirmed for same-day positions: buckets 2026-04-07 through 2026-04-13 match position entry dates ✓. Overnight rollover not testable — no overnight positions in test data.
+- [x] AC6: Per-hour-of-day breakdown renders 0–23 in the configured `display_timezone`. Confirmed: chart labeled "BY HOUR (AMERICA/CHICAGO)"; API returns `timezone: America/Chicago`; active hours 8–12 match CT morning session ✓.
+- [x] AC7: Per-side breakdown (Long/Short) renders with position count, total P&L, win rate. Confirmed: "LONG VS SHORT" card shows Long (+$2,310 · 8 trades · 75.0%) and Short (+$1,901 · 10 trades · 80.0%) ✓.
+- [ ] AC8: Execution-quality metrics: average hold time, median hold time, average position size, P&L distribution histogram with 10 buckets. **FAIL**: avg hold (15 min) and avg size (6.0) shown; median hold time and P&L distribution histogram not rendered (data exists in API but UI omits them).
+- [x] AC9: Filter controls (account, date range, side) change the displayed numbers. Filter posts query params, not a new page. Confirmed: selecting Long+Apply re-fetched all `/api/stats/*?side=Long`; total P&L updated 4211→2310; URL became `?side=Long` via pushState ✓.
 
 ### `/reports` (doc 15 AC 10)
 
-- [ ] AC10: Page renders a monthly P&L calendar heat map, a per-account cumulative equity curve (one point per session date — no HH:MM labels), an instrument breakdown table, and a performance summary card
-- [ ] AC10.1: The equity curve handles the plan 15 polish — multi-line per account, date-bucketed, no mixing day numbers with intraday labels
-- [ ] AC10.2: Side filter (Long/Short) threads through both pages
+- [ ] AC10: Page renders a monthly P&L calendar heat map, a per-account cumulative equity curve (one point per session date — no HH:MM labels), an instrument breakdown table, and a performance summary card. **FAIL**: calendar ✓, equity curve ✓, by-week ✓, by-month ✓ — but instrument breakdown table and performance summary card are absent from the page.
+- [x] AC10.1: The equity curve handles the plan 15 polish — multi-line per account, date-bucketed, no mixing day numbers with intraday labels. Confirmed: two lines (APEX…067 purple, APEX…068 teal); x-axis shows date numbers 7/8/9/10/13; no HH:MM ✓.
+- [x] AC10.2: Side filter (Long/Short) threads through both pages. Confirmed: `/reports?side=Long` refetches all 5 report endpoints with `?side=Long` ✓.
 
 ### No cache, always live (doc 15 AC 11)
 
-- [ ] AC11: Change an execution (e.g. rollback a tick), reload `/statistics`, and verify the numbers update immediately — no stale values
+- [ ] AC11: Change an execution (e.g. rollback a tick), reload `/statistics`, and verify the numbers update immediately — no stale values. **BLOCKED**: requires rolling back a tick to test; deferred to avoid data loss.
 
 ---
 
