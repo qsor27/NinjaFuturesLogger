@@ -8,6 +8,7 @@ __pycache__/
 data/inbox/*
 data/archive/*
 data/logs/*
+data/config/instruments.json
 !data/inbox/.gitkeep
 !data/archive/.gitkeep
 !data/logs/.gitkeep
