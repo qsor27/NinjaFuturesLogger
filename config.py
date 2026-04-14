@@ -27,6 +27,7 @@ class Config(StrictModel):
     session: SessionConfig
     thread_pool: ThreadPoolConfig
     scheduler: SchedulerConfig
+    display_timezone: str | None = None
 
 
 def load_config(path: Path | str) -> Config:
