@@ -9,12 +9,44 @@ const CHART_DEFAULTS = {
   timeScale: { borderColor: "#334155", timeVisible: true, secondsVisible: false },
 };
 
-export function mountLineChart(container, points, opts = {}) {
+const LINE_COLOR_CYCLE = [
+  "#8b5cf6", // purple (accent)
+  "#14b8a6", // teal
+  "#f59e0b", // amber
+  "#ec4899", // pink
+  "#6366f1", // indigo
+  "#22d3ee", // cyan
+];
+
+// Multi-series line chart. `seriesList` is [{account, points: [...]}]; each
+// points entry is {time, cumulative_pnl}. One LC line series per account
+// with a color from LINE_COLOR_CYCLE, plus a legend chip row.
+export function mountLineChart(container, seriesList, opts = {}) {
   container.innerHTML = "";
-  if (!points.length) {
+  const nonEmpty = (seriesList || []).filter((s) => s.points && s.points.length);
+  if (!nonEmpty.length) {
     container.innerHTML = '<div class="empty-state">No data for this filter</div>';
     return null;
   }
+
+  if (nonEmpty.length > 1) {
+    const legend = document.createElement("div");
+    legend.className = "chart-legend";
+    nonEmpty.forEach((s, i) => {
+      const chip = document.createElement("span");
+      chip.className = "legend-chip";
+      const swatch = document.createElement("span");
+      swatch.className = "legend-swatch";
+      swatch.style.background = LINE_COLOR_CYCLE[i % LINE_COLOR_CYCLE.length];
+      chip.appendChild(swatch);
+      const label = document.createElement("span");
+      label.textContent = s.account;
+      chip.appendChild(label);
+      legend.appendChild(chip);
+    });
+    container.appendChild(legend);
+  }
+
   const wrap = document.createElement("div");
   wrap.className = "chart-container";
   container.appendChild(wrap);
@@ -23,11 +55,26 @@ export function mountLineChart(container, points, opts = {}) {
     width: wrap.clientWidth,
     height: wrap.clientHeight,
   });
-  const series = chart.addLineSeries({
-    color: opts.color || "#8b5cf6",
-    lineWidth: 2,
+  nonEmpty.forEach((s, i) => {
+    const lcSeries = chart.addLineSeries({
+      color: opts.color || LINE_COLOR_CYCLE[i % LINE_COLOR_CYCLE.length],
+      lineWidth: 2,
+    });
+    // Lightweight Charts requires strictly increasing time values; dedupe
+    // points that share an exit_time by keeping the last cumulative value
+    // for that second.
+    const deduped = [];
+    let lastTime = null;
+    for (const p of s.points) {
+      if (lastTime === p.time && deduped.length) {
+        deduped[deduped.length - 1].value = p.cumulative_pnl;
+      } else {
+        deduped.push({ time: p.time, value: p.cumulative_pnl });
+        lastTime = p.time;
+      }
+    }
+    lcSeries.setData(deduped);
   });
-  series.setData(points.map((p) => ({ time: p.time, value: p.cumulative_pnl })));
   chart.timeScale().fitContent();
   new ResizeObserver(() => {
     chart.applyOptions({ width: wrap.clientWidth, height: wrap.clientHeight });

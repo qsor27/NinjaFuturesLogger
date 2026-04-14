@@ -245,6 +245,26 @@ body:has(.reports-page) {
 #stats-equity .chart-container { height: 220px; }
 #reports-equity .chart-container { height: 320px; }
 
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
 /* Hand-rolled histogram bar chart (plan 15 bug 2 fix) */
 .bar-chart {
   display: flex;

@@ -17,6 +17,7 @@ from models.position import Position
 from models.statistics import (
     DistributionResponse,
     EquityCurveResponse,
+    EquitySeries,
     HourBucketResponse,
     InstrumentBreakdown,
     SideBreakdown,
@@ -193,7 +194,14 @@ class StatisticsService:
 
     def equity_curve(self, filter: StatsFilter) -> EquityCurveResponse:
         loaded = self._load_closed_positions(filter)
-        return EquityCurveResponse(points=cumulative_equity(loaded.closed_with_pnl))
+        by_account: dict[str, list[Position]] = {}
+        for p in loaded.closed_with_pnl:
+            by_account.setdefault(p.account, []).append(p)
+        series = [
+            EquitySeries(account=account, points=cumulative_equity(positions))
+            for account, positions in sorted(by_account.items())
+        ]
+        return EquityCurveResponse(series=series)
 
     def distribution(self, filter: StatsFilter) -> DistributionResponse:
         loaded = self._load_closed_positions(filter)

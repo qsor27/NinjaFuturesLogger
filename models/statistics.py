@@ -81,8 +81,13 @@ class EquityPoint(StrictModel):
     cumulative_pnl: float
 
 
-class EquityCurveResponse(StrictModel):
+class EquitySeries(StrictModel):
+    account: str
     points: list[EquityPoint]
+
+
+class EquityCurveResponse(StrictModel):
+    series: list[EquitySeries]
 
 
 class HistogramBucket(StrictModel):

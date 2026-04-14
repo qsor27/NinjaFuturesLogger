@@ -131,7 +131,7 @@ async function refresh(filter) {
   equityCard.innerHTML = '<p class="section-label">Equity Curve</p>';
   const equityHost = document.createElement("div");
   equityCard.appendChild(equityHost);
-  mountLineChart(equityHost, data["equity-curve"].points);
+  mountLineChart(equityHost, data["equity-curve"].series);
 
   const dayCard = document.getElementById("stats-by-day");
   dayCard.innerHTML = '<p class="section-label">By Day</p>';

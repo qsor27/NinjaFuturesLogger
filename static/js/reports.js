@@ -32,7 +32,7 @@ async function refresh(filter) {
   equityCard.innerHTML = '<p class="section-label">Cumulative Equity</p>';
   const equityHost = document.createElement("div");
   equityCard.appendChild(equityHost);
-  mountLineChart(equityHost, data["equity-curve"].points);
+  mountLineChart(equityHost, data["equity-curve"].series);
 
   const weekCard = document.getElementById("reports-by-week");
   weekCard.innerHTML = '<p class="section-label">By Week</p>';

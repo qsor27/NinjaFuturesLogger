@@ -253,8 +253,23 @@ def test_by_side(tmp_path):
 def test_equity_curve(tmp_path):
     svc = _service(_fresh(tmp_path))
     r = svc.equity_curve(StatsFilter())
-    assert len(r.points) == 1
-    assert r.points[0].cumulative_pnl > 0
+    assert len(r.series) == 1
+    assert r.series[0].account == "Sim"
+    assert len(r.series[0].points) == 1
+    assert r.series[0].points[0].cumulative_pnl > 0
+
+
+def test_equity_curve_multi_account(tmp_path):
+    db_path = _migrated_db(tmp_path)
+    _seed(db_path, account="A")
+    _seed_extra_account(db_path)
+    svc = _service(db_path)
+    r = svc.equity_curve(StatsFilter())
+    accounts = sorted(s.account for s in r.series)
+    assert accounts == ["A", "B"]
+    for s in r.series:
+        assert len(s.points) == 1
+        assert s.points[0].cumulative_pnl > 0
 
 
 def test_distribution(tmp_path):

@@ -7,6 +7,7 @@ from models.statistics import (
     DistributionResponse,
     EquityCurveResponse,
     EquityPoint,
+    EquitySeries,
     HistogramBucket,
     HourBucket,
     HourBucketResponse,
@@ -124,14 +125,31 @@ def test_side_breakdown():
     assert payload.long.position_count == 3
 
 
-def test_equity_curve_orders_by_time():
+def test_equity_curve_response_series():
     payload = EquityCurveResponse(
-        points=[
-            EquityPoint(time=100, cumulative_pnl=10.0),
-            EquityPoint(time=200, cumulative_pnl=15.0),
+        series=[
+            EquitySeries(
+                account="Sim",
+                points=[
+                    EquityPoint(time=100, cumulative_pnl=10.0),
+                    EquityPoint(time=200, cumulative_pnl=15.0),
+                ],
+            )
         ]
     )
-    assert payload.points[1].time == 200
+    assert len(payload.series) == 1
+    assert payload.series[0].account == "Sim"
+    assert payload.series[0].points[1].time == 200
+
+
+def test_equity_curve_response_multi_series():
+    payload = EquityCurveResponse(
+        series=[
+            EquitySeries(account="A", points=[EquityPoint(time=100, cumulative_pnl=5.0)]),
+            EquitySeries(account="B", points=[EquityPoint(time=100, cumulative_pnl=-3.0)]),
+        ]
+    )
+    assert [s.account for s in payload.series] == ["A", "B"]
 
 
 def test_distribution_response():

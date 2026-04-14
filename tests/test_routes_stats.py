@@ -135,7 +135,10 @@ def test_equity_curve(client):
     resp = client.get("/api/stats/equity-curve")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert len(body["points"]) == 1
+    assert "series" in body
+    assert len(body["series"]) == 1
+    assert body["series"][0]["account"] == "Sim"
+    assert len(body["series"][0]["points"]) == 1
 
 
 def test_distribution(client):
