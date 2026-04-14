@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Data Health — FTL{% endblock %}
+{% block content %}
+<h1>Data Health</h1>
+<div id="sources-band"></div>
+<div id="completeness-matrix"></div>
+<div id="detail-panel" style="display:none"></div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/data_health.js') }}"></script>
+{% endblock %}

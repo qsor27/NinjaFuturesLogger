@@ -18,7 +18,7 @@ def test_imports_blueprint_is_registered(tmp_config):
     resp = client.get("/api/imports/runs")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body == {"runs": []}
+    assert body == {"runs": [], "total": 0}
 
 
 def test_inbox_dir_is_in_app_config(tmp_config):

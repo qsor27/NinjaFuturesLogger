@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Import History — FTL{% endblock %}
+{% block content %}
+<h1>Import History</h1>
+<div id="cursors-band"></div>
+<div class="filters" id="filters-bar"></div>
+<div id="runs-table"></div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/imports.js') }}"></script>
+{% endblock %}

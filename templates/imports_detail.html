@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Import Tick {{ tick_id }} — FTL{% endblock %}
+{% block content %}
+<h1>Import Tick #{{ tick_id }}</h1>
+<div id="tick-detail" data-tick-id="{{ tick_id }}"></div>
+<div id="rejects-table"></div>
+<div id="rollback-section"></div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/imports.js') }}"></script>
+{% endblock %}

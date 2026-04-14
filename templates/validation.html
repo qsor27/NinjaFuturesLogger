@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Validation — FTL{% endblock %}
+{% block content %}
+<h1>Validation</h1>
+<div class="info-banner">
+  Issues are re-evaluated on every import tick. Issues that no longer hold
+  are marked system-resolved automatically. Ignored issues stay ignored until
+  you unignore them.
+</div>
+<div class="filters" id="filters-bar"></div>
+<div id="issues-table"></div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/validation.js') }}"></script>
+{% endblock %}

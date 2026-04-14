@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}System Health — FTL{% endblock %}
+{% block content %}
+<h1>System Health</h1>
+<div id="healthz-section"></div>
+<h2>APScheduler Jobs</h2>
+<div id="jobs-table"></div>
+<h2>Thread Pool</h2>
+<div id="pool-section"></div>
+<h2>Watchdog Observer</h2>
+<div id="watchdog-section"></div>
+<h2>Uptime</h2>
+<div id="uptime-section"></div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/system_health.js') }}"></script>
+{% endblock %}

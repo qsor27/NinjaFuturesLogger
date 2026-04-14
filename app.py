@@ -15,6 +15,7 @@ from migrations import run_migrations
 from routes import health as health_routes
 from routes.imports import build_imports_blueprint
 from routes.links import build_links_blueprint
+from routes.monitoring import build_monitoring_blueprint
 from routes.ohlc import build_ohlc_blueprint
 from routes.pages import build_pages_blueprint
 from routes.positions import build_positions_blueprint
@@ -139,6 +140,7 @@ def create_app(
     app.register_blueprint(build_settings_blueprint())
     app.register_blueprint(build_pages_blueprint())
     app.register_blueprint(build_stats_blueprint())
+    app.register_blueprint(build_monitoring_blueprint())
 
     services.scheduler.add_job(
         lambda: pipeline.scan_inbox(config.inbox_dir),

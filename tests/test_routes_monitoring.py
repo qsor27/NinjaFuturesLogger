@@ -472,3 +472,53 @@ def test_system_run_job_executes(monitoring_app):
         assert ran == [1]
     finally:
         svc.stop()
+
+
+# --- full app page route tests ---
+
+import json as _json
+
+from app import create_app
+from config import load_config
+
+
+def _make_full_config_client(tmp_path):
+    data_dir = tmp_path / "data"
+    (data_dir / "config").mkdir(parents=True)
+    (data_dir / "inbox").mkdir()
+    (data_dir / "archive").mkdir()
+    (data_dir / "log").mkdir()
+    app_json = data_dir / "config" / "app.json"
+    app_json.write_text(
+        _json.dumps(
+            {
+                "data_dir": str(data_dir),
+                "db_path": str(data_dir / "ftl.db"),
+                "inbox_dir": str(data_dir / "inbox"),
+                "archive_dir": str(data_dir / "archive"),
+                "log_dir": str(data_dir / "log"),
+                "session": {
+                    "exchange_timezone": "America/Chicago",
+                    "trade_date_rollover": "16:00",
+                    "archive_job_time": "18:00",
+                },
+                "thread_pool": {"max_workers": 2},
+                "scheduler": {"heartbeat_seconds": 60},
+            }
+        )
+    )
+    app, _svc = create_app(load_config(app_json))
+    return app.test_client()
+
+
+def test_monitoring_pages_return_200(tmp_path):
+    client = _make_full_config_client(tmp_path)
+    for path in ["/imports", "/validation", "/data-health", "/system/health"]:
+        resp = client.get(path)
+        assert resp.status_code == 200, f"{path} returned {resp.status_code}"
+
+
+def test_imports_detail_page_returns_200(tmp_path):
+    client = _make_full_config_client(tmp_path)
+    resp = client.get("/imports/42")
+    assert resp.status_code == 200

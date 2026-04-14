@@ -35,4 +35,24 @@ def build_pages_blueprint() -> Blueprint:
     def reports_page():
         return render_template("reports.html")
 
+    @bp.get("/imports")
+    def imports_list():
+        return render_template("imports.html")
+
+    @bp.get("/imports/<int:tick_id>")
+    def imports_detail(tick_id: int):
+        return render_template("imports_detail.html", tick_id=tick_id)
+
+    @bp.get("/validation")
+    def validation_page():
+        return render_template("validation.html")
+
+    @bp.get("/data-health")
+    def data_health_page():
+        return render_template("data_health.html")
+
+    @bp.get("/system/health")
+    def system_health_page():
+        return render_template("system_health.html")
+
     return bp
