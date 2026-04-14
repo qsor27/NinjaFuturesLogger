@@ -7,6 +7,7 @@ import {
   setText,
 } from "./api.js";
 import { PriceChart } from "./PriceChart.js";
+import { mountCustomFields } from "./custom_fields_detail.js";
 
 const root = document.getElementById("detail-root");
 const { account, instrument, entryExecutionId } = root.dataset;
@@ -186,6 +187,10 @@ deleteBtn.addEventListener("click", async () => {
     renderHeader(detail);
     renderReviewedToggle(detail);
     renderNotesPanel(detail);
+    const cfContainer = document.getElementById("custom-fields-block");
+    if (cfContainer) {
+      mountCustomFields(cfContainer, detail, detail.position.entry_execution_id);
+    }
     renderExecutions(execs.executions, detail);
     renderLinksPanel();
 

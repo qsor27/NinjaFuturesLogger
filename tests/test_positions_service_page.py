@@ -155,5 +155,5 @@ def test_attach_metadata_collects_notes_and_flags(migrated_db):
     detail = attach_metadata(migrated_db, positions[0])
     assert detail["notes"] == {"a": "entry thoughts"}
     assert detail["reviewed"] == {"a": True}
-    assert detail["custom_fields"] == {}
+    assert detail["custom_fields"] == {"entry": {}, "per_execution": [], "definitions": []}
     assert detail["position"]["entry_execution_id"] == "a"

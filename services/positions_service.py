@@ -152,14 +152,19 @@ def get_filter_options(db_path: Path | str) -> dict:
 
 
 def attach_metadata(db_path: Path | str, position) -> dict:
-    """Return the detail-response envelope for one position: the position
-    itself, a {execution_id: note} map, a {execution_id: True} reviewed
-    map, and an empty custom_fields placeholder (plan 16 populates)."""
+    """Return the detail-response envelope for one position."""
+    from services.custom_fields import CustomFieldsService
+
     notes = list_notes_for_executions(db_path, position.execution_ids)
     reviewed = list_flags_for_executions(db_path, position.execution_ids)
+    svc = CustomFieldsService(db_path)
+    custom_fields = svc.values_for_position(
+        execution_ids=position.execution_ids,
+        entry_execution_id=position.entry_execution_id,
+    )
     return {
         "position": position.model_dump(),
         "notes": notes,
         "reviewed": reviewed,
-        "custom_fields": {},
+        "custom_fields": custom_fields,
     }

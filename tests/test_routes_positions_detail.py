@@ -62,7 +62,7 @@ def test_detail_attaches_notes_and_reviewed(tmp_config):
         assert body["position"]["entry_execution_id"] == "a"
         assert body["notes"] == {"a": "setup"}
         assert body["reviewed"] == {"a": True}
-        assert body["custom_fields"] == {}
+        assert body["custom_fields"] == {"entry": {}, "per_execution": [], "definitions": []}
     finally:
         services.stop()
 
