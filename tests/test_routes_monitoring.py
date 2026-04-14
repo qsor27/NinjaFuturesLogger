@@ -341,3 +341,134 @@ def test_run_job_now_executes_job(svc_config):
         assert ran == [1]
     finally:
         svc.stop()
+
+
+# --- monitoring blueprint tests ---
+
+from routes.monitoring import build_monitoring_blueprint
+
+
+@pytest.fixture
+def monitoring_app(tmp_path):
+    db_path = tmp_path / "t.db"
+    conn = connect(db_path)
+    run_migrations(conn, Path("migrations"))
+    conn.close()
+
+    (tmp_path / "inbox").mkdir()
+    config = Config(
+        data_dir=str(tmp_path),
+        db_path=str(db_path),
+        inbox_dir=str(tmp_path / "inbox"),
+        archive_dir=str(tmp_path / "archive"),
+        log_dir=str(tmp_path / "logs"),
+        session=SessionConfig(
+            exchange_timezone="America/Chicago",
+            trade_date_rollover="16:00",
+            archive_job_time="18:00",
+        ),
+        thread_pool=ThreadPoolConfig(max_workers=2),
+        scheduler=SchedulerConfig(heartbeat_seconds=60),
+    )
+    svc = BackgroundServices(config)
+
+    app = Flask(__name__)
+    app.config["FTL_DB_PATH"] = str(db_path)
+    app.config["BACKGROUND_SERVICES"] = svc
+    app.register_blueprint(build_monitoring_blueprint())
+    return app, db_path
+
+
+def test_data_health_completeness_empty(monitoring_app):
+    app, _ = monitoring_app
+    resp = app.test_client().get("/api/data-health/completeness")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert "instruments" in body
+    assert "cells" in body
+    assert body["instruments"] == []
+
+
+def test_data_health_completeness_has_instrument_after_executions(monitoring_app):
+    app, db_path = monitoring_app
+    now = int(_time.time())
+    conn = connect(db_path)
+    try:
+        conn.execute("BEGIN")
+        conn.execute(
+            "INSERT INTO executions (nt_execution_id, account, instrument, timestamp,"
+            " side, original_action, quantity, price, commission, entry_exit,"
+            " position_after, source_order_id, source_filename, imported_at)"
+            " VALUES ('e1','Sim101','MNQ',?,?,?,1,100.0,0.0,'Entry','1 L',NULL,'f.csv',?)",
+            (now - 100, "Buy", "Buy", now - 100),
+        )
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+    resp = app.test_client().get("/api/data-health/completeness")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert "MNQ" in body["instruments"]
+    assert "MNQ" in body["cells"]
+
+
+def test_data_health_missing_returns_gaps(monitoring_app):
+    app, _ = monitoring_app
+    now = int(_time.time())
+    start = now - 3600
+    end = now
+    resp = app.test_client().get(
+        f"/api/data-health/missing/MNQ/1m?start={start}&end={end}"
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert "gaps" in body
+    assert isinstance(body["gaps"], list)
+
+
+def test_data_health_missing_unknown_timeframe(monitoring_app):
+    app, _ = monitoring_app
+    resp = app.test_client().get("/api/data-health/missing/MNQ/7x")
+    assert resp.status_code == 400
+
+
+def test_system_health_endpoint(monitoring_app):
+    app, _ = monitoring_app
+    resp = app.test_client().get("/api/system/health")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert "jobs" in body
+    assert "pool" in body
+    assert "watchdog" in body
+    assert "uptime_seconds" in body
+
+
+def test_system_run_job_not_found(monitoring_app):
+    app, _ = monitoring_app
+    svc = app.config["BACKGROUND_SERVICES"]
+    svc.start()
+    try:
+        resp = app.test_client().post("/api/system/run-job/ghost_job")
+        assert resp.status_code == 404
+    finally:
+        svc.stop()
+
+
+def test_system_run_job_executes(monitoring_app):
+    app, _ = monitoring_app
+    svc = app.config["BACKGROUND_SERVICES"]
+    ran = []
+    svc.start()
+    try:
+        svc.scheduler.add_job(
+            lambda: ran.append(1),
+            trigger="interval",
+            seconds=9999,
+            id="test_run_via_api",
+        )
+        resp = app.test_client().post("/api/system/run-job/test_run_via_api")
+        assert resp.status_code == 200
+        _time.sleep(0.3)
+        assert ran == [1]
+    finally:
+        svc.stop()
