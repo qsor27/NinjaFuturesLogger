@@ -13,3 +13,5 @@ data/logs/*
 !data/logs/.gitkeep
 .venv/
 .env
+.claude/
+pip_install.log
