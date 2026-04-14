@@ -16,6 +16,7 @@ from routes import health as health_routes
 from routes.imports import build_imports_blueprint
 from routes.ohlc import build_ohlc_blueprint
 from routes.positions import build_positions_blueprint
+from routes.user_metadata import build_user_metadata_blueprint
 from services.import_pipeline import ImportPipeline
 from services.import_watchdog import TickHandler
 from services.instruments import DEFAULT_TIMEFRAMES
@@ -123,6 +124,7 @@ def create_app(
     app.register_blueprint(build_imports_blueprint())
     app.register_blueprint(build_positions_blueprint())
     app.register_blueprint(build_ohlc_blueprint())
+    app.register_blueprint(build_user_metadata_blueprint())
 
     services.scheduler.add_job(
         lambda: pipeline.scan_inbox(config.inbox_dir),
