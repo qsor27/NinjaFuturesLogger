@@ -124,8 +124,8 @@ def test_attach_metadata_collects_notes_and_flags(migrated_db):
     )
     upsert_note(migrated_db, execution_id="a", note="entry thoughts", now=150)
     set_reviewed(migrated_db, execution_id="a", reviewed=True, now=151)
-    from services.positions import build_positions
     from models.execution import Execution as _E
+    from services.positions import build_positions
 
     conn = connect(migrated_db)
     try:

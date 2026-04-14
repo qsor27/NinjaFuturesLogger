@@ -1,5 +1,5 @@
-from models.base import StrictModel
 from models.bar import AttemptRecord, Bar, FetchResult
+from models.base import StrictModel
 from models.browsing import (
     LinkGroup,
     LinkGroupDetail,

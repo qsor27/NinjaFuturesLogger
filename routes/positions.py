@@ -71,17 +71,19 @@ def build_positions_blueprint() -> Blueprint:
             page=page,
             page_size=page_size,
         )
-        return jsonify({
-            "positions": [p.model_dump() for p in result.positions],
-            "page": {
-                "page": result.page.page,
-                "page_size": result.page.page_size,
-                "total": result.page.total,
-                "total_pages": result.page.total_pages,
-                "has_next": result.page.has_next,
-                "has_prev": result.page.has_prev,
-            },
-        })
+        return jsonify(
+            {
+                "positions": [p.model_dump() for p in result.positions],
+                "page": {
+                    "page": result.page.page,
+                    "page_size": result.page.page_size,
+                    "total": result.page.total,
+                    "total_pages": result.page.total_pages,
+                    "has_next": result.page.has_next,
+                    "has_prev": result.page.has_prev,
+                },
+            }
+        )
 
     @bp.get("/api/positions/filters")
     def filters_endpoint():
@@ -113,6 +115,7 @@ def build_positions_blueprint() -> Blueprint:
         # return only the ones whose nt_execution_id (with split suffix
         # stripped) appears in p.execution_ids.
         from services.notes import strip_split_suffix
+
         wanted = {strip_split_suffix(eid) for eid in p.execution_ids}
         conn = connect(_db_path())
         try:

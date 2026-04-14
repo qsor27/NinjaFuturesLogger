@@ -51,8 +51,7 @@ def get_group(db_path: Path | str, link_group_id: int) -> LinkGroupDetail | None
     conn = connect(db_path)
     try:
         row = conn.execute(
-            "SELECT link_group_id, label, created_at FROM link_groups "
-            "WHERE link_group_id = ?",
+            "SELECT link_group_id, label, created_at FROM link_groups " "WHERE link_group_id = ?",
             (link_group_id,),
         ).fetchone()
         if row is None:
@@ -84,8 +83,7 @@ def list_groups(db_path: Path | str) -> list[LinkGroup]:
     conn = connect(db_path)
     try:
         rows = conn.execute(
-            "SELECT link_group_id, label, created_at "
-            "FROM link_groups ORDER BY created_at DESC"
+            "SELECT link_group_id, label, created_at " "FROM link_groups ORDER BY created_at DESC"
         ).fetchall()
     finally:
         conn.close()
@@ -141,7 +139,7 @@ def add_members(
             existing_keys = {
                 (r["account"], r["instrument"], r["entry_execution_id"]) for r in existing
             }
-            next_ordinal = (max((int(r["ordinal"]) for r in existing), default=-1) + 1)
+            next_ordinal = max((int(r["ordinal"]) for r in existing), default=-1) + 1
             for m in members:
                 key = (m.account, m.instrument, m.entry_execution_id)
                 if key in existing_keys:

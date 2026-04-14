@@ -46,8 +46,11 @@ def test_classify_scratch_at_exact_boundary():
 
 def test_classify_open_position_is_open():
     p = _pos(
-        exit_time=None, exit_price=None,
-        points_pnl=None, dollars_pnl=None, duration_minutes=None,
+        exit_time=None,
+        exit_price=None,
+        points_pnl=None,
+        dollars_pnl=None,
+        duration_minutes=None,
     )
     assert classify_outcome(p) == "open"
 

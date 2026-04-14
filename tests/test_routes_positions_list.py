@@ -102,9 +102,7 @@ def test_list_outcome_filter(tmp_config):
         )
         conn = connect(tmp_config.db_path)
         try:
-            conn.execute(
-                "UPDATE executions SET price = 200.0 WHERE nt_execution_id = 'b'"
-            )
+            conn.execute("UPDATE executions SET price = 200.0 WHERE nt_execution_id = 'b'")
         finally:
             conn.close()
         resp = app.test_client().get("/api/positions?outcome=winner")

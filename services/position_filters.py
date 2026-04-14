@@ -9,8 +9,8 @@ from services.outcomes import classify_outcome
 class PositionFilter:
     account: str | None = None
     instrument: str | None = None
-    side: str | None = None           # "Long" | "Short"
-    outcome: Outcome | None = None    # "winner" | "loser" | "scratch" | "open"
+    side: str | None = None  # "Long" | "Short"
+    outcome: Outcome | None = None  # "winner" | "loser" | "scratch" | "open"
     entry_time_min: int | None = None
     entry_time_max: int | None = None
 
@@ -20,6 +20,7 @@ def apply_filters(
     filter_: PositionFilter,
 ) -> list[Position]:
     """Pure function: compose all filter predicates with AND."""
+
     def _keep(p: Position) -> bool:
         if filter_.account is not None and p.account != filter_.account:
             return False

@@ -58,15 +58,20 @@ def test_position_links_shape(tmp_path: Path):
     try:
         cols = {r[1] for r in conn.execute("PRAGMA table_info(position_links)").fetchall()}
         assert cols == {
-            "link_group_id", "account", "instrument",
-            "entry_execution_id", "ordinal",
+            "link_group_id",
+            "account",
+            "instrument",
+            "entry_execution_id",
+            "ordinal",
         }
         pk_cols = sorted(
-            r[1] for r in conn.execute("PRAGMA table_info(position_links)").fetchall()
-            if r[5] > 0
+            r[1] for r in conn.execute("PRAGMA table_info(position_links)").fetchall() if r[5] > 0
         )
         assert pk_cols == [
-            "account", "entry_execution_id", "instrument", "link_group_id",
+            "account",
+            "entry_execution_id",
+            "instrument",
+            "link_group_id",
         ]
         fks = conn.execute("PRAGMA foreign_key_list(position_links)").fetchall()
         assert any(fk[2] == "link_groups" and fk[6] == "CASCADE" for fk in fks)

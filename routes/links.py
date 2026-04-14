@@ -28,9 +28,7 @@ def _parse_members(raw) -> list[LinkMember]:
         instrument = item.get("instrument")
         eid = item.get("entry_execution_id")
         if not (isinstance(account, str) and isinstance(instrument, str) and isinstance(eid, str)):
-            raise ValueError(
-                f"member {i} must have string account, instrument, entry_execution_id"
-            )
+            raise ValueError(f"member {i} must have string account, instrument, entry_execution_id")
         parsed.append(
             LinkMember(
                 account=account,

@@ -34,9 +34,7 @@ def test_link_group_lifecycle_end_to_end(tmp_config):
             "/api/links",
             json={
                 "label": "e2e",
-                "members": [
-                    {"account": "A", "instrument": "MNQ", "entry_execution_id": "e1"}
-                ],
+                "members": [{"account": "A", "instrument": "MNQ", "entry_execution_id": "e1"}],
             },
         )
         assert create.status_code == 201

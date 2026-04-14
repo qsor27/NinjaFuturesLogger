@@ -101,7 +101,9 @@ def test_patch_group_rename(tmp_config):
     app, services = create_app(tmp_config, start_background=False)
     try:
         client = app.test_client()
-        create = _create_group(client, [{"account": "A", "instrument": "M", "entry_execution_id": "a"}])
+        create = _create_group(
+            client, [{"account": "A", "instrument": "M", "entry_execution_id": "a"}]
+        )
         gid = create.get_json()["link_group_id"]
         resp = client.patch(f"/api/links/{gid}", json={"label": "renamed"})
         assert resp.status_code == 200
@@ -114,7 +116,9 @@ def test_patch_group_add_members(tmp_config):
     app, services = create_app(tmp_config, start_background=False)
     try:
         client = app.test_client()
-        create = _create_group(client, [{"account": "A", "instrument": "M", "entry_execution_id": "a"}])
+        create = _create_group(
+            client, [{"account": "A", "instrument": "M", "entry_execution_id": "a"}]
+        )
         gid = create.get_json()["link_group_id"]
         resp = client.patch(
             f"/api/links/{gid}",
@@ -141,7 +145,9 @@ def test_patch_group_remove_member(tmp_config):
         gid = create.get_json()["link_group_id"]
         resp = client.patch(
             f"/api/links/{gid}",
-            json={"remove_members": [{"account": "A", "instrument": "M", "entry_execution_id": "a"}]},
+            json={
+                "remove_members": [{"account": "A", "instrument": "M", "entry_execution_id": "a"}]
+            },
         )
         assert resp.status_code == 200
         detail = client.get(f"/api/links/{gid}").get_json()
@@ -154,7 +160,9 @@ def test_delete_group(tmp_config):
     app, services = create_app(tmp_config, start_background=False)
     try:
         client = app.test_client()
-        create = _create_group(client, [{"account": "A", "instrument": "M", "entry_execution_id": "a"}])
+        create = _create_group(
+            client, [{"account": "A", "instrument": "M", "entry_execution_id": "a"}]
+        )
         gid = create.get_json()["link_group_id"]
         resp = client.delete(f"/api/links/{gid}")
         assert resp.status_code == 200
