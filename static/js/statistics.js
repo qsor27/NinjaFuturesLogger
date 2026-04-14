@@ -41,7 +41,18 @@ function fmtNum(v, digits = 1) {
   return Number(v).toFixed(digits);
 }
 
-function renderSummary(container, summary) {
+function _avgDayPnl(dayBuckets, positive) {
+  const days = dayBuckets.filter((b) =>
+    b.position_count > 0 && (positive ? b.total_pnl > 0 : b.total_pnl < 0)
+  );
+  if (!days.length) return null;
+  return days.reduce((s, b) => s + b.total_pnl, 0) / days.length;
+}
+
+function renderSummary(container, summary, dayBuckets) {
+  const avgWinDay = _avgDayPnl(dayBuckets, true);
+  const avgLossDay = _avgDayPnl(dayBuckets, false);
+
   container.innerHTML = `
     <p class="section-label">Summary</p>
     <p class="big-number ${summary.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(summary.total_pnl)}</p>
@@ -58,6 +69,8 @@ function renderSummary(container, summary) {
       <div><div class="stat-label">Loss Streak</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Avg Size</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Open</div><div class="stat-value"></div></div>
+      <div><div class="stat-label">Avg Win Day</div><div class="stat-value pnl-pos"></div></div>
+      <div><div class="stat-label">Avg Loss Day</div><div class="stat-value pnl-neg"></div></div>
     </div>
   `;
   const values = container.querySelectorAll(".summary-grid .stat-value");
@@ -73,6 +86,8 @@ function renderSummary(container, summary) {
   values[9].textContent = String(summary.longest_loss_streak);
   values[10].textContent = fmtNum(summary.avg_position_size, 1);
   values[11].textContent = String(summary.open_positions);
+  values[12].textContent = fmtMoney(avgWinDay);
+  values[13].textContent = fmtMoney(avgLossDay);
 
   if (summary.skipped_no_multiplier > 0) {
     const warn = document.createElement("div");
@@ -123,7 +138,7 @@ function renderInstrumentTable(container, breakdown) {
 async function refresh(filter) {
   document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "0.5"));
   const data = await fetchAll(filter);
-  renderSummary(document.getElementById("stats-summary"), data["summary"]);
+  renderSummary(document.getElementById("stats-summary"), data["summary"], data["by-day"].buckets);
   renderBySide(document.getElementById("stats-by-side"), data["by-side"]);
   renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);
 

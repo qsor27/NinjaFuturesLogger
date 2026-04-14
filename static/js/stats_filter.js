@@ -6,12 +6,13 @@ export function parseFilterFromUrl() {
   const account = url.searchParams.get("account") || null;
   const from = url.searchParams.get("from") || null;
   const to = url.searchParams.get("to") || null;
-  return { account, from, to };
+  const side = url.searchParams.get("side") || null;
+  return { account, from, to, side };
 }
 
 export function writeFilterToUrl(filter) {
   const url = new URL(window.location.href);
-  ["account", "from", "to"].forEach((k) => {
+  ["account", "from", "to", "side"].forEach((k) => {
     if (filter[k]) {
       url.searchParams.set(k, filter[k]);
     } else {
@@ -26,11 +27,12 @@ export function filterToQueryString(filter) {
   if (filter.account) parts.push(`account=${encodeURIComponent(filter.account)}`);
   if (filter.from) parts.push(`from=${encodeURIComponent(filter.from)}`);
   if (filter.to) parts.push(`to=${encodeURIComponent(filter.to)}`);
+  if (filter.side) parts.push(`side=${encodeURIComponent(filter.side)}`);
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
 export function isAnyFilterActive(filter) {
-  return Boolean(filter.account || filter.from || filter.to);
+  return Boolean(filter.account || filter.from || filter.to || filter.side);
 }
 
 export async function fetchAccountOptions() {
@@ -48,6 +50,13 @@ export function renderFilterBar(container, filter, onApply) {
         <option value="">All accounts</option>
       </select>
     </label>
+    <label>Side
+      <select id="filter-side">
+        <option value="">All</option>
+        <option value="Long">Long</option>
+        <option value="Short">Short</option>
+      </select>
+    </label>
     <label>From
       <input type="date" id="filter-from">
     </label>
@@ -59,6 +68,7 @@ export function renderFilterBar(container, filter, onApply) {
   `;
 
   const accountSelect = container.querySelector("#filter-account");
+  const sideSelect = container.querySelector("#filter-side");
   const fromInput = container.querySelector("#filter-from");
   const toInput = container.querySelector("#filter-to");
   const applyBtn = container.querySelector("#filter-apply");
@@ -66,6 +76,7 @@ export function renderFilterBar(container, filter, onApply) {
 
   if (filter.from) fromInput.value = filter.from;
   if (filter.to) toInput.value = filter.to;
+  if (filter.side) sideSelect.value = filter.side;
 
   fetchAccountOptions().then((accounts) => {
     accounts.forEach((a) => {
@@ -82,6 +93,7 @@ export function renderFilterBar(container, filter, onApply) {
   applyBtn.addEventListener("click", () => {
     const next = {
       account: accountSelect.value || null,
+      side: sideSelect.value || null,
       from: fromInput.value || null,
       to: toInput.value || null,
     };
@@ -96,9 +108,10 @@ export function renderFilterBar(container, filter, onApply) {
 
   clearBtn.addEventListener("click", () => {
     accountSelect.value = "";
+    sideSelect.value = "";
     fromInput.value = "";
     toInput.value = "";
-    const cleared = { account: null, from: null, to: null };
+    const cleared = { account: null, side: null, from: null, to: null };
     writeFilterToUrl(cleared);
     applyBtn.classList.remove("active");
     onApply(cleared);
@@ -107,6 +120,7 @@ export function renderFilterBar(container, filter, onApply) {
   window.addEventListener("popstate", () => {
     const reread = parseFilterFromUrl();
     accountSelect.value = reread.account || "";
+    sideSelect.value = reread.side || "";
     fromInput.value = reread.from || "";
     toInput.value = reread.to || "";
     onApply(reread);

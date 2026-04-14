@@ -322,3 +322,42 @@ body:has(.reports-page) {
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+/* Week / month bars: no rotation, three-line label (name + value + count) */
+.bar-chart.kind-week,
+.bar-chart.kind-month,
+.bar-chart.kind-day-count {
+  padding-bottom: 68px;
+}
+.bar-chart.kind-week::before,
+.bar-chart.kind-month::before,
+.bar-chart.kind-day-count::before {
+  top: calc(100% - 68px);
+}
+.bar-label-multi {
+  transform: translateX(-50%); /* no rotation */
+  bottom: -60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+}
+.bar-label-value {
+  font-size: 11px;
+  font-weight: 600;
+}
+.bar-label-count {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Distribution bars: count annotation above the bar (bottom set in JS) */
+.bar-top-value {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}

@@ -18,10 +18,15 @@ def _parse_filter(args) -> StatsFilter:
         except ValueError as e:
             raise ValueError(f"{key} must be ISO YYYY-MM-DD") from e
 
+    raw_side = args.get("side") or None
+    if raw_side not in (None, "Long", "Short"):
+        raise ValueError("side must be 'Long' or 'Short'")
+
     return StatsFilter(
         account=account,
         from_date=_parse_date("from"),
         to_date=_parse_date("to"),
+        side=raw_side,
     )
 
 

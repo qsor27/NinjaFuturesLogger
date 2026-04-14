@@ -8,6 +8,7 @@ class StatsFilter(StrictModel):
     account: str | None = None
     from_date: date | None = None  # inclusive, session date
     to_date: date | None = None  # inclusive, session date
+    side: Literal["Long", "Short"] | None = None
 
 
 class StatsSummary(StrictModel):
@@ -77,7 +78,7 @@ class SideBreakdown(StrictModel):
 
 
 class EquityPoint(StrictModel):
-    time: int  # unix seconds, the position's exit_time
+    time: str  # ISO date YYYY-MM-DD, one point per session date
     cumulative_pnl: float
 
 

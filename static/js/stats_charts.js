@@ -60,9 +60,9 @@ export function mountLineChart(container, seriesList, opts = {}) {
       color: opts.color || LINE_COLOR_CYCLE[i % LINE_COLOR_CYCLE.length],
       lineWidth: 2,
     });
-    // Lightweight Charts requires strictly increasing time values; dedupe
-    // points that share an exit_time by keeping the last cumulative value
-    // for that second.
+    // Lightweight Charts requires strictly increasing time values. The API
+    // now returns one point per session date (YYYY-MM-DD), so duplicates
+    // cannot occur, but keep the guard for safety.
     const deduped = [];
     let lastTime = null;
     for (const p of s.points) {
@@ -96,8 +96,9 @@ export function mountHistogramChart(container, buckets, opts = {}) {
   const hasNegative = values.some((v) => v < 0);
   const maxAbs = Math.max(1e-9, ...values.map(Math.abs));
 
+  const kind = opts.kind || "";
   const wrap = document.createElement("div");
-  wrap.className = "bar-chart" + (hasNegative ? " has-negative" : "");
+  wrap.className = "bar-chart" + (hasNegative ? " has-negative" : "") + (kind ? ` kind-${kind}` : "");
   container.appendChild(wrap);
 
   buckets.forEach((b, i) => {
@@ -105,8 +106,8 @@ export function mountHistogramChart(container, buckets, opts = {}) {
     const col = document.createElement("div");
     col.className = "bar-col";
 
-    const label = _formatBucketLabel(b, opts.kind, i);
-    const valueStr = _formatBucketValue(value, opts.kind);
+    const label = _formatBucketLabel(b, kind, i);
+    const valueStr = _formatBucketValue(value, kind);
 
     if (value === 0 && (b.position_count === 0 || b.count === 0)) {
       col.classList.add("bar-empty");
@@ -118,11 +119,42 @@ export function mountHistogramChart(container, buckets, opts = {}) {
       fill.className = "bar-fill " + (value >= 0 ? "bar-pos" : "bar-neg");
       fill.style.height = `${heightPct}%`;
       col.appendChild(fill);
+
+      // For distribution, show trade count just above the bar fill.
+      if (kind === "distribution") {
+        const topVal = document.createElement("div");
+        topVal.className = "bar-top-value";
+        topVal.textContent = value === 1 ? "1 trade" : `${value} trades`;
+        topVal.style.bottom = `calc(${heightPct}% + 4px)`;
+        col.appendChild(topVal);
+      }
     }
 
     const labelEl = document.createElement("div");
-    labelEl.className = "bar-label";
-    labelEl.textContent = label;
+    if (kind === "week" || kind === "month" || kind === "day-count") {
+      // Multi-line label: bucket name + dollar amount + context count.
+      labelEl.className = "bar-label bar-label-multi";
+      const nameLine = document.createElement("span");
+      nameLine.textContent = label;
+      labelEl.appendChild(nameLine);
+
+      const valLine = document.createElement("span");
+      valLine.className = "bar-label-value " + (value >= 0 ? "pnl-pos" : "pnl-neg");
+      valLine.textContent = _formatPnl(value);
+      labelEl.appendChild(valLine);
+
+      const cntLine = document.createElement("span");
+      cntLine.className = "bar-label-count";
+      if (kind === "day-count") {
+        cntLine.textContent = `${b.days} day${b.days === 1 ? "" : "s"}`;
+      } else if (b.position_count !== undefined) {
+        cntLine.textContent = `${b.position_count} trade${b.position_count === 1 ? "" : "s"}`;
+      }
+      labelEl.appendChild(cntLine);
+    } else {
+      labelEl.className = "bar-label";
+      labelEl.textContent = label;
+    }
     col.appendChild(labelEl);
 
     col.title = `${label}: ${valueStr}`;
@@ -152,6 +184,9 @@ function _formatBucketLabel(b, kind, index) {
   }
   if (kind === "distribution") {
     return `${_formatMoneyCompact(b.bucket_min)}..${_formatMoneyCompact(b.bucket_max)}`;
+  }
+  if (kind === "day-count") {
+    return `${b.trades_per_day} trade${b.trades_per_day === 1 ? "" : "s"}/day`;
   }
   return String(index);
 }

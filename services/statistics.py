@@ -88,6 +88,11 @@ class StatisticsService:
                 if self._in_session_range(p, filter.from_date, filter.to_date)
             ]
 
+        if filter.side is not None:
+            closed_with_pnl = [p for p in closed_with_pnl if p.side == filter.side]
+            closed_missing_mult = [p for p in closed_missing_mult if p.side == filter.side]
+            open_positions = [p for p in open_positions if p.side == filter.side]
+
         return _LoadResult(
             closed_with_pnl=closed_with_pnl,
             closed_missing_multiplier=closed_missing_mult,

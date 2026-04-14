@@ -298,20 +298,35 @@ def test_bucket_by_hour_in_tokyo_shifts_the_bucket():
 
 
 def test_cumulative_equity_orders_by_exit_time():
+    # Use timestamps on distinct UTC days so each position gets its own point.
+    DAY1, DAY2, DAY3 = 86400, 86400 * 2, 86400 * 3  # 1970-01-02/03/04
     positions = [
-        _pos(eid="b", exit_time=200, dollars_pnl=5.0),
-        _pos(eid="a", exit_time=100, dollars_pnl=10.0),
-        _pos(eid="c", exit_time=300, dollars_pnl=-3.0),
+        _pos(eid="b", exit_time=DAY2, dollars_pnl=5.0),
+        _pos(eid="a", exit_time=DAY1, dollars_pnl=10.0),
+        _pos(eid="c", exit_time=DAY3, dollars_pnl=-3.0),
     ]
     points = cumulative_equity(positions)
-    assert [p.time for p in points] == [100, 200, 300]
+    assert [p.time for p in points] == ["1970-01-02", "1970-01-03", "1970-01-04"]
     assert [p.cumulative_pnl for p in points] == [10.0, 15.0, 12.0]
+
+
+def test_cumulative_equity_collapses_same_day():
+    # Multiple positions on the same UTC day → one point with closing cumulative.
+    DAY = 86400  # 1970-01-02; use different seconds within the same day
+    positions = [
+        _pos(eid="a", exit_time=DAY + 100, dollars_pnl=10.0),
+        _pos(eid="b", exit_time=DAY + 200, dollars_pnl=5.0),
+    ]
+    points = cumulative_equity(positions)
+    assert len(points) == 1
+    assert points[0].time == "1970-01-02"
+    assert points[0].cumulative_pnl == 15.0
 
 
 def test_cumulative_equity_skips_open_positions():
     positions = [
         _pos(eid="a", exit_time=None, dollars_pnl=None),
-        _pos(eid="b", exit_time=100, dollars_pnl=5.0),
+        _pos(eid="b", exit_time=86400, dollars_pnl=5.0),
     ]
     points = cumulative_equity(positions)
     assert len(points) == 1

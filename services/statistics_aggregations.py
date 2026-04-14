@@ -257,16 +257,21 @@ def bucket_by_hour(
 
 
 def cumulative_equity(positions: list[Position]) -> list[EquityPoint]:
-    """One point per closed position, ordered by exit_time ascending. Open
-    positions (no exit_time / no dollars_pnl) are excluded."""
+    """One point per session date, ordered ascending. The point value is the
+    closing cumulative P&L at end of that day. Open positions (no exit_time /
+    no dollars_pnl) are excluded. Time is YYYY-MM-DD (UTC date of exit_time)
+    so TradingView renders a clean daily axis instead of mixing day numbers and
+    HH:MM intraday labels."""
     closed = [p for p in positions if p.exit_time is not None and p.dollars_pnl is not None]
     closed.sort(key=lambda p: p.exit_time or 0)
-    out: list[EquityPoint] = []
     running = 0.0
+    # Keep the last cumulative value seen for each date.
+    by_date: dict[str, float] = {}
     for p in closed:
         running += p.dollars_pnl or 0.0
-        out.append(EquityPoint(time=p.exit_time or 0, cumulative_pnl=running))
-    return out
+        date_str = datetime.fromtimestamp(p.exit_time or 0, tz=UTC).strftime("%Y-%m-%d")
+        by_date[date_str] = running
+    return [EquityPoint(time=d, cumulative_pnl=v) for d, v in sorted(by_date.items())]
 
 
 def pnl_histogram(

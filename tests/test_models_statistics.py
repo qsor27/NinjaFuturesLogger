@@ -131,22 +131,22 @@ def test_equity_curve_response_series():
             EquitySeries(
                 account="Sim",
                 points=[
-                    EquityPoint(time=100, cumulative_pnl=10.0),
-                    EquityPoint(time=200, cumulative_pnl=15.0),
+                    EquityPoint(time="2026-04-07", cumulative_pnl=10.0),
+                    EquityPoint(time="2026-04-08", cumulative_pnl=15.0),
                 ],
             )
         ]
     )
     assert len(payload.series) == 1
     assert payload.series[0].account == "Sim"
-    assert payload.series[0].points[1].time == 200
+    assert payload.series[0].points[1].time == "2026-04-08"
 
 
 def test_equity_curve_response_multi_series():
     payload = EquityCurveResponse(
         series=[
-            EquitySeries(account="A", points=[EquityPoint(time=100, cumulative_pnl=5.0)]),
-            EquitySeries(account="B", points=[EquityPoint(time=100, cumulative_pnl=-3.0)]),
+            EquitySeries(account="A", points=[EquityPoint(time="2026-04-07", cumulative_pnl=5.0)]),
+            EquitySeries(account="B", points=[EquityPoint(time="2026-04-07", cumulative_pnl=-3.0)]),
         ]
     )
     assert [s.account for s in payload.series] == ["A", "B"]
