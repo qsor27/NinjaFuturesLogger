@@ -113,7 +113,7 @@ export function buildPriceLines(executions, avgEntryPrice, positionSide) {
     lineStyle: 2, // LightweightCharts.LineStyle.Dashed
     lineWidth: 1,
     axisLabelVisible: true,
-    title: `${e.side} ${e.quantity} @ ${e.price.toFixed(2)}`,
+    title: `${e.side} ${e.quantity}`,
   }));
   const avg = {
     price: avgEntryPrice,
@@ -314,6 +314,7 @@ export class PriceChart {
     this.overlayEl.style.font = "12px monospace";
     this.overlayEl.style.whiteSpace = "pre";
     this.overlayEl.style.pointerEvents = "none";
+    this.overlayEl.style.zIndex = "3"; // LWC canvases use z-index 2; must be higher
     this.overlayEl.style.display = "none";
     this.canvasEl.appendChild(this.overlayEl);
 
