@@ -71,8 +71,8 @@ Implementation is split into **phased plans**, one per spec feature, written and
 | [10 — Import Pipeline](../superpowers/plans/2026-04-13-10-import-pipeline.md) | `executions` schema, CSV parser, `ingest_tick`, watchdog handler, `import_runs`/`import_rejects`/`import_cursors`, session archival job, rollback API | ✅ **Complete** (2026-04-13) |
 | [11 — Position Building](../superpowers/plans/2026-04-13-11-position-building.md) | `build_positions` pure function, reversal splitter, `IntegrityValidator`, `integrity_issues` diff, hooked into import tick | ✅ **Complete** (2026-04-13) |
 | [14 — OHLC Pipeline](../superpowers/plans/2026-04-13-14-ohlc-pipeline.md) | `Bar` model, `OhlcSource` protocol, yfinance + Stooq adapters, circuit breaker, fetcher, gap detection, `bars` table, scheduled refresh jobs, fetch job API | ✅ **Complete** (2026-04-13) |
-| 12 — Browsing | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ⏳ **Next** |
-| 13 — Charting | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ⏳ |
+| [12 — Browsing](../superpowers/plans/2026-04-13-12-browsing.md) | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ✅ **Complete** (2026-04-13) |
+| 13 — Charting | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ⏳ **Next** |
 | 15 — Statistics | `StatisticsService`, all `/api/stats/*`, `/statistics` and `/reports` pages | ⏳ |
 | 16 — Settings & Custom Fields | `instruments.json` registry, `chart_defaults`, `custom_fields` + values, `/settings/*` pages | ⏳ |
 | 17 — Monitoring | `/imports`, `/validation`, `/data-health`, `/system/health` pages and APIs | ⏳ |
@@ -126,6 +126,21 @@ Implementation is split into **phased plans**, one per spec feature, written and
 - **Two new pinned dependencies.** `requirements.txt` adds `requests==2.32.3` and `yfinance==0.2.50`. The Dockerfile rebuild on next `docker compose up -d --build` picks them up automatically.
 - **End-to-end verified in Docker.** `/healthz` stays 200 even when both OHLC sources are unreachable; `/api/chart/{instrument}` returns whatever is in `bars` and never blocks; on-demand `POST /api/chart/{instrument}/fetch` returns a job_id immediately and the client polls.
 - **OHLC stays isolated, per Rule 6.** No FK to `bars`, no route imports `fetch_range` for synchronous use, no positions/stats/notes path depends on chart data being present.
+
+### What Plan 12 landed
+
+- **Migration 005.** Ships `execution_notes`, `execution_flags`, `link_groups`, and `position_links`. Notes and flags FK cascade on `executions(nt_execution_id)` via plan 10's unique index — rollback cleans them up automatically. `position_links` uses the natural three-column position key and CASCADEs on its parent `link_groups`.
+- **Typed models.** `models/browsing.py` adds `LinkGroup`, `LinkGroupDetail`, `LinkMember`, `Outcome` (`winner`/`loser`/`scratch`/`open`), `PageMeta` (with derived `total_pages`/`has_next`/`has_prev`), and `PositionListPage`. All `StrictModel` subclasses, exported from `models/__init__.py`.
+- **Notes and flags services.** `services/notes.py` and `services/flags.py` own the SQL for their tables. Both strip `#close`/`#open` suffixes from incoming execution IDs via `notes.strip_split_suffix` — synthesized reversal sub-fills inherit their parent's metadata and never get their own rows.
+- **Outcome classifier.** `services/outcomes.py::classify_outcome` implements doc 15's Winner/Loser/Scratch definitions verbatim and also handles the open-position case. Plan 15's statistics will reuse this helper.
+- **Pure filter+paginate helpers.** `services/position_filters.py::apply_filters` and `paginate` are pure functions on `list[Position]` — no DB access, no mutation. Filters compose with AND.
+- **Positions service extensions.** `services/positions_service.py` adds `list_positions_page` (load → build → sort newest-first → filter → paginate), `get_filter_options` (SELECT DISTINCT over `executions`), and `attach_metadata` (position + notes + reviewed + empty `custom_fields` for plan 16).
+- **Links service.** `services/links.py` ships `create_group` / `get_group` / `list_groups` / `rename_group` / `add_members` / `remove_member` / `delete_group`, with validation that members are non-empty and unique per group.
+- **API surface.** Extended `/api/positions` now returns the `{positions, page}` envelope and supports `account`, `instrument`, `side`, `outcome`, `entry_time_min`, `entry_time_max`, `page`, `page_size` query params. New endpoints: `GET /api/positions/filters`, `GET /api/positions/{account}/{instrument}/{eid}/executions`, `PATCH /api/executions/{id}/note`, `PATCH /api/executions/{id}/reviewed`, `POST/GET/PATCH/DELETE /api/links` family, `GET /api/links/{id}`. The detail endpoint now returns `{position, notes, reviewed, custom_fields}`.
+- **Shell pages + static JS.** Three server-rendered shell templates (`positions_list.html`, `position_detail.html`, `link_group.html`) extending a revamped `base.html` with minimal CSS. Vanilla ES-module JS in `static/js/` (`api.js`, `positions_list.js`, `position_detail.js`, `link_group.js`) reads `data-*` attributes, calls the JSON API, and renders with `textContent` for user strings. No bundler, no framework, no inline script logic in templates — Rule 5 holds.
+- **Deletion via rollback.** The detail page's delete button collects the un-suffixed execution IDs from `Position.execution_ids` and calls `POST /api/executions/rollback` from plan 10. Cascade on `execution_notes` and `execution_flags` cleans up automatically. There is no separate delete endpoint.
+- **End-to-end verified in Docker.** Dropping a CSV into the inbox causes positions to appear in `/positions`, filter correctly by winner/loser/outcome, drill into the detail page with notes and reviewed flag editing, and delete via rollback.
+- **No numeric position IDs, no positions table, no rebuild lifecycle.** Per Rule 1.
 
 ### What Plan 00 deliberately did NOT land
 
