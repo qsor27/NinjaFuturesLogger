@@ -17,20 +17,44 @@ def build_imports_blueprint() -> Blueprint:
 
     @bp.get("/api/imports/runs")
     def list_runs():
-        limit = min(int(request.args.get("limit", "100")), 500)
+        limit = min(int(request.args.get("limit", "50")), 500)
         offset = max(int(request.args.get("offset", "0")), 0)
+        start_ts = request.args.get("start_ts")
+        end_ts = request.args.get("end_ts")
+        filename = request.args.get("filename")
+        status = request.args.get("status")
+
+        clauses: list[str] = []
+        params: list = []
+        if start_ts is not None:
+            clauses.append("started_at >= ?")
+            params.append(int(start_ts))
+        if end_ts is not None:
+            clauses.append("started_at <= ?")
+            params.append(int(end_ts))
+        if filename:
+            clauses.append("filename LIKE ?")
+            params.append(f"%{filename}%")
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+        sql = (
+            "SELECT tick_id, filename, started_at, finished_at, cursor_before,"
+            " cursor_after, lines_read, rows_parsed, rows_inserted,"
+            " rows_skipped_duplicate, rows_rejected, status, error "
+            f"FROM import_runs {where} ORDER BY tick_id DESC LIMIT ? OFFSET ?"
+        )
         conn = _db()
         try:
-            rows = conn.execute(
-                "SELECT tick_id, filename, started_at, finished_at, cursor_before,"
-                " cursor_after, lines_read, rows_parsed, rows_inserted,"
-                " rows_skipped_duplicate, rows_rejected, status, error "
-                "FROM import_runs ORDER BY tick_id DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
+            rows = conn.execute(sql, (*params, limit, offset)).fetchall()
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM import_runs {where}", params
+            ).fetchone()[0]
         finally:
             conn.close()
-        return jsonify({"runs": [dict(r) for r in rows]})
+        return jsonify({"runs": [dict(r) for r in rows], "total": total})
 
     @bp.get("/api/imports/runs/<int:tick_id>")
     def get_run(tick_id: int):
@@ -49,6 +73,25 @@ def build_imports_blueprint() -> Blueprint:
         body = dict(row)
         body["rejects"] = [dict(r) for r in rejects]
         return jsonify(body)
+
+    @bp.get("/api/imports/runs/<int:tick_id>/executions")
+    def get_run_executions(tick_id: int):
+        conn = _db()
+        try:
+            run = conn.execute(
+                "SELECT filename, started_at, finished_at FROM import_runs WHERE tick_id = ?",
+                (tick_id,),
+            ).fetchone()
+            if run is None:
+                return jsonify({"error": "not found"}), 404
+            rows = conn.execute(
+                "SELECT nt_execution_id FROM executions "
+                "WHERE source_filename = ? AND imported_at BETWEEN ? AND ?",
+                (run["filename"], run["started_at"], run["finished_at"] + 5),
+            ).fetchall()
+        finally:
+            conn.close()
+        return jsonify({"execution_ids": [r["nt_execution_id"] for r in rows]})
 
     @bp.get("/api/imports/cursors")
     def list_cursors():
