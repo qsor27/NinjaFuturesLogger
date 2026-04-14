@@ -2,10 +2,12 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
+from services.chart_defaults import get_defaults
 from services.ohlc.gap_detection import timeframe_seconds
 from services.ohlc.store import read_range
 
 log = get_logger("http.ohlc")
+CANONICAL_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
 
 def build_ohlc_blueprint() -> Blueprint:
@@ -52,6 +54,37 @@ def build_ohlc_blueprint() -> Blueprint:
                 "instrument": instrument,
                 "timeframe": timeframe,
                 "bars": [b.model_dump() for b in bars],
+            }
+        )
+
+    @bp.get("/api/chart/<instrument>/timeframes-available")
+    def get_timeframes_available(instrument: str):
+        # Read-only count query against the bars table. Reads only — never
+        # fetches. (Plan 13 load-bearing rule 2.)
+        conn = connect(_db_path())
+        try:
+            rows = conn.execute(
+                "SELECT timeframe, COUNT(*) AS bar_count FROM bars "
+                "WHERE instrument = ? GROUP BY timeframe",
+                (instrument,),
+            ).fetchall()
+        finally:
+            conn.close()
+        counts = {r["timeframe"]: int(r["bar_count"]) for r in rows}
+        timeframes = [
+            {
+                "timeframe": tf,
+                "available": counts.get(tf, 0) > 0,
+                "count": counts.get(tf, 0),
+            }
+            for tf in CANONICAL_TIMEFRAMES
+        ]
+        defaults = get_defaults()
+        return jsonify(
+            {
+                "instrument": instrument,
+                "timeframes": timeframes,
+                "default_timeframe": defaults["default_timeframe"],
             }
         )
 
