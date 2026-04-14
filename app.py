@@ -47,6 +47,11 @@ def create_app(
     finally:
         conn.close()
 
+    from services.instruments import get_registry, set_registry_path
+
+    set_registry_path(Path(config.data_dir) / "config" / "instruments.json")
+    get_registry().load()
+
     services = BackgroundServices(config)
     trader_tz = ZoneInfo(config.session.exchange_timezone)
 
