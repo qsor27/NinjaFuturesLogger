@@ -8,14 +8,34 @@ all of it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 from config import Config
 from db import connect
 from models.execution import Execution
 from models.position import Position
-from models.statistics import StatsFilter
+from models.statistics import (
+    DistributionResponse,
+    EquityCurveResponse,
+    HourBucketResponse,
+    InstrumentBreakdown,
+    SideBreakdown,
+    SideStats,
+    StatsFilter,
+    StatsSummary,
+    TimeBucketResponse,
+)
 from services.positions import build_positions
-from services.statistics_aggregations import _session_date_of
+from services.statistics_aggregations import (
+    _session_date_of,
+    bucket_by_hour,
+    bucket_by_session_date,
+    compute_summary,
+    cumulative_equity,
+    per_instrument,
+    pnl_histogram,
+    split_by_side,
+)
 
 
 @dataclass(frozen=True)
@@ -119,4 +139,72 @@ class StatisticsService:
             for r in rows
         ]
 
-    # -- Public methods (filled in by Task 7) -----------------------------
+    # -- Public methods ---------------------------------------------------
+
+    def summary(self, filter: StatsFilter) -> StatsSummary:
+        loaded = self._load_closed_positions(filter)
+        s = compute_summary(loaded.closed_with_pnl)
+        return s.model_copy(
+            update={
+                "open_positions": len(loaded.open),
+                "skipped_no_multiplier": len(loaded.closed_missing_multiplier),
+            }
+        )
+
+    def by_instrument(self, filter: StatsFilter) -> InstrumentBreakdown:
+        loaded = self._load_closed_positions(filter)
+        return InstrumentBreakdown(rows=per_instrument(loaded.closed_with_pnl))
+
+    def by_day(self, filter: StatsFilter) -> TimeBucketResponse:
+        return self._time_bucket(filter, granularity="day")
+
+    def by_week(self, filter: StatsFilter) -> TimeBucketResponse:
+        return self._time_bucket(filter, granularity="week")
+
+    def by_month(self, filter: StatsFilter) -> TimeBucketResponse:
+        return self._time_bucket(filter, granularity="month")
+
+    def _time_bucket(self, filter: StatsFilter, *, granularity) -> TimeBucketResponse:
+        loaded = self._load_closed_positions(filter)
+        buckets = bucket_by_session_date(
+            loaded.closed_with_pnl,
+            granularity=granularity,
+            from_date=filter.from_date,
+            to_date=filter.to_date,
+        )
+        return TimeBucketResponse(granularity=granularity, buckets=buckets)
+
+    def by_hour(self, filter: StatsFilter) -> HourBucketResponse:
+        loaded = self._load_closed_positions(filter)
+        tz_name = self._config.display_timezone or self._config.session.exchange_timezone
+        tz = ZoneInfo(tz_name)
+        return HourBucketResponse(
+            timezone=tz_name,
+            buckets=bucket_by_hour(loaded.closed_with_pnl, display_tz=tz),
+        )
+
+    def by_side(self, filter: StatsFilter) -> SideBreakdown:
+        loaded = self._load_closed_positions(filter)
+        longs, shorts = split_by_side(loaded.closed_with_pnl)
+        return SideBreakdown(
+            long=_side_stats(longs),
+            short=_side_stats(shorts),
+        )
+
+    def equity_curve(self, filter: StatsFilter) -> EquityCurveResponse:
+        loaded = self._load_closed_positions(filter)
+        return EquityCurveResponse(points=cumulative_equity(loaded.closed_with_pnl))
+
+    def distribution(self, filter: StatsFilter) -> DistributionResponse:
+        loaded = self._load_closed_positions(filter)
+        buckets = pnl_histogram(loaded.closed_with_pnl, n_buckets=10)
+        return DistributionResponse(buckets=buckets, bucket_count=10)
+
+
+def _side_stats(positions: list[Position]) -> SideStats:
+    s = compute_summary(positions)
+    return SideStats(
+        position_count=s.total_positions,
+        total_pnl=s.total_pnl,
+        win_rate=s.win_rate,
+    )
