@@ -72,8 +72,8 @@ Implementation is split into **phased plans**, one per spec feature, written and
 | [11 — Position Building](../superpowers/plans/2026-04-13-11-position-building.md) | `build_positions` pure function, reversal splitter, `IntegrityValidator`, `integrity_issues` diff, hooked into import tick | ✅ **Complete** (2026-04-13) |
 | [14 — OHLC Pipeline](../superpowers/plans/2026-04-13-14-ohlc-pipeline.md) | `Bar` model, `OhlcSource` protocol, yfinance + Stooq adapters, circuit breaker, fetcher, gap detection, `bars` table, scheduled refresh jobs, fetch job API | ✅ **Complete** (2026-04-13) |
 | [12 — Browsing](../superpowers/plans/2026-04-13-12-browsing.md) | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ✅ **Complete** (2026-04-13) |
-| 13 — Charting | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ⏳ **Next** |
-| 15 — Statistics | `StatisticsService`, all `/api/stats/*`, `/statistics` and `/reports` pages | ⏳ |
+| [13 — Charting](../superpowers/plans/2026-04-13-13-charting.md) | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ✅ **Complete** (2026-04-13, browser AC walkthrough pending) |
+| 15 — Statistics | `StatisticsService`, all `/api/stats/*`, `/statistics` and `/reports` pages | ⏳ **Next** |
 | 16 — Settings & Custom Fields | `instruments.json` registry, `chart_defaults`, `custom_fields` + values, `/settings/*` pages | ⏳ |
 | 17 — Monitoring | `/imports`, `/validation`, `/data-health`, `/system/health` pages and APIs | ⏳ |
 
@@ -141,6 +141,33 @@ Implementation is split into **phased plans**, one per spec feature, written and
 - **Deletion via rollback.** The detail page's delete button collects the un-suffixed execution IDs from `Position.execution_ids` and calls `POST /api/executions/rollback` from plan 10. Cascade on `execution_notes` and `execution_flags` cleans up automatically. There is no separate delete endpoint.
 - **End-to-end verified in Docker.** Dropping a CSV into the inbox causes positions to appear in `/positions`, filter correctly by winner/loser/outcome, drill into the detail page with notes and reviewed flag editing, and delete via rollback.
 - **No numeric position IDs, no positions table, no rebuild lifecycle.** Per Rule 1.
+
+### What Plan 13 landed
+
+- **Two new read-only GET routes.** `/api/chart/{instrument}/timeframes-available` (returns canonical-order counts per timeframe plus the configured default) and `/api/positions/{account}/{instrument}/{entry_execution_id}/markers` (returns one marker per real execution row in the position, suffix-stripped, natural-key path). Both routes are read-only — neither calls `fetch_range`. Plan 13 load-bearing rule 2.
+- **`services/chart_defaults.py` Plan 16 seam.** Module-level constants `DEFAULT_TIMEFRAME = "1m"` and `VOLUME_VISIBLE_DEFAULT = True` plus `get_defaults()` returning a fresh dict on each call. Plan 16 will replace the body of `get_defaults()` with a `chart_defaults` table SELECT without touching callers.
+- **`services/markers.py::build_markers`.** Pure function: `list[Execution] -> list[Marker]`, one Marker per execution, input order preserved. No DB, no mutation, no sort, no filter, no suffix handling — the route is responsible for passing only deduped real rows.
+- **`Marker` Pydantic StrictModel.** Five fields (`time`, `price`, `side`, `quantity`, `label`) with `Side = Literal["Buy", "Sell"]`. Exported from `models/__init__.py`. The label is the un-suffixed `nt_execution_id` so the chart-arrow ↔ table-row link can match by label.
+- **Vendored TradingView Lightweight Charts v4.2.3.** `static/vendor/lightweight-charts.standalone.production.js` (163,684 bytes, SHA-256 `c7dda807d662a95b3d257119ed315cec669e3bdf5aaece75c480a39307f23540`). The only third-party JavaScript in the entire codebase. Loaded as a plain `<script src>` from `templates/position_detail.html`; no bundler, no Node, no `package.json`, no CDN at runtime, no new entries in `requirements.txt`. Pinned at v4 because v4 still exposes `addCandlestickSeries()` / `addHistogramSeries()` directly; v5 collapses both into a single `addSeries(...)` factory and would require code changes.
+- **`static/js/PriceChart.js` — the one chart implementation.** Pure helpers at the top (`timeframeSeconds`, `computeFetchRange`, `computeVisibleRange`, `pickInitialTimeframe`, `buildMarkersFromApi`, `buildPriceLines`, `summarizeFetchResult`, `nextPollDelay`, `formatOhlcOverlay` — all DOM-/fetch-/library-free), then constants, then one `PriceChart` class that owns the lightweight-charts instance, controls header, ResizeObserver, AbortController, fetch-job poller, no-data CTA, delayed-data banner, loading indicator, error+retry UI, and the document-level custom-event bus. ~700 lines, single file, single class. `find static/ -name '*chart*' -o -name '*Chart*' | grep -i js | grep -v vendor` lists only `PriceChart.js`. AC 22 holds.
+- **Two custom events for arrow ↔ table linking.** `executions-table:row-clicked` (dispatched by `position_detail.js` when a `<tr>` is clicked → `PriceChart` re-centers the visible range and gold-flashes the matching marker for ~2s) and `chart:execution-clicked` (dispatched by `PriceChart` when the canvas is clicked near a marker → `position_detail.js` scrolls the matching row into view and highlights it). Both keyed by un-suffixed `nt_execution_id`.
+- **Polling parameters.** `POLL_INTERVAL_MS = 2000`, `POLL_TIMEOUT_MS = 120000` (60 polls max). Adopted from doc 14's recommended values.
+- **`tests/test_app_factory_plan13.py` smoke test.** Spins up `create_app(...)` and asserts both new routes are wired, `/static/vendor/lightweight-charts.standalone.production.js` is served and contains `LightweightCharts`, and `/static/js/PriceChart.js` is served and contains `export class PriceChart`.
+- **377 backend tests pass.** 22 new tests (Tasks 1, 2, 3, 4, 5, 10) on top of Plans 00/10/11/12/14. Ruff `check` and `format --check` both clean.
+
+### What Plan 13 deliberately did NOT land
+
+These belong to later plans or are explicit non-goals:
+
+- **No `chart_defaults` table, no migration, no settings page.** Plan 16 owns the database-backed config and the settings UI. Plan 13 ships only the Python seam.
+- **No standalone `/charts/{instrument}` page or chart gallery.** Removed by doc 13 deviation 1; charts only exist embedded in position detail.
+- **No new OHLC fetcher, no new circuit-breaker config, no chart-route writes to `bars`.** Plan 14 owns the entire OHLC surface; Plan 13 calls Plan 14's existing endpoints unchanged.
+- **No JS unit-test runner.** Pure helpers in `PriceChart.js` are factored to the top and exported so a future plan can add a runner without rewriting. Plan 13's frontend verification is the in-browser AC 1–22 walkthrough in Task 12.
+- **No new dependencies in `requirements.txt`.** The vendor file is the only new external code.
+- **No `routes/chart.py` or new blueprint.** Both new routes register on existing `ohlc` and `positions` blueprints.
+- **No second `<div id="chart">` mount point.** Plan 12's existing `<div id="chart-root">` is reused; the placeholder text is removed and nothing else about the detail-page DOM changes.
+- **No removal of existing `position_detail.js` behavior.** The chart mounts alongside the existing detail/notes/reviewed/executions/links/delete behavior, not in place of it.
+- **Browser AC walkthrough deferred.** Backend tests verify the routes are wired and the static assets are served, but the in-browser walkthrough of AC 1–22 (chart rendering, marker placement, timeframe switching, fetch-now CTA, delayed-data banner, arrow↔row linking) was not run in this session. The user will perform it before declaring the plan fully shipped.
 
 ### What Plan 00 deliberately did NOT land
 
