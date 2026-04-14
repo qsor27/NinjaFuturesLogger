@@ -90,5 +90,5 @@ def test_positions_route_returns_computed_positions(tmp_config):
     resp = app.test_client().get("/api/positions")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert len(body["positions"]) == 1
+    assert body["page"]["total"] == 1
     assert body["positions"][0]["entry_execution_id"] == "a"

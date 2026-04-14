@@ -56,7 +56,9 @@ def test_list_empty(app):
     app_, _ = app
     resp = app_.test_client().get("/api/positions")
     assert resp.status_code == 200
-    assert resp.get_json() == {"positions": []}
+    body = resp.get_json()
+    assert body["positions"] == []
+    assert body["page"]["total"] == 0
 
 
 def test_list_returns_all_positions(app):
@@ -133,7 +135,7 @@ def test_get_position_by_natural_key(app):
     resp = app_.test_client().get("/api/positions/Sim101/MNQ/a")
     assert resp.status_code == 200
     body = resp.get_json()
-    assert body["entry_execution_id"] == "a"
+    assert body["position"]["entry_execution_id"] == "a"
 
 
 def test_get_position_404(app):
