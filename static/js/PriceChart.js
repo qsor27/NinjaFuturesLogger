@@ -485,12 +485,17 @@ export class PriceChart {
     }
 
     // Visible range: as many bars as fit on screen, centered on entry_time.
-    const width = this.canvasEl.clientWidth || 800;
-    const visible = computeVisibleRange(this.position.entry_time, this.timeframe, width, 8);
-    this.lwChart.timeScale().setVisibleRange({
-      from: visible.start,
-      to: visible.end,
-    });
+    // setVisibleRange throws on an empty series ("Value is null"), so only
+    // apply it when there are bars to range over. Empty-bar path is reached
+    // via the "delayed" state when all OHLC sources are open.
+    if (bars.length > 0) {
+      const width = this.canvasEl.clientWidth || 800;
+      const visible = computeVisibleRange(this.position.entry_time, this.timeframe, width, 8);
+      this.lwChart.timeScale().setVisibleRange({
+        from: visible.start,
+        to: visible.end,
+      });
+    }
 
     // Crosshair OHLC overlay (AC 15)
     this.lwChart.subscribeCrosshairMove((param) => {
