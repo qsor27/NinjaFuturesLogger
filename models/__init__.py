@@ -9,6 +9,7 @@ from models.browsing import (
     PositionListPage,
 )
 from models.execution import Execution, RejectRecord, TickResult
+from models.markers import Marker
 from models.position import Fill, IntegrityIssue, Position
 
 __all__ = [
@@ -25,6 +26,7 @@ __all__ = [
     "LinkGroup",
     "LinkGroupDetail",
     "LinkMember",
+    "Marker",
     "Outcome",
     "PageMeta",
     "PositionListPage",
