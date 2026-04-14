@@ -273,3 +273,71 @@ def test_integrity_filter_account(imports_app):
     body = resp.get_json()
     assert len(body["issues"]) == 1
     assert body["issues"][0]["account"] == "Sim202"
+
+
+# --- BackgroundServices health tests ---
+
+import time as _time
+
+from background import BackgroundServices
+from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
+
+
+@pytest.fixture
+def svc_config(tmp_path):
+    (tmp_path / "inbox").mkdir()
+    return Config(
+        data_dir=str(tmp_path),
+        db_path=str(tmp_path / "t.db"),
+        inbox_dir=str(tmp_path / "inbox"),
+        archive_dir=str(tmp_path / "archive"),
+        log_dir=str(tmp_path / "logs"),
+        session=SessionConfig(
+            exchange_timezone="America/Chicago",
+            trade_date_rollover="16:00",
+            archive_job_time="18:00",
+        ),
+        thread_pool=ThreadPoolConfig(max_workers=2),
+        scheduler=SchedulerConfig(heartbeat_seconds=60),
+    )
+
+
+def test_system_health_snapshot_shape(svc_config):
+    svc = BackgroundServices(svc_config)
+    snap = svc.system_health_snapshot()
+    assert "uptime_seconds" in snap
+    assert "started_at" in snap
+    assert "jobs" in snap
+    assert isinstance(snap["jobs"], list)
+    assert "pool" in snap
+    assert snap["pool"]["max_workers"] == 2
+    assert "watchdog" in snap
+
+
+def test_run_job_now_returns_false_for_unknown(svc_config):
+    svc = BackgroundServices(svc_config)
+    svc.start()
+    try:
+        result = svc.run_job_now("nonexistent_job")
+        assert result is False
+    finally:
+        svc.stop()
+
+
+def test_run_job_now_executes_job(svc_config):
+    svc = BackgroundServices(svc_config)
+    ran = []
+    svc.start()
+    try:
+        svc.scheduler.add_job(
+            lambda: ran.append(1),
+            trigger="interval",
+            seconds=9999,
+            id="test_manual_job",
+        )
+        result = svc.run_job_now("test_manual_job")
+        assert result is True
+        _time.sleep(0.3)
+        assert ran == [1]
+    finally:
+        svc.stop()
