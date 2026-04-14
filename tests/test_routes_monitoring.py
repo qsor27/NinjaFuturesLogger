@@ -1,13 +1,25 @@
+import json as _json
+import time as _time
 from pathlib import Path
 
 import pytest
 from flask import Flask
 
+from app import create_app
+from background import BackgroundServices
+from config import (
+    Config,
+    SchedulerConfig,
+    SessionConfig,
+    ThreadPoolConfig,
+    load_config,
+)
 from db import connect
 from migrations import run_migrations
 from models.execution import Execution
 from models.position import IntegrityIssue
 from routes.imports import build_imports_blueprint
+from routes.monitoring import build_monitoring_blueprint
 from routes.positions import build_positions_blueprint
 from services.import_db import bulk_insert_executions, record_run
 from services.integrity_db import mark_ignored, mark_resolved_by_user, upsert_issue
@@ -277,11 +289,6 @@ def test_integrity_filter_account(imports_app):
 
 # --- BackgroundServices health tests ---
 
-import time as _time
-
-from background import BackgroundServices
-from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
-
 
 @pytest.fixture
 def svc_config(tmp_path):
@@ -344,8 +351,6 @@ def test_run_job_now_executes_job(svc_config):
 
 
 # --- monitoring blueprint tests ---
-
-from routes.monitoring import build_monitoring_blueprint
 
 
 @pytest.fixture
@@ -475,11 +480,6 @@ def test_system_run_job_executes(monitoring_app):
 
 
 # --- full app page route tests ---
-
-import json as _json
-
-from app import create_app
-from config import load_config
 
 
 def _make_full_config_client(tmp_path):
