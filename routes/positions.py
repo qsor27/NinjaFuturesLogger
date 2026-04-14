@@ -5,6 +5,7 @@ from flask import Blueprint, current_app, jsonify, request
 from db import connect
 from logging_config import get_logger
 from services.integrity_db import mark_ignored, mark_resolved_by_user
+from services.markers import build_markers
 from services.position_filters import PositionFilter
 from services.positions_service import (
     attach_metadata,
@@ -131,6 +132,62 @@ def build_positions_blueprint() -> Blueprint:
             conn.close()
         filtered = [dict(r) for r in rows if r["nt_execution_id"] in wanted]
         return jsonify({"executions": filtered})
+
+    @bp.get("/api/positions/<account>/<instrument>/<entry_execution_id>/markers")
+    def get_markers(account: str, instrument: str, entry_execution_id: str):
+        p = get_position(
+            _db_path(),
+            account=account,
+            instrument=instrument,
+            entry_execution_id=entry_execution_id,
+        )
+        if p is None:
+            return jsonify({"error": "not found"}), 404
+
+        # Same lookup pattern as get_executions: load all (account, instrument)
+        # executions, filter to the ones whose un-suffixed nt_execution_id
+        # appears in the position's execution_ids, then build markers from
+        # those real rows.
+        from services.notes import strip_split_suffix
+
+        wanted = {strip_split_suffix(eid) for eid in p.execution_ids}
+        conn = connect(_db_path())
+        try:
+            rows = conn.execute(
+                "SELECT nt_execution_id, account, instrument, timestamp, side,"
+                " original_action, quantity, price, commission, entry_exit,"
+                " position_after, source_order_id, source_filename, imported_at "
+                "FROM executions WHERE account = ? AND instrument = ? "
+                "ORDER BY timestamp, nt_execution_id",
+                (account, instrument),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        from models.execution import Execution
+
+        executions = [
+            Execution(
+                nt_execution_id=r["nt_execution_id"],
+                account=r["account"],
+                instrument=r["instrument"],
+                timestamp=r["timestamp"],
+                side=r["side"],
+                original_action=r["original_action"],
+                quantity=r["quantity"],
+                price=r["price"],
+                commission=r["commission"],
+                entry_exit=r["entry_exit"],
+                position_after=r["position_after"],
+                source_order_id=r["source_order_id"],
+                source_filename=r["source_filename"],
+                imported_at=r["imported_at"],
+            )
+            for r in rows
+            if r["nt_execution_id"] in wanted
+        ]
+        markers = build_markers(executions)
+        return jsonify({"markers": [m.model_dump() for m in markers]})
 
     @bp.get("/api/integrity-issues")
     def list_integrity():
