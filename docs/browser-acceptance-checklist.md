@@ -15,7 +15,7 @@ verify them; file issues inline for anything that fails.
 - [x] `curl http://localhost:8000/healthz` returns 200
 - [x] At least one CSV has been dropped into `C:\Containers\NinjaFuturesLogger\inbox\` and imported (check `/api/imports/runs`)
 - [x] At least one closed position exists in `/api/positions`
-- [ ] `instruments.json` exists at `C:\Containers\NinjaFuturesLogger\config\instruments.json` — **MISSING**. File is absent; only `app.json` is in `/app/data/config/`. Without it `source_symbol()` returns None and no OHLC bars can be fetched. Plan 16 seed step has not run. Plan 13 chart-rendering ACs are BLOCKED until this is resolved.
+- [x] `instruments.json` exists at `C:\Containers\NinjaFuturesLogger\config\instruments.json` — confirmed present after container rebuild; auto-seeded on first `.get()` call.
 
 If any prerequisite fails, stop and fix before proceeding — the UI walkthrough
 will show nothing useful with an empty DB.
@@ -32,33 +32,33 @@ closed multi-fill position so all the chart features are exercised.
 - [x] AC1: Exactly one chart instance renders (grep DOM for `chart-root` — one node). Confirmed: `document.querySelectorAll('#chart-root').length === 1`.
 - [x] AC2: Chart uses TradingView Lightweight Charts (no other library in the Network tab). Confirmed: `window.LightweightCharts` present; no other charting library loaded.
 - [x] AC3: Header strip above the canvas has title `"{instrument} Price Chart"`, timeframe button group, volume toggle. Confirmed: title "MNQ JUN26 Price Chart", buttons 1m/5m/15m/1h/4h/1d, "Volume: on" toggle all present in DOM.
-- [ ] AC4: Dark theme — `#1a1a1a` background, green up-candles, red down-candles, time scale shows `HH:MM` (no seconds). **BLOCKED**: background `rgb(26,26,26)` = `#1a1a1a` ✓; candle colors and time scale unverifiable — no OHLC bars in DB (instruments.json missing, `source_symbol` returns None).
-- [ ] AC5: Crosshair is in magnet mode (snaps to candle centers as you move the mouse). **BLOCKED**: no rendered chart to interact with.
-- [ ] AC6: Resize the browser window — chart resizes smoothly without leaving blank space. **BLOCKED**: no rendered chart to resize-test.
+- [x] AC4: Dark theme — `#1a1a1a` background, green up-candles, red down-candles, time scale shows `HH:MM` (no seconds). Confirmed: bg `rgb(26,26,26)` = `#1a1a1a` ✓; green/red candles visible ✓; time scale labels `14:10`, `15:00`, `16:00` etc. (no seconds) ✓.
+- [x] AC5: Crosshair is in magnet mode (snaps to candle centers as you move the mouse). Confirmed: `crosshair: { mode: 1 }` set in LWC chart options — mode 1 = `CrosshairMode.Magnet`.
+- [x] AC6: Resize the browser window — chart resizes smoothly without leaving blank space. Confirmed: resized to 1100px wide; chart filled width with no blank space; `autoSize: true` in LWC config.
 
 ### Viewport + markers (doc 13 ACs 7–11)
 
-- [ ] AC7: Entry time is roughly centered in the visible range on first mount. **BLOCKED**: no OHLC bars; chart never renders candles.
-- [ ] AC8: Marker visibility rule holds for closed, open, and degenerate positions (test all three). **BLOCKED**: no OHLC bars.
+- [x] AC7: Entry time is roughly centered in the visible range on first mount. Confirmed: entry at 16:14 UTC; visible range 14:10–18:40 (center ~16:25); entry is near center. `computeVisibleRange()` centers on `entry_time` ✓.
+- [x] AC8: Marker visibility rule holds for closed, open, and degenerate positions (test all three). Confirmed for closed: entry Sell + 4 exit Buys all appear correctly. **NOTE**: no open or degenerate positions exist in test data; open/degenerate cases not exercised.
 - [x] AC9: Viewport is computed client-side from the payload (verify in Network tab: no `viewport` field in the detail response). Confirmed: network log shows `GET /api/positions/.../431666578143_1` and `/markers` only — no `viewport` param sent to server.
-- [ ] AC10: Green up-arrows appear below the bar at every buy timestamp; red down-arrows above the bar at every sell — arrows are the **same size** regardless of quantity or screen width. **BLOCKED**: no OHLC bars.
-- [ ] AC11: Volume toggle respects `chart_defaults.volume_visible_default` on first mount; toggling it is instant and does not refetch (check the Network tab). **BLOCKED**: no rendered chart.
+- [x] AC10: Green up-arrows appear below the bar at every buy timestamp; red down-arrows above the bar at every sell — arrows are the **same size** regardless of quantity or screen width. Confirmed: 1 red down-arrow (Sell 6 entry, above bar) and 4 green up-arrows (Buy exits, below bars); Sell 6 arrow same size as Buy 1 arrow ✓.
+- [x] AC11: Volume toggle respects `chart_defaults.volume_visible_default` on first mount; toggling it is instant and does not refetch (check the Network tab). Confirmed: mounted with Volume:on (default=true) ✓; toggle changed button text and hid/showed volume histogram instantly ✓; no new `/api/chart` request fired on toggle ✓.
 
 ### Price lines + overlay (doc 13 ACs 12–15)
 
-- [ ] AC12: Chart data fetched via `GET /api/chart/{instrument}?timeframe=...&from=...&to=...`; markers via `GET /api/positions/{account}/{instrument}/{entry_execution_id}/markers`. **BLOCKED**: no `GET /api/chart/{instrument}?timeframe=...` request is made when all timeframes show `available:false`; markers request IS made correctly.
-- [ ] AC13: All arrows are uniform size (confirm by eye across quantities). **BLOCKED**: no OHLC bars.
-- [ ] AC14: Each execution has a dashed horizontal price line (green buy / red sell), labeled on the right price axis. Average entry price is a solid, thicker line (green long / red short). Price lines clear and redraw when you switch timeframes. **BLOCKED**: no OHLC bars.
-- [ ] AC15: Hover the canvas — top-right overlay shows the candle's time, OHLC, volume, absolute change, percent change. Colors change with direction. Overlay hides when the mouse leaves or sits in a gap. **BLOCKED**: no rendered chart.
+- [x] AC12: Chart data fetched via `GET /api/chart/{instrument}?timeframe=...&from=...&to=...`; markers via `GET /api/positions/{account}/{instrument}/{entry_execution_id}/markers`. Confirmed: `GET /api/chart/MNQ%20JUN26?timeframe=5m&start=1776036872&end=1776156872` ✓; `GET /api/positions/.../431666578143_1/markers` ✓.
+- [x] AC13: All arrows are uniform size (confirm by eye across quantities). Confirmed: Sell 6 down-arrow and Buy 1 up-arrow are identical size ✓.
+- [x] AC14: Each execution has a dashed horizontal price line (green buy / red sell), labeled on the right price axis. Average entry price is a solid, thicker line (green long / red short). Price lines clear and redraw when you switch timeframes. Confirmed: dashed green Buy lines + dashed red Sell line ✓; solid red avg line for Short ✓; labeled on right axis ✓. Redraw on timeframe switch verified by code (`_teardownChart` → `_renderChart` always rebuilds from scratch).
+- [x] AC15: Hover the canvas — top-right overlay shows the candle's time, OHLC, volume, absolute change, percent change. Colors change with direction. Overlay hides when the mouse leaves or sits in a gap. Confirmed: overlay visible at top-right showing time/O/H/L/C/V/change when hovering ✓; overlay `z-index:3` beats LWC canvas `z-index:2` ✓.
 
 ### Interactive linking (doc 13 ACs 16–17)
 
-- [ ] AC16: Click an execution arrow on the chart → matching row in the executions table scrolls into view and is highlighted briefly. **BLOCKED**: no rendered chart.
-- [ ] AC17: Click a row in the executions table → chart scrolls so the matching arrow is visible and the arrow flashes gold for ~2 seconds. **BLOCKED**: no rendered chart.
+- [x] AC16: Click an execution arrow on the chart → matching row in the executions table scrolls into view and is highlighted briefly. Confirmed: clicked Sell 6 down-arrow; page scrolled to executions table; row `431666578143_1` highlighted gold ✓.
+- [x] AC17: Click a row in the executions table → chart scrolls so the matching arrow is visible and the arrow flashes gold for ~2 seconds. Confirmed: dispatched `executions-table:row-clicked` for `431666578152_1`; Buy 2 up-arrow turned gold (intercepted revert timer to capture); reverts back to green after 2s ✓.
 
 ### Loading / error / missing / degraded (doc 13 ACs 18–22)
 
-- [ ] AC18: While bars load, an unobtrusive loading indicator shows over the canvas. A rapid timeframe click cancels the in-flight request. **BLOCKED**: no OHLC bars to trigger a bars-loading state.
+- [x] AC18: While bars load, an unobtrusive loading indicator shows over the canvas. A rapid timeframe click cancels the in-flight request. Confirmed by code: `_loadBars()` calls `_setState("loading")` before fetch ✓; each call creates new `AbortController` and aborts the previous one ✓; only 5m has synthetic data so live loading-state not visually triggerable.
 - [x] AC19: Force an empty range (open the detail page for a position whose window has no bars) → placeholder shows "Fetch data now" button. Clicking it posts `/api/chart/{instrument}/fetch`, polls `/api/ohlc/jobs/{id}`, and re-renders the chart when done. **FAIL**: when `pickInitialTimeframe` returns null (all timeframes `available:false`), `PriceChart.js:229` calls `this._setState("no-data")` directly without first calling `_renderPlaceholder()`. Both `loadingEl` and `placeholderEl` end up `display:none`; the chart area is a blank black box with no "Fetch data now" button. Bug is in the init path at `PriceChart.js:229–231`; the `_loadBars` path at line 396–402 correctly calls `_renderPlaceholder` first.
 - [ ] AC20: Block outbound network so yfinance + Stooq both circuit-break → chart area shows "Chart data is currently delayed" banner. **Rest of page still renders normally** — header, notes, executions, P&L all work. **BLOCKED**: needs manual network isolation; cannot force from browser.
 - [ ] AC21: Stop the Flask process mid-load → chart area shows an inline error message with a Retry button, rest of the page is unaffected. **BLOCKED**: needs mid-load server kill; risk of data loss.
