@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="settings-page" id="settings-instruments" data-endpoint="/api/config/instruments">
+  <h1>Instruments</h1>
+  <p class="muted">Changes take effect immediately for new fetches and P&amp;L computation.</p>
+  <div class="instruments-toolbar">
+    <button id="new-instrument-btn" type="button">Add instrument</button>
+  </div>
+  <table class="instruments-table">
+    <thead>
+      <tr>
+        <th>Symbol</th><th>Display name</th><th>Multiplier</th><th>Tick</th>
+        <th>yfinance</th><th>stooq</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="instruments-tbody"></tbody>
+  </table>
+  <dialog id="instrument-dialog">
+    <form id="instrument-form" method="dialog">
+      <h2 id="dialog-title">Edit instrument</h2>
+      <label>Symbol <input name="symbol" required></label>
+      <label>Display name <input name="display_name" required></label>
+      <label>Multiplier <input name="multiplier" type="number" step="any" required></label>
+      <label>Tick size <input name="tick_size" type="number" step="any" required></label>
+      <label>yfinance continuous <input name="yfinance_continuous"></label>
+      <label>stooq continuous <input name="stooq_continuous"></label>
+      <fieldset>
+        <legend>Session</legend>
+        <label>Timezone <input name="session_timezone" required></label>
+        <label>Open <input name="session_open" placeholder="HH:MM"></label>
+        <label>Close <input name="session_close" placeholder="HH:MM"></label>
+        <label>Break start <input name="session_break_start" placeholder="HH:MM"></label>
+        <label>Break end <input name="session_break_end" placeholder="HH:MM"></label>
+      </fieldset>
+      <div class="dialog-actions">
+        <button type="button" id="dialog-cancel">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+<script type="module" src="{{ url_for('static', filename='js/settings_instruments.js') }}"></script>
+{% endblock %}

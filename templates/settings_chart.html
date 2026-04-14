@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="settings-page" id="settings-chart" data-endpoint="/api/config/chart-defaults">
+  <h1>Chart defaults</h1>
+  <form id="chart-defaults-form">
+    <label>Default timeframe
+      <select name="default_timeframe">
+        <option>1m</option><option>5m</option><option>15m</option>
+        <option>1h</option><option>4h</option><option>1d</option>
+      </select>
+    </label>
+    <label><input type="checkbox" name="volume_visible_default"> Show volume by default</label>
+    <label>Display timezone (optional, for hour-bucketed stats)
+      <input name="display_timezone" placeholder="e.g. America/Chicago or Asia/Tokyo">
+    </label>
+    <button type="submit">Save</button>
+    <p class="status" id="chart-defaults-status"></p>
+  </form>
+</section>
+<script type="module" src="{{ url_for('static', filename='js/settings_chart.js') }}"></script>
+{% endblock %}

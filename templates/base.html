@@ -32,6 +32,7 @@
       .link-box { border: 1px solid #ddd; border-radius: 4px; padding: 12px; margin: 8px 0; }
       .orphan { color: #888; font-style: italic; }
     </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
     {% block extra_styles %}{% endblock %}
   </head>
   <body>
@@ -40,6 +41,7 @@
       <a href="/statistics">Statistics</a>
       <a href="/reports">Reports</a>
       <a href="/links">Link Groups</a>
+      <a href="/settings">Settings</a>
     </header>
     <main>
       {% block content %}{% endblock %}

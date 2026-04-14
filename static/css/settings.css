@@ -1,0 +1,15 @@
+.settings-page {
+  max-width: 960px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+.settings-page h1 { margin-bottom: 0.75rem; }
+.settings-index { list-style: none; padding: 0; }
+.settings-index li { padding: 0.5rem 0; border-bottom: 1px solid #2a2a32; }
+.instruments-table { width: 100%; border-collapse: collapse; }
+.instruments-table th, .instruments-table td { padding: 0.4rem 0.6rem; text-align: left; border-bottom: 1px solid #2a2a32; }
+.instruments-toolbar { margin-bottom: 0.75rem; }
+.field-row { padding: 0.5rem 0; border-bottom: 1px solid #2a2a32; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.options-editor { width: 100%; margin-top: 0.5rem; }
+.options-editor textarea { width: 100%; font-family: inherit; }
+.muted { color: #8a8a92; }
