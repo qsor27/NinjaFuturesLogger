@@ -5,7 +5,7 @@ from pathlib import Path
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 
 from config import Config
 from logging_config import get_logger
@@ -23,6 +23,13 @@ class BackgroundServices:
     Per doc 03: one APScheduler, one watchdog Observer, one bounded
     ThreadPoolExecutor. The application factory holds a reference to this
     object and calls start()/stop() at process boundaries.
+
+    Uses PollingObserver (stat-based, 1s interval) instead of the native
+    inotify Observer because Docker Desktop on Windows does not propagate
+    host filesystem events through bind-mounted volumes into the container.
+    The trade-off is ~1s detection latency vs. the native ~10ms; for a
+    directory that holds at most a handful of NinjaTrader CSVs this is
+    invisible.
     """
 
     def __init__(self, config: Config) -> None:
@@ -34,7 +41,7 @@ class BackgroundServices:
             max_workers=config.thread_pool.max_workers,
             thread_name_prefix="ftl-pool",
         )
-        self.observer: Observer = Observer()
+        self.observer: PollingObserver = PollingObserver(timeout=1.0)
         self._last_tick: int | None = None
         self._started: bool = False
 
