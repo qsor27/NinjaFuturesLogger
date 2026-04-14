@@ -73,7 +73,7 @@ def test_default_timeframe_comes_from_chart_defaults(tmp_config):
     app, pool = _make_app(tmp_config)
     try:
         body = app.test_client().get("/api/chart/MNQ/timeframes-available").get_json()
-        assert body["default_timeframe"] == "1m"
+        assert body["default_timeframe"] == "5m"
     finally:
         pool.shutdown(wait=True)
 

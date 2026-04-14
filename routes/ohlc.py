@@ -79,7 +79,7 @@ def build_ohlc_blueprint() -> Blueprint:
             }
             for tf in CANONICAL_TIMEFRAMES
         ]
-        defaults = get_defaults()
+        defaults = get_defaults(_db_path())
         return jsonify(
             {
                 "instrument": instrument,
