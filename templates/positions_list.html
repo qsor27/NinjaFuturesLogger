@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Positions — FuturesTradingLog{% endblock %}
+{% block content %}
+  <h1>Positions</h1>
+  <form class="filters" id="filter-form">
+    <label>Account
+      <select name="account"><option value="">All</option></select>
+    </label>
+    <label>Instrument
+      <select name="instrument"><option value="">All</option></select>
+    </label>
+    <label>Side
+      <select name="side">
+        <option value="">All</option>
+        <option value="Long">Long</option>
+        <option value="Short">Short</option>
+      </select>
+    </label>
+    <label>Outcome
+      <select name="outcome">
+        <option value="">All</option>
+        <option value="winner">Winner</option>
+        <option value="loser">Loser</option>
+        <option value="scratch">Scratch</option>
+        <option value="open">Open</option>
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+  <div id="list-root"></div>
+  <div class="pagination" id="pagination-root"></div>
+{% endblock %}
+{% block scripts %}
+  <script type="module" src="{{ url_for('static', filename='js/positions_list.js') }}"></script>
+{% endblock %}

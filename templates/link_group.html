@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Link group — FuturesTradingLog{% endblock %}
+{% block content %}
+  <div id="link-root" data-link-group-id="{{ link_group_id }}">
+    <a href="/positions">&larr; Back to positions</a>
+    <h1 id="link-title">Loading...</h1>
+    <div id="link-members"></div>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script type="module" src="{{ url_for('static', filename='js/link_group.js') }}"></script>
+{% endblock %}

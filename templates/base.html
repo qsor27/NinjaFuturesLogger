@@ -2,9 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>FuturesTradingLog</title>
+    <meta name="viewport" content="width=1280">
+    <title>{% block title %}FuturesTradingLog{% endblock %}</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; color: #222; }
+      header { background: #1a1a1a; color: #f0f0f0; padding: 12px 24px; display: flex; gap: 24px; align-items: center; }
+      header a { color: #f0f0f0; text-decoration: none; font-weight: 600; }
+      header a:hover { text-decoration: underline; }
+      main { padding: 24px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #ddd; }
+      th { background: #f5f5f5; }
+      tbody tr:hover { background: #fafafa; cursor: pointer; }
+      .pnl-pos { color: #0a7f0a; }
+      .pnl-neg { color: #b00020; }
+      .filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: end; }
+      .filters label { display: flex; flex-direction: column; font-size: 12px; }
+      .filters input, .filters select { padding: 4px 8px; font-size: 14px; }
+      .pagination { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
+      .pagination button { padding: 4px 12px; }
+      .detail-header { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #f9f9f9; padding: 16px; border-radius: 4px; }
+      .detail-header dt { font-size: 11px; text-transform: uppercase; color: #666; }
+      .detail-header dd { margin: 0; font-size: 16px; font-weight: 600; }
+      .chart-slot { height: 360px; background: #fafafa; border: 1px solid #e5e5e5; margin: 16px 0; display: flex; align-items: center; justify-content: center; color: #888; }
+      .notes-panel { margin: 16px 0; }
+      .notes-panel textarea { width: 100%; min-height: 80px; font-family: inherit; font-size: 14px; }
+      .reviewed-toggle { display: inline-flex; align-items: center; gap: 8px; }
+      .danger { background: #b00020; color: white; border: none; padding: 6px 16px; cursor: pointer; }
+      .link-box { border: 1px solid #ddd; border-radius: 4px; padding: 12px; margin: 8px 0; }
+      .orphan { color: #888; font-style: italic; }
+    </style>
   </head>
   <body>
-    <main id="app"></main>
+    <header>
+      <a href="/positions">Positions</a>
+      <a href="/links">Link Groups</a>
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
   </body>
 </html>
