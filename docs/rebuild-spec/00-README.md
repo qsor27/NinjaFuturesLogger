@@ -75,7 +75,7 @@ Implementation is split into **phased plans**, one per spec feature, written and
 | [13 — Charting](../superpowers/plans/2026-04-13-13-charting.md) | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ✅ **Complete** (2026-04-13, browser AC walkthrough pending) |
 | [15 — Statistics](../superpowers/plans/2026-04-13-15-statistics.md) | `StatisticsService`, all `/api/stats/*`, `/statistics` and `/reports` pages | ✅ **Complete** (2026-04-13, 16 commits, 451 tests, browser AC walkthrough pending) |
 | [16 — Settings & Custom Fields](../superpowers/plans/2026-04-13-16-settings-instruments.md) | `instruments.json` registry, `chart_defaults`, `custom_fields` + values, `/settings/*` pages | ✅ **Complete** (2026-04-14, ~14 tasks, 557 tests) |
-| 17 — Monitoring | `/imports`, `/validation`, `/data-health`, `/system/health` pages and APIs | ⏳ |
+| [17 — Monitoring](../superpowers/plans/2026-04-14-17-import-monitoring.md) | `/imports`, `/validation`, `/data-health`, `/system/health` pages and APIs | ✅ **Complete** (2026-04-14) |
 
 ### What Plan 00 landed
 
@@ -207,6 +207,17 @@ These belong to later plans or are explicit non-goals:
 - **Four new ES modules, no new dependencies.** `settings_instruments.js`, `settings_chart.js`, `settings_custom_fields.js`, `custom_fields_detail.js`. Plus one `settings.css` scoped to `.settings-page`. No bundler, no framework, no `package.json`, no new `requirements.txt` entries.
 - **Doc 16 hazards enforced.** One endpoint per resource; one registry owns `instruments.json`; no profiles, no instrument groups; custom field values attach to `nt_execution_id` (not to any position key); `chart_defaults` stays single-row with `CHECK(id=1)`.
 - **End-to-end verification deferred.** Backend tests cover all 13 routes, all four pages, and every service path. In-browser walkthrough of doc 16 AC 1–11 is the user's task — same pattern as plans 13/15.
+
+### What Plan 17 landed
+
+- **Four monitoring pages.** `/imports`, `/validation`, `/data-health`, `/system/health` — each a shell template extending `base.html` mounting a single vanilla ES module under `static/js/`. Four nav links added.
+- **Filter surface expansion on existing endpoints.** `GET /api/imports/runs` gains `start_ts`/`end_ts`/`filename`/`status` params and a `total` count. `GET /api/integrity-issues` gains `status` (open/resolved/ignored/all), `severity`, `account`, `instrument` filters — default `status=open` preserves plan 11 behavior.
+- **New tick→executions endpoint.** `GET /api/imports/runs/{tick_id}/executions` returns the NT execution IDs inserted by a specific tick via a `source_filename + imported_at` window, feeding the detail-page rollback button.
+- **BackgroundServices introspection.** APScheduler EVENT_JOB_SUBMITTED/EXECUTED/ERROR listeners record a 20-entry ring buffer per job_id with start time, duration, status, and error. `system_health_snapshot()` rolls job metadata, thread pool state, watchdog liveness, and process uptime into one dict. `run_job_now(job_id)` submits a scheduled job's function to the thread pool on demand without altering its schedule.
+- **`routes/monitoring.py` blueprint.** `GET /api/data-health/completeness` builds a live instrument × timeframe matrix (complete/partial/missing/session_closed) from `bars` + `find_gaps` + the instrument's `default_session`, with a 90-day instrument cutoff and 7-day default lookback. `GET /api/data-health/missing/{instrument}/{timeframe}` drills into one cell's gaps. `GET /api/system/health` exposes the BackgroundServices snapshot. `POST /api/system/run-job/{job_id}` is the force-run hook. Blueprint is registered in `create_app()` after `build_stats_blueprint()`.
+- **No new DB tables.** Every dashboard is a read surface over tables and in-process state already produced by plans 10/11/14/00. No alerts table, no completeness table, no parallel monitoring service.
+- **Doc 17 hazards enforced.** Exactly four pages. Only `BackgroundServices` (no parallel runtime). No alerts table. One fetch action (`POST /api/chart/{instrument}/fetch`). One validation UI. No quota widgets — just circuit breaker state. No external-service health checks.
+- **End-to-end browser walkthrough deferred.** Backend tests cover all five monitoring endpoints, the four page routes, and job history, but the in-browser AC walkthrough (cursor band live-updating, rollback button, auto-refresh, etc.) is the user's task — same pattern as plans 13/15/16.
 
 ### What Plan 00 deliberately did NOT land
 

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Single-user Flask app for analyzing NinjaTrader futures exports. This is a **rebuild from spec** — the canonical source of truth is `docs/rebuild-spec/00-README.md` and the numbered feature docs it lists. When a question starts with "how should X work?", read the relevant spec doc before reading code.
 
-Implementation progresses plan-by-plan under `docs/superpowers/plans/` in build order: 00 → 10 → 11 → 14 → 12 → 13 → 15 → 16 → 17. As of 2026-04-14, plans 00–16 are complete; plan 17 (Monitoring) is next.
+Implementation progresses plan-by-plan under `docs/superpowers/plans/` in build order: 00 → 10 → 11 → 14 → 12 → 13 → 15 → 16 → 17. As of 2026-04-14, every plan (00–17) is complete.
 
 ## Commands
 
