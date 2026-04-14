@@ -8,11 +8,12 @@ thin I/O wrapper that calls these.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from statistics import median
+from typing import Literal
 
 from models.position import Position
-from models.statistics import StatsSummary
+from models.statistics import StatsSummary, TimeBucket
 from services.outcomes import classify_outcome
 from services.time_utils import compute_session_date
 
@@ -143,3 +144,89 @@ def _longest_streaks(positions: list[Position]) -> tuple[int, int]:
                 longest_loss = cur_loss
         # scratches and open positions: do nothing
     return longest_win, longest_loss
+
+
+def bucket_by_session_date(
+    positions: list[Position],
+    *,
+    granularity: Literal["day", "week", "month"],
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> list[TimeBucket]:
+    """Bucket positions by their entry-time session date.
+
+    Continuous fill: if `from_date`/`to_date` are given, the result has one
+    bucket per granularity unit in [from_date, to_date]. Otherwise the range
+    is derived from min..max session date in the input. Empty input with no
+    range returns an empty list.
+
+    Bucket key formats:
+      day:   "YYYY-MM-DD"
+      week:  "YYYY-Www" (ISO week, Monday-start)
+      month: "YYYY-MM"
+    """
+    by_key: dict[str, tuple[int, float]] = {}
+    session_dates: list[date] = []
+    for p in positions:
+        sd = _session_date_of(p)
+        session_dates.append(sd)
+        key = _format_bucket_key(sd, granularity)
+        cnt, pnl_sum = by_key.get(key, (0, 0.0))
+        by_key[key] = (cnt + 1, pnl_sum + (p.dollars_pnl or 0.0))
+
+    if from_date is None and to_date is None and not session_dates:
+        return []
+
+    range_start = from_date if from_date is not None else min(session_dates)
+    range_end = to_date if to_date is not None else max(session_dates)
+
+    keys_in_order = _enumerate_keys(range_start, range_end, granularity)
+    result: list[TimeBucket] = []
+    for k in keys_in_order:
+        cnt, pnl_sum = by_key.get(k, (0, 0.0))
+        result.append(TimeBucket(bucket=k, position_count=cnt, total_pnl=pnl_sum))
+    return result
+
+
+def _format_bucket_key(d: date, granularity: str) -> str:
+    if granularity == "day":
+        return d.isoformat()
+    if granularity == "week":
+        iso_year, iso_week, _ = d.isocalendar()
+        return f"{iso_year}-W{iso_week:02d}"
+    if granularity == "month":
+        return f"{d.year:04d}-{d.month:02d}"
+    raise ValueError(f"unknown granularity: {granularity}")
+
+
+def _enumerate_keys(start: date, end: date, granularity: str) -> list[str]:
+    if granularity == "day":
+        out = []
+        cur = start
+        while cur <= end:
+            out.append(cur.isoformat())
+            cur = cur + timedelta(days=1)
+        return out
+    if granularity == "week":
+        # Walk Monday-aligned weeks from the ISO week containing `start` up to
+        # and including the ISO week containing `end`.
+        start_monday = start - timedelta(days=start.weekday())
+        end_monday = end - timedelta(days=end.weekday())
+        out = []
+        cur = start_monday
+        while cur <= end_monday:
+            iso_year, iso_week, _ = cur.isocalendar()
+            out.append(f"{iso_year}-W{iso_week:02d}")
+            cur = cur + timedelta(days=7)
+        return out
+    if granularity == "month":
+        out = []
+        y, m = start.year, start.month
+        while (y, m) <= (end.year, end.month):
+            out.append(f"{y:04d}-{m:02d}")
+            m += 1
+            if m == 13:
+                m = 1
+                y += 1
+        return out
+    raise ValueError(f"unknown granularity: {granularity}")

@@ -169,3 +169,97 @@ def test_compute_summary_avg_position_size():
         _pos(eid="2", quantity=4),
     ]
     assert compute_summary(positions).avg_position_size == 3.0
+
+
+from datetime import date as _date  # noqa: E402
+
+from services.statistics_aggregations import bucket_by_session_date  # noqa: E402
+
+
+def _at(unix_ts: int, *, eid: str, pnl: float = 10.0) -> Position:
+    return _pos(eid=eid, entry_time=unix_ts, exit_time=unix_ts + 60, dollars_pnl=pnl)
+
+
+def test_bucket_by_day_continuous_fill():
+    # Three positions: two on 2026-04-13, none on 2026-04-14, one on 2026-04-15.
+    # All before 16:00 Chicago time so session date == calendar date.
+    # 2026-04-13 09:00 UTC = 2026-04-13 04:00 CDT
+    positions = [
+        _at(1776070800, eid="a", pnl=10.0),  # 2026-04-13
+        _at(1776071400, eid="b", pnl=20.0),  # 2026-04-13
+        _at(1776243600, eid="c", pnl=30.0),  # 2026-04-15
+    ]
+    result = bucket_by_session_date(positions, granularity="day")
+    keys = [b.bucket for b in result]
+    assert keys == ["2026-04-13", "2026-04-14", "2026-04-15"]
+    assert result[0].position_count == 2
+    assert result[0].total_pnl == 30.0
+    assert result[1].position_count == 0
+    assert result[1].total_pnl == 0.0
+    assert result[2].position_count == 1
+    assert result[2].total_pnl == 30.0
+
+
+def test_bucket_by_day_explicit_range_pads_left_and_right():
+    positions = [_at(1776070800, eid="a", pnl=10.0)]  # 2026-04-13
+    result = bucket_by_session_date(
+        positions,
+        granularity="day",
+        from_date=_date(2026, 4, 11),
+        to_date=_date(2026, 4, 14),
+    )
+    keys = [b.bucket for b in result]
+    assert keys == ["2026-04-11", "2026-04-12", "2026-04-13", "2026-04-14"]
+    assert result[2].total_pnl == 10.0
+    assert result[0].total_pnl == 0.0
+    assert result[3].total_pnl == 0.0
+
+
+def test_bucket_by_day_empty_input_with_no_range_returns_empty():
+    assert bucket_by_session_date([], granularity="day") == []
+
+
+def test_bucket_by_day_empty_input_with_range_zero_fills():
+    result = bucket_by_session_date(
+        [],
+        granularity="day",
+        from_date=_date(2026, 4, 13),
+        to_date=_date(2026, 4, 14),
+    )
+    assert [b.bucket for b in result] == ["2026-04-13", "2026-04-14"]
+    assert all(b.position_count == 0 and b.total_pnl == 0.0 for b in result)
+
+
+def test_bucket_by_week_iso_week_keys():
+    # 2026-04-13 is a Monday — ISO week 16
+    positions = [_at(1776070800, eid="a", pnl=10.0)]
+    result = bucket_by_session_date(positions, granularity="week")
+    assert result[0].bucket == "2026-W16"
+
+
+def test_bucket_by_week_continuous_two_weeks():
+    positions = [
+        _at(1776070800, eid="a", pnl=10.0),  # 2026-04-13 -> W16
+        _at(1776675600, eid="b", pnl=20.0),  # 2026-04-20 -> W17 (Mon)
+    ]
+    result = bucket_by_session_date(positions, granularity="week")
+    assert [b.bucket for b in result] == ["2026-W16", "2026-W17"]
+
+
+def test_bucket_by_month_keys_and_continuous_fill():
+    positions = [
+        _at(1776070800, eid="a", pnl=10.0),  # 2026-04-13
+        _at(1781341200, eid="b", pnl=20.0),  # 2026-06-13
+    ]
+    result = bucket_by_session_date(positions, granularity="month")
+    assert [b.bucket for b in result] == ["2026-04", "2026-05", "2026-06"]
+    assert result[0].total_pnl == 10.0
+    assert result[1].total_pnl == 0.0
+    assert result[2].total_pnl == 20.0
+
+
+def test_bucket_uses_session_date_not_calendar():
+    # 2026-04-13 21:30 UTC = 16:30 CDT -> rolls over to session 2026-04-14
+    positions = [_at(1776115800, eid="rollover", pnl=10.0)]
+    result = bucket_by_session_date(positions, granularity="day")
+    assert result[0].bucket == "2026-04-14"
