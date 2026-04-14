@@ -6,11 +6,13 @@ import {
   postJSON,
   setText,
 } from "./api.js";
+import { PriceChart } from "./PriceChart.js";
 
 const root = document.getElementById("detail-root");
 const { account, instrument, entryExecutionId } = root.dataset;
 const title = document.getElementById("detail-title");
 const headerDl = document.getElementById("detail-header");
+const chartRoot = document.getElementById("chart-root");
 const notesPanel = document.getElementById("notes-panel");
 const reviewedToggle = document.getElementById("reviewed-toggle");
 const executionsRoot = document.getElementById("executions-root");
@@ -108,6 +110,15 @@ function renderExecutions(executions, detail) {
   const tbody = document.createElement("tbody");
   for (const e of executions) {
     const tr = document.createElement("tr");
+    tr.dataset.executionId = e.nt_execution_id;
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => {
+      document.dispatchEvent(
+        new CustomEvent("executions-table:row-clicked", {
+          detail: { executionId: e.nt_execution_id },
+        }),
+      );
+    });
     const td = (text) => {
       const c = document.createElement("td");
       setText(c, text);
@@ -126,6 +137,22 @@ function renderExecutions(executions, detail) {
   table.appendChild(tbody);
   executionsRoot.appendChild(table);
 }
+
+function flashRow(executionId) {
+  const tr = executionsRoot.querySelector(`tr[data-execution-id="${CSS.escape(executionId)}"]`);
+  if (!tr) return;
+  tr.scrollIntoView({ behavior: "smooth", block: "center" });
+  const prev = tr.style.background;
+  tr.style.background = "#FFD700";
+  setTimeout(() => {
+    tr.style.background = prev;
+  }, 1500);
+}
+
+document.addEventListener("chart:execution-clicked", (ev) => {
+  const id = ev?.detail?.executionId;
+  if (id) flashRow(id);
+});
 
 function renderLinksPanel() {
   linksPanel.innerHTML = "";
@@ -161,6 +188,19 @@ deleteBtn.addEventListener("click", async () => {
     renderNotesPanel(detail);
     renderExecutions(execs.executions, detail);
     renderLinksPanel();
+
+    // Mount the chart. PriceChart.init does its own fetches for markers,
+    // bars, available timeframes, and source snapshots. It is fire-and-forget
+    // from this script's perspective — the page renders fully even if the
+    // chart errors out.
+    PriceChart.init({
+      container: chartRoot,
+      account,
+      instrument,
+      entryExecutionId,
+    }).catch((e) => {
+      console.error("PriceChart failed to init", e);
+    });
   } catch (e) {
     setText(title, `Error loading ${ENTRY_KEY}: ${e.message}`);
   }
