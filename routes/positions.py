@@ -6,11 +6,10 @@ from db import connect
 from logging_config import get_logger
 from services.integrity_db import mark_ignored, mark_resolved_by_user
 from services.position_filters import PositionFilter
-from services.positions_service import (  # noqa: F401
+from services.positions_service import (
     attach_metadata,
     get_filter_options,
     get_position,
-    list_positions,
     list_positions_page,
 )
 
