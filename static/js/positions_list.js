@@ -32,6 +32,7 @@ function readFilters() {
     instrument: data.get("instrument") || "",
     side: data.get("side") || "",
     outcome: data.get("outcome") || "",
+    session_date: data.get("session_date") || "",
   };
 }
 
@@ -137,7 +138,7 @@ async function load() {
 
 function restoreFiltersFromUrl() {
   const params = new URL(window.location.href).searchParams;
-  for (const name of ["account", "instrument", "side", "outcome"]) {
+  for (const name of ["account", "instrument", "side", "outcome", "session_date"]) {
     const value = params.get(name);
     if (value !== null) {
       const el = form.querySelector(`[name="${name}"]`);
