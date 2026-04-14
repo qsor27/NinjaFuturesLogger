@@ -1,0 +1,122 @@
+"""StatisticsService — the I/O wrapper around the pure aggregation helpers.
+
+Plan 15. One method per /api/stats/* endpoint. Each method takes a StatsFilter
+and returns a typed Pydantic StrictModel. Routes do no SQL; this module owns
+all of it.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from config import Config
+from db import connect
+from models.execution import Execution
+from models.position import Position
+from models.statistics import StatsFilter
+from services.positions import build_positions
+from services.statistics_aggregations import _session_date_of
+
+
+@dataclass(frozen=True)
+class _LoadResult:
+    closed_with_pnl: list[Position]
+    closed_missing_multiplier: list[Position]
+    open: list[Position]
+
+
+class StatisticsService:
+    def __init__(self, config: Config) -> None:
+        self._config = config
+
+    # -- I/O --------------------------------------------------------------
+
+    def _load_closed_positions(self, filter: StatsFilter) -> _LoadResult:
+        executions = self._load_executions(account=filter.account)
+        groups: dict[tuple[str, str], list[Execution]] = {}
+        for e in executions:
+            groups.setdefault((e.account, e.instrument), []).append(e)
+
+        closed_with_pnl: list[Position] = []
+        closed_missing_mult: list[Position] = []
+        open_positions: list[Position] = []
+        for _key, group in groups.items():
+            positions, _issues = build_positions(group)
+            for p in positions:
+                if p.exit_time is None:
+                    open_positions.append(p)
+                elif p.dollars_pnl is None:
+                    closed_missing_mult.append(p)
+                else:
+                    closed_with_pnl.append(p)
+
+        if filter.from_date is not None or filter.to_date is not None:
+            closed_with_pnl = [
+                p
+                for p in closed_with_pnl
+                if self._in_session_range(p, filter.from_date, filter.to_date)
+            ]
+            closed_missing_mult = [
+                p
+                for p in closed_missing_mult
+                if self._in_session_range(p, filter.from_date, filter.to_date)
+            ]
+            open_positions = [
+                p
+                for p in open_positions
+                if self._in_session_range(p, filter.from_date, filter.to_date)
+            ]
+
+        return _LoadResult(
+            closed_with_pnl=closed_with_pnl,
+            closed_missing_multiplier=closed_missing_mult,
+            open=open_positions,
+        )
+
+    @staticmethod
+    def _in_session_range(p: Position, from_date, to_date) -> bool:
+        sd = _session_date_of(p)
+        if from_date is not None and sd < from_date:
+            return False
+        if to_date is not None and sd > to_date:
+            return False
+        return True
+
+    def _load_executions(self, *, account: str | None) -> list[Execution]:
+        sql = (
+            "SELECT nt_execution_id, account, instrument, timestamp, side,"
+            " original_action, quantity, price, commission, entry_exit,"
+            " position_after, source_order_id, source_filename, imported_at "
+            "FROM executions"
+        )
+        params: tuple = ()
+        if account is not None:
+            sql += " WHERE account = ?"
+            params = (account,)
+        sql += " ORDER BY account, instrument, timestamp, nt_execution_id"
+        conn = connect(self._config.db_path)
+        try:
+            rows = conn.execute(sql, params).fetchall()
+        finally:
+            conn.close()
+        return [
+            Execution(
+                nt_execution_id=r["nt_execution_id"],
+                account=r["account"],
+                instrument=r["instrument"],
+                timestamp=r["timestamp"],
+                side=r["side"],
+                original_action=r["original_action"],
+                quantity=r["quantity"],
+                price=r["price"],
+                commission=r["commission"],
+                entry_exit=r["entry_exit"],
+                position_after=r["position_after"],
+                source_order_id=r["source_order_id"],
+                source_filename=r["source_filename"],
+                imported_at=r["imported_at"],
+            )
+            for r in rows
+        ]
+
+    # -- Public methods (filled in by Task 7) -----------------------------
