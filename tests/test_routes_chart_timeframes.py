@@ -12,7 +12,6 @@ from services.ohlc.jobs import FetchJobRegistry
 from services.ohlc.registry import build_default_registry
 from services.ohlc.store import insert_many
 
-
 CANONICAL = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
 
@@ -28,9 +27,7 @@ def _make_app(tmp_config):
     app.config["FTL_DB_PATH"] = tmp_config.db_path
     app.config["FTL_OHLC_POOL"] = pool
     app.config["FTL_OHLC_JOBS"] = FetchJobRegistry()
-    app.config["FTL_OHLC_REGISTRY"] = build_default_registry(
-        clock=lambda: int(time.time())
-    )
+    app.config["FTL_OHLC_REGISTRY"] = build_default_registry(clock=lambda: int(time.time()))
     app.register_blueprint(build_ohlc_blueprint())
     return app, pool
 

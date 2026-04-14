@@ -36,9 +36,7 @@ def test_empty_executions_yields_empty_markers():
 def test_one_execution_one_marker():
     e = _exec(nt_execution_id="abc", timestamp=100, side="Buy", quantity=2, price=100.5)
     out = build_markers([e])
-    assert out == [
-        Marker(time=100, price=100.5, side="Buy", quantity=2, label="abc")
-    ]
+    assert out == [Marker(time=100, price=100.5, side="Buy", quantity=2, label="abc")]
 
 
 def test_marker_preserves_input_order():

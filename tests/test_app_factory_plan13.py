@@ -83,9 +83,7 @@ def test_position_markers_route_is_wired(tmp_config):
 def test_static_vendor_lightweight_charts_is_served(tmp_config):
     app, services = create_app(tmp_config, start_background=False)
     try:
-        resp = app.test_client().get(
-            "/static/vendor/lightweight-charts.standalone.production.js"
-        )
+        resp = app.test_client().get("/static/vendor/lightweight-charts.standalone.production.js")
         assert resp.status_code == 200
         # The standalone build defines the LightweightCharts global at least
         # once in its minified body. This is a cheap sanity check that the

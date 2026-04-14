@@ -14,8 +14,8 @@ class Marker(StrictModel):
     its row, so the chart-arrow ↔ table-row linking can match by label.
     """
 
-    time: int          # unix seconds, UTC — the execution timestamp
-    price: float       # the fill price
+    time: int  # unix seconds, UTC — the execution timestamp
+    price: float  # the fill price
     side: Side
     quantity: int
-    label: str         # the un-suffixed nt_execution_id
+    label: str  # the un-suffixed nt_execution_id

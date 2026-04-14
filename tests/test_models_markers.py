@@ -31,9 +31,7 @@ def test_marker_quantity_must_be_int():
 
 def test_marker_extra_fields_forbidden():
     with pytest.raises(ValidationError):
-        Marker(
-            time=1, price=1.0, side="Buy", quantity=1, label="x", extra="nope"
-        )
+        Marker(time=1, price=1.0, side="Buy", quantity=1, label="x", extra="nope")
 
 
 def test_marker_is_exported_from_models():
