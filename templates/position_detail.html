@@ -10,7 +10,7 @@
     <a href="/positions">&larr; Back to positions</a>
     <h1 id="detail-title">Loading...</h1>
     <dl class="detail-header" id="detail-header"></dl>
-    <div class="chart-slot" id="chart-root">Chart loads in plan 13</div>
+    <div class="chart-slot" id="chart-root"></div>
     <div class="notes-panel" id="notes-panel"></div>
     <div class="reviewed-toggle" id="reviewed-toggle"></div>
     <h2>Executions</h2>
@@ -22,5 +22,6 @@
   </div>
 {% endblock %}
 {% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/lightweight-charts.standalone.production.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='js/position_detail.js') }}"></script>
 {% endblock %}
