@@ -74,7 +74,7 @@ Implementation is split into **phased plans**, one per spec feature, written and
 | [12 — Browsing](../superpowers/plans/2026-04-13-12-browsing.md) | `/positions` list and detail, `execution_notes`, `execution_flags`, link groups, JSON APIs, shell templates + vanilla JS | ✅ **Complete** (2026-04-13) |
 | [13 — Charting](../superpowers/plans/2026-04-13-13-charting.md) | `PriceChart.js`, embed in detail page, markers, timeframe selector, fetch-now CTA, delayed-data banner | ✅ **Complete** (2026-04-13, browser AC walkthrough pending) |
 | [15 — Statistics](../superpowers/plans/2026-04-13-15-statistics.md) | `StatisticsService`, all `/api/stats/*`, `/statistics` and `/reports` pages | ✅ **Complete** (2026-04-13, 16 commits, 451 tests, browser AC walkthrough pending) |
-| 16 — Settings & Custom Fields | `instruments.json` registry, `chart_defaults`, `custom_fields` + values, `/settings/*` pages | ⏳ |
+| [16 — Settings & Custom Fields](../superpowers/plans/2026-04-13-16-settings-instruments.md) | `instruments.json` registry, `chart_defaults`, `custom_fields` + values, `/settings/*` pages | ✅ **Complete** (2026-04-14, ~14 tasks, 557 tests) |
 | 17 — Monitoring | `/imports`, `/validation`, `/data-health`, `/system/health` pages and APIs | ⏳ |
 
 ### What Plan 00 landed
@@ -193,6 +193,20 @@ These belong to later plans or are explicit non-goals:
 - **No second `<div id="chart">` mount point.** Plan 12's existing `<div id="chart-root">` is reused; the placeholder text is removed and nothing else about the detail-page DOM changes.
 - **No removal of existing `position_detail.js` behavior.** The chart mounts alongside the existing detail/notes/reviewed/executions/links/delete behavior, not in place of it.
 - **Browser AC walkthrough deferred.** Backend tests verify the routes are wired and the static assets are served, but the in-browser walkthrough of AC 1–22 (chart rendering, marker placement, timeframe switching, fetch-now CTA, delayed-data banner, arrow↔row linking) was not run in this session. The user will perform it before declaring the plan fully shipped.
+
+### What Plan 16 landed
+
+- **Migration 006.** Ships `chart_defaults` (one-row `CHECK(id=1)`), `custom_fields`, `custom_field_options`, `execution_custom_field_values`. FK cascades on both executions and field deletions confirmed by tests.
+- **InstrumentRegistry.** `services/instrument_registry.py` owns `data/config/instruments.json` with atomic tmp+rename writes under a module-level lock. First load seeds from `DEFAULT_SEED` — the multiplier/symbol/session tables previously hardcoded in `services/instruments.py`. Plans 11/14 callers see identical results for all seeded instruments (pinned by `test_instruments_registry_backcompat.py`).
+- **`services/instruments.py` becomes a thin delegator.** Bodies of `get_multiplier`, `source_symbol`, `default_session` now read from the registry. `DEFAULT_TIMEFRAMES`, `base_symbol`, `SessionCalendar` unchanged so plan 14's `app.py` post-tick hook continues to work.
+- **DB-backed chart defaults.** `services/chart_defaults.py::get_defaults(db_path)` now SELECTs from the seeded `chart_defaults` row. New `save_defaults(...)` companion writes it inside a transaction. `DEFAULT_TIMEFRAME` bumped from `"1m"` to `"5m"` to match the spec seed row.
+- **`config.save_display_timezone`.** New helper reads/modifies/writes `app.json` under a module lock with tmp+rename. Validates IANA strings via `zoneinfo.ZoneInfo`. Called by the chart-defaults PUT handler. No generic config-save path.
+- **CustomFieldsService.** Owns all CRUD for definitions, options, and execution values. Typed encoding for `text`/`number`/`dropdown`/`date`/`boolean` in one place. Dropdown writes validated against current options. `#close`/`#open` split-suffix stripped before every DB touch. Two-step delete flow via `affected_executions(field_id)` + `delete_definition(field_id, confirm_count=N)`. `values_for_position(...)` splits results into `entry`/`per_execution`/`definitions`.
+- **Settings blueprint.** New `routes/settings.py` with all 13 endpoints from doc 16 plus four page routes (`/settings`, `/settings/instruments`, `/settings/chart`, `/settings/custom-fields`). Registered in `create_app()` between `build_links_blueprint()` and `build_pages_blueprint()`. `FTL_CONFIG_PATH` now lives on `app.config` so the PUT handler can write to `app.json`.
+- **Position detail integration.** `services/positions_service.py::attach_metadata` now returns `custom_fields: {entry, per_execution, definitions}` instead of the plan 12 `{}` stub. `static/js/custom_fields_detail.js` renders an inline always-visible block + a `<details>` per-execution fold-out when non-entry executions have values.
+- **Four new ES modules, no new dependencies.** `settings_instruments.js`, `settings_chart.js`, `settings_custom_fields.js`, `custom_fields_detail.js`. Plus one `settings.css` scoped to `.settings-page`. No bundler, no framework, no `package.json`, no new `requirements.txt` entries.
+- **Doc 16 hazards enforced.** One endpoint per resource; one registry owns `instruments.json`; no profiles, no instrument groups; custom field values attach to `nt_execution_id` (not to any position key); `chart_defaults` stays single-row with `CHECK(id=1)`.
+- **End-to-end verification deferred.** Backend tests cover all 13 routes, all four pages, and every service path. In-browser walkthrough of doc 16 AC 1–11 is the user's task — same pattern as plans 13/15.
 
 ### What Plan 00 deliberately did NOT land
 
