@@ -32,10 +32,13 @@
       .link-box { border: 1px solid #ddd; border-radius: 4px; padding: 12px; margin: 8px 0; }
       .orphan { color: #888; font-style: italic; }
     </style>
+    {% block extra_styles %}{% endblock %}
   </head>
   <body>
     <header>
       <a href="/positions">Positions</a>
+      <a href="/statistics">Statistics</a>
+      <a href="/reports">Reports</a>
       <a href="/links">Link Groups</a>
     </header>
     <main>

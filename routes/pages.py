@@ -27,4 +27,12 @@ def build_pages_blueprint() -> Blueprint:
         # landing page. A dedicated index can ship later if there's demand.
         return redirect(url_for("pages.positions_list"))
 
+    @bp.get("/statistics")
+    def statistics_page():
+        return render_template("statistics.html")
+
+    @bp.get("/reports")
+    def reports_page():
+        return render_template("reports.html")
+
     return bp

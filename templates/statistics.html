@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Statistics — FuturesTradingLog{% endblock %}
+{% block extra_styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/stats.css') }}">
+{% endblock %}
+{% block content %}
+  <div id="stats-root" class="stats-page">
+    <div id="stats-filter-bar"></div>
+    <div class="bento-grid">
+      <section id="stats-summary" class="bento-cell bento-2x1"></section>
+      <section id="stats-by-side" class="bento-cell bento-1x1"></section>
+      <section id="stats-equity" class="bento-cell bento-2x1"></section>
+      <section id="stats-by-instrument" class="bento-cell bento-1x1"></section>
+      <section id="stats-by-day" class="bento-cell bento-1x1"></section>
+      <section id="stats-by-hour" class="bento-cell bento-1x1"></section>
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/lightweight-charts.standalone.production.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='js/statistics.js') }}"></script>
+{% endblock %}
