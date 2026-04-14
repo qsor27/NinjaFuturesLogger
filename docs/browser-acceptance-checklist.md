@@ -59,7 +59,7 @@ closed multi-fill position so all the chart features are exercised.
 ### Loading / error / missing / degraded (doc 13 ACs 18–22)
 
 - [x] AC18: While bars load, an unobtrusive loading indicator shows over the canvas. A rapid timeframe click cancels the in-flight request. Confirmed by code: `_loadBars()` calls `_setState("loading")` before fetch ✓; each call creates new `AbortController` and aborts the previous one ✓; only 5m has synthetic data so live loading-state not visually triggerable.
-- [x] AC19: Force an empty range (open the detail page for a position whose window has no bars) → placeholder shows "Fetch data now" button. Clicking it posts `/api/chart/{instrument}/fetch`, polls `/api/ohlc/jobs/{id}`, and re-renders the chart when done. **FAIL**: when `pickInitialTimeframe` returns null (all timeframes `available:false`), `PriceChart.js:229` calls `this._setState("no-data")` directly without first calling `_renderPlaceholder()`. Both `loadingEl` and `placeholderEl` end up `display:none`; the chart area is a blank black box with no "Fetch data now" button. Bug is in the init path at `PriceChart.js:229–231`; the `_loadBars` path at line 396–402 correctly calls `_renderPlaceholder` first.
+- [x] AC19: **FIXED** — init path now calls `_renderPlaceholder({ message, ctaLabel: "Fetch data now", onCta: () => _fetchOnDemand(start, end) })` before `_setState("no-data")`, matching the `_loadBars` path. Verified by code inspection; all-unavailable state not naturally triggerable with current test data (all 18 positions are MNQ JUN26 which has 5m bars).
 - [ ] AC20: Block outbound network so yfinance + Stooq both circuit-break → chart area shows "Chart data is currently delayed" banner. **Rest of page still renders normally** — header, notes, executions, P&L all work. **BLOCKED**: needs manual network isolation; cannot force from browser.
 - [ ] AC21: Stop the Flask process mid-load → chart area shows an inline error message with a Retry button, rest of the page is unaffected. **BLOCKED**: needs mid-load server kill; risk of data loss.
 - [x] AC22: Verify only one chart file exists: `grep -r "class PriceChart" static/js/` returns exactly one hit in `PriceChart.js`. Confirmed: exactly one hit — `static/js/PriceChart.js:export class PriceChart {`.
@@ -76,23 +76,23 @@ placeholders, not crash.
 
 - [x] AC1: Page renders using one `StatisticsService` behind the JSON API. Check Network: only `/api/stats/*` endpoints are called, not ad-hoc SQL routes. Confirmed: 6 calls all `GET /api/stats/*`; `/api/positions/filters` for filter dropdown only ✓.
 - [x] AC2: Open positions do NOT appear in P&L totals — verify by counting closed-only positions against the summary. Confirmed: OPEN: 0 in summary card; all 18 positions are closed ✓.
-- [ ] AC3: Summary card shows total positions, total P&L, win count, loss count, scratch count, win rate, average win, average loss, profit factor, largest win, largest loss, longest winning streak, longest losing streak. **FAIL**: win count (14), loss count (4), scratch count (0) exist in API response (`/api/stats/summary`) but are not rendered in the summary card UI. All other fields present ✓.
-- [ ] AC4: Per-instrument breakdown table renders with instrument / position count / total P&L / win rate / avg P&L per position. **FAIL**: table shows instrument, trades, P&L, win% — missing "avg P&L per position" column.
+- [x] AC3: **FIXED** — added Wins (14), Losses (4), Scratch (0) to summary card. API uses `wins`/`losses` fields (not `win_count`/`loss_count`); fixed field names in JS ✓.
+- [x] AC4: **FIXED** — added "Avg P&L" column to instrument breakdown table using `avg_pnl_per_position` from API (+$234 for MNQ JUN26) ✓.
 - [x] AC5: Per-day/week/month breakdown uses **session date** (16:00 CT rollover), not calendar date. Confirmed for same-day positions: buckets 2026-04-07 through 2026-04-13 match position entry dates ✓. Overnight rollover not testable — no overnight positions in test data.
 - [x] AC6: Per-hour-of-day breakdown renders 0–23 in the configured `display_timezone`. Confirmed: chart labeled "BY HOUR (AMERICA/CHICAGO)"; API returns `timezone: America/Chicago`; active hours 8–12 match CT morning session ✓.
 - [x] AC7: Per-side breakdown (Long/Short) renders with position count, total P&L, win rate. Confirmed: "LONG VS SHORT" card shows Long (+$2,310 · 8 trades · 75.0%) and Short (+$1,901 · 10 trades · 80.0%) ✓.
-- [ ] AC8: Execution-quality metrics: average hold time, median hold time, average position size, P&L distribution histogram with 10 buckets. **FAIL**: avg hold (15 min) and avg size (6.0) shown; median hold time and P&L distribution histogram not rendered (data exists in API but UI omits them).
+- [x] AC8: **FIXED** — added Median Hold (min) = 14.4 to summary card; added P&L Distribution histogram (10 buckets from `/api/stats/distribution`) as new bento cell ✓.
 - [x] AC9: Filter controls (account, date range, side) change the displayed numbers. Filter posts query params, not a new page. Confirmed: selecting Long+Apply re-fetched all `/api/stats/*?side=Long`; total P&L updated 4211→2310; URL became `?side=Long` via pushState ✓.
 
 ### `/reports` (doc 15 AC 10)
 
-- [ ] AC10: Page renders a monthly P&L calendar heat map, a per-account cumulative equity curve (one point per session date — no HH:MM labels), an instrument breakdown table, and a performance summary card. **FAIL**: calendar ✓, equity curve ✓, by-week ✓, by-month ✓ — but instrument breakdown table and performance summary card are absent from the page.
+- [x] AC10: **FIXED** — added By Instrument table (Instr/Trades/P&L/Win%/Avg P&L) and Performance Summary card (Trades/Win Rate/Profit Factor/Total P&L/Avg Win/Avg Loss/Largest Win/Largest Loss) to `/reports` page. Both render correctly ✓.
 - [x] AC10.1: The equity curve handles the plan 15 polish — multi-line per account, date-bucketed, no mixing day numbers with intraday labels. Confirmed: two lines (APEX…067 purple, APEX…068 teal); x-axis shows date numbers 7/8/9/10/13; no HH:MM ✓.
 - [x] AC10.2: Side filter (Long/Short) threads through both pages. Confirmed: `/reports?side=Long` refetches all 5 report endpoints with `?side=Long` ✓.
 
 ### No cache, always live (doc 15 AC 11)
 
-- [ ] AC11: Change an execution (e.g. rollback a tick), reload `/statistics`, and verify the numbers update immediately — no stale values. **BLOCKED**: requires rolling back a tick to test; deferred to avoid data loss.
+- [x] AC11: Change an execution (e.g. rollback a tick), reload `/statistics`, and verify the numbers update immediately — no stale values. UI-verified on 2026-04-14 by rolling back tick #5 (32 executions, NinjaTrader_Executions_20260413.csv): `/api/stats/summary` before → `total_positions=18, total_pnl=4210.5, wins=14, losses=4`; after → `total_positions=12, total_pnl=4038.5, wins=10, losses=2`. No stale values, no refresh delay ✓.
 
 ---
 
@@ -102,33 +102,33 @@ Spec: `docs/rebuild-spec/16-settings-instruments.md`. Eleven numbered ACs.
 
 ### Instruments (`/settings/instruments`, doc 16 ACs 1–3)
 
-- [ ] AC1: Page loads populated from `data/config/instruments.json`. Verify the file exists after first startup (`/app/data/config/instruments.json` in the container)
-- [ ] AC2: Each row shows display_name, multiplier, tick_size, per-source symbol (yfinance continuous, stooq continuous), session timezone/open/close/break
-- [ ] AC3: Add a new instrument (e.g. `BTC`) — table updates, JSON file on disk updates, closing/reopening the page preserves it
-- [ ] AC3.1: Edit `ES` multiplier from 50 to 25 — reload `/positions`, dollars P&L halves for new ES positions and for recomputed existing ones
-- [ ] AC3.2: Delete an instrument — 204, table re-renders without it
-- [ ] AC3.3: Drop a CSV for the edited instrument, verify `/api/positions` `dollars_pnl` reflects the new multiplier
+- [x] AC1: Page loads populated from `data/config/instruments.json`. Confirmed: table shows all instruments (6B, 6E, 6J, CL, ES, GC, HG, HO, M2K, MCL, MES, MGC, MHG, MNQ, MYM, NQ, RTY, etc.) — instruments.json read on startup ✓.
+- [x] AC2: **FIXED** — added Session column showing `{timezone} · {open}–{close}` (e.g., "America/Chicago · 17:00–16:00"); break times visible on hover as tooltip. All required fields now in every row ✓.
+- [x] AC3: Added `BTC` (Bitcoin Futures, mult=5, tick=5) via Add form — table updated immediately with BTC in alphabetical order ✓; JSON file on disk updated (`instruments.json` contains BTC entry) ✓; page reload preserved it ✓.
+- [x] AC3.1: No ES positions in test data (all 18 are MNQ JUN26). Adapted: changed MNQ multiplier 2→1 — `/api/positions` P&L halved (92→46, -54→-27) ✓. Reverted MNQ to multiplier=2 after test.
+- [x] AC3.2: Deleted BTC via UI Delete button — HTTP 204 ✓; table re-rendered in-place without BTC row ✓.
+- [ ] AC3.3: Drop a CSV for the edited instrument, verify `/api/positions` `dollars_pnl` reflects the new multiplier. **BLOCKED**: requires creating and dropping a new MNQ CSV into inbox; deferred to avoid test-data pollution.
 
 ### Chart defaults (`/settings/chart`, doc 16 AC 4)
 
-- [ ] AC4: Form renders with default_timeframe, volume_visible_default, display_timezone (optional)
-- [ ] AC4.1: Change default_timeframe from `5m` to `15m`, save, open a position detail page — chart mounts at `15m`
-- [ ] AC4.2: Toggle volume_visible_default off, save, open a position detail page — volume series is hidden on first mount
-- [ ] AC4.3: Set display_timezone to `Asia/Tokyo`, save, reload `/statistics`, and verify per-hour buckets now use Tokyo local time
-- [ ] AC4.4: Try to save `default_timeframe=2m` or `display_timezone=Not/Real` — form shows an error, no write happens
+- [x] AC4: Form renders with default_timeframe (select: 1m/5m/15m/1h/4h/1d, default 5m), volume_visible_default checkbox (checked), display_timezone text input (optional) ✓.
+- [x] AC4.1: Changed default_timeframe to 15m, saved. `timeframes-available` returns `default_timeframe: "15m"` ✓; chart correctly falls back to 5m because only 5m has bars — expected `pickInitialTimeframe` behavior. Setting flows through correctly.
+- [x] AC4.2: **FIXED** — `timeframes-available` was missing `volume_visible_default`; `PriceChart.js` hardcoded `this.volumeVisible = true`. Fixed both. After fix: volume_visible_default=false → chart mounts with "Volume: off" ✓. Reverted to true.
+- [x] AC4.3: Set display_timezone=Asia/Tokyo, saved. `/api/stats/by-hour` returned `timezone: Asia/Tokyo` ✓; `/statistics` page showed "BY HOUR (ASIA/TOKYO)" label ✓. Reverted to null.
+- [x] AC4.4: Submitted `display_timezone=Not/Real` — API returned 400, form shows "Error: invalid display_timezone", timezone field preserved "Not/Real" (no write) ✓. `default_timeframe=2m` is unreachable via UI (fixed select); API returns `{"error":"invalid default_timeframe"}` ✓.
 
 ### Custom fields (`/settings/custom-fields`, doc 16 ACs 5–11)
 
-- [ ] AC5: Create a `text` field "Setup" — appears in the list
-- [ ] AC5.1: Create a `dropdown` field "Trend" — dropdown-options editor appears
-- [ ] AC6: Add three options to "Trend" ("Up", "Down", "Range"); save; reorder them; the `option_id` of unchanged values stays the same (verify via `GET /api/custom-fields/{id}/options`)
-- [ ] AC7: Open a position detail page — new Custom Fields block appears between notes and executions with an input per active field
-- [ ] AC7.1: Values attach to `nt_execution_id`, never to a position key — verify by rolling back the entry execution and confirming the row is gone (cascade)
-- [ ] AC8: Set a value on the entry execution — it persists on the entry row. Expand the `<details>` fold-out — per-execution values for non-entry fills appear only if any exist
-- [ ] AC9: All CRUD flows work: create, rename, toggle active, delete
-- [ ] AC10: Toggle a field `is_active=false` after setting a value — the field disappears from the position detail block but its stored values are preserved (verify with `GET /api/executions/{id}/custom-fields`)
-- [ ] AC11: Delete a field that has values — UI shows "N executions affected", requires confirmation, then cascades
-- [ ] AC11.1: Try to change `field_type` on a field that has values — 400 error, no write
+- [x] AC5: Created `text` field "Setup" — appeared in list with name, type "text", Active ✓ checked, Delete button ✓.
+- [x] AC5.1: Created `dropdown` field "Trend" — dropdown-options editor (textarea + Save options button) appeared immediately below the row ✓.
+- [x] AC6: Added Up/Down/Range, saved (option_ids 1/2/3). Reordered to Down/Range/Up, saved — option_ids unchanged: Down=2, Range=3, Up=1 ✓; display_order updated correctly.
+- [x] AC7: Position detail page shows "Custom fields" block between notes and Executions with Setup (text input) and Trend (select) inputs ✓.
+- [x] AC7.1: Values attach to `nt_execution_id`, never to a position key — verify by rolling back the entry execution and confirming the row is gone (cascade). UI-verified on 2026-04-14: exec `431666578143_1` (entry of an MNQ position) had Pattern="Breakout" pre-rollback; rolling back tick #5 cascaded the `execution_custom_field_values` row via FK — `/api/executions/431666578143_1/custom-fields` now returns `execution not found` ✓.
+- [x] AC8: Typed "Breakout" in Setup → persisted: `{"1": "Breakout"}` on reload ✓. Selected "Down" for Trend → `{"1": "Breakout", "2": "Down"}` ✓. Note: Trend dropdown lazy-loads options on `focus` event. No `<details>` fold-out when no non-entry fills have values ✓.
+- [x] AC9: Create ✓ (Setup text, Trend dropdown). Rename: "Setup"→"Pattern" via name input blur → `PATCH /api/custom-fields/1` ✓. Toggle active: unchecked Pattern Active checkbox → is_active=false ✓. Delete (Trend): tested via API (cascade confirmed).
+- [x] AC10: Pattern set is_active=false → position detail shows only Trend ✓; `GET /api/executions/431666578143_1/custom-fields` still returns `{"1": "Breakout"}` ✓.
+- [x] AC11: First DELETE → 409 `{"affected_executions": 1}` ✓; JS calls `confirm("This field has values on 1 executions. Delete anyway?")` ✓. UI-verified on 2026-04-14 by overriding `window.confirm` in the page context, clicking Delete on a seeded "DeleteTest" field with 1 attached value: confirm dialog fired with expected text, field row disappeared from list + `/api/custom-fields` no longer returns it, and `execution_custom_field_values` cascade confirmed via `/api/executions/{id}/custom-fields` ✓.
+- [x] AC11.1: PUT `/api/custom-fields/1` with `{"field_type":"number"}` while Pattern has a value → `{"error":"cannot change field_type while 1 executions have values"}` ✓, no write.
 
 ---
 
@@ -138,58 +138,58 @@ Spec: `docs/rebuild-spec/17-import-monitoring.md`. Four pages.
 
 ### Imports list (`/imports`)
 
-- [ ] Page loads with the cursors band at top (or "No active inbox files" if inbox is empty)
-- [ ] "Scan Now" button runs `POST /api/imports/scan` and refreshes the band + table
-- [ ] Filter bar: From / To / Filename / Status. Apply button filters the table. Default lookback is 7 days
-- [ ] Table: 50 rows per page, newest first, pagination with Previous/Next and a total count
-- [ ] Each row: tick_id, filename, started_at (local time), duration, status, inserted, duplicates, rejected, `cursor_before → cursor_after`
-- [ ] Click a row → navigates to `/imports/{tick_id}`
+- [x] Page loads with cursors band at top: 5 active inbox files, each showing file/cursor position/last modified ✓.
+- [x] "Scan Now" button POSTs to `/api/imports/scan`, triggered 5 new ticks (970→975), then called `renderCursorsBand()` + `loadRuns()` to refresh ✓. Note: uses native `alert()` (auto-dismissed by extension).
+- [x] Filter bar: From / To / Filename / Status / Apply ✓. Default From = 7 days back (04/07/2026 on test date 04/14/2026) ✓.
+- [x] 50 rows per page, newest first, "Showing 1–50 of 975" with Previous/Next ✓.
+- [x] Each row: ID, filename, started (local time), duration, status, inserted, dups, rejected, `cursor_before → cursor_after` ✓.
+- [x] Click row 970 → navigated to `/imports/970` ✓.
 
 ### Imports detail (`/imports/{tick_id}`)
 
-- [ ] Detail header shows file, status, started, finished, duration, counts, cursor before/after
-- [ ] Rejected rows table: one row per reject with line number, reason, raw line (mono font)
-- [ ] Rollback section shows "This tick inserted N execution(s)" with a red "Roll Back This Tick" button
-- [ ] Clicking rollback shows a confirm dialog with the first 5 IDs and a "+N more" label
-- [ ] Confirming rolls back, shows "Rolled back N execution(s)", and redirects to `/imports`
-- [ ] After rollback, the executions are gone and any `execution_notes` / `execution_flags` / `execution_custom_field_values` tied to them have cascaded
+- [x] Detail header (tick #5): file, status=ok, started/finished (local time), duration=1000ms, inserted=32, duplicates=0, rejected=1, cursor before=0, cursor after=4465 ✓.
+- [x] Rejected Rows (1): line=0, reason="invalid action: 'Action'", raw = CSV header row in table (mono font) ✓.
+- [x] Rollback section: "This tick inserted **32** execution(s). Rolling back deletes them." + red "Roll Back This Tick" button ✓.
+- [x] Clicking rollback shows a confirm dialog with the first 5 IDs and a "+N more" label. Verified 2026-04-14 via `static/js/imports.js:248`: `` confirm(`Delete ${ids.length} execution(s)?\n\n${first5.join(", ")} … +${ids.length-5} more`) `` — click observed to trigger dialog and proceed on accept ✓.
+- [x] Confirming rolls back, shows "Rolled back N execution(s)", and redirects to `/imports`. Verified 2026-04-14 via tick #5 rollback: `static/js/imports.js:255-256` calls `alert(\`Rolled back ${body.deleted} execution(s).\`)` then `window.location.href = "/imports"`; post-click, tab URL was `http://localhost:8000/imports` ✓.
+- [x] After rollback, the executions are gone and any `execution_notes` / `execution_flags` / `execution_custom_field_values` tied to them have cascaded. UI-verified 2026-04-14: seeded exec `431666578014_1` (in tick #5) with a test note (`PATCH /note`), reviewed flag (`PATCH /reviewed`), and custom field value (`PUT /custom-fields/1`), rolled back tick #5, then `GET /api/executions/431666578014_1/custom-fields` returned `execution not found` — all FK cascades observed ✓.
 
 ### Validation (`/validation`)
 
-- [ ] Auto-resolve banner at top: "Issues are re-evaluated on every import tick…" (exact wording from spec AC)
-- [ ] Filter bar: Status (Open/Resolved/Ignored/All), Severity, Account, Instrument
-- [ ] Default view is `status=open`, sorted by severity then `detected_at` desc (high issues first)
-- [ ] Each row: severity (colored), type, account, instrument, execution link, description, detected, age (hours), action
-- [ ] Clicking the execution link navigates to the position detail page containing that execution
-- [ ] Resolve button on an open issue prompts for an optional note, calls `/resolve`, row moves out of the open list
-- [ ] Ignore button on an open issue prompts for a mandatory note, calls `/ignore`, row moves out of the open list
-- [ ] Switching to Resolved/Ignored filter shows the note inline on the row (no modal)
-- [ ] **No "Run validation now" button exists** (per spec — force re-eval happens via `/imports` "Scan Now")
+- [x] Auto-resolve banner: "Issues are re-evaluated on every import tick. Issues that no longer hold are marked system-resolved automatically. Ignored issues stay ignored until you unignore them." ✓
+- [x] Filter bar: Status (Open/Resolved/Ignored/All), Severity, Account, Instrument, Apply ✓.
+- [x] Default view status=open, sorted by severity (all "high" issues first) ✓.
+- [x] Each row: severity (red "high"), type, account, instrument, execution link, description, detected, age (16h), Resolve/Ignore buttons ✓.
+- [x] Clicking the execution link navigates to the position detail page containing that execution. **FIXED** — JS now fetches positions for each unique (account, instrument) pair, builds an execution_id → position detail URL map, and uses direct `/positions/{account}/{instrument}/{entry_execution_id}` links ✓.
+- [x] Resolve button calls `/resolve` → row moves out of open list ✓. UI-verified on 2026-04-14 by overriding `window.prompt` in the page context and clicking Resolve on issue #6: prompt fired with "Resolution note (optional):", row disappeared (16→15 rows) ✓.
+- [x] Ignore button calls `/ignore` with mandatory note → row moves out of open list ✓. UI-verified on 2026-04-14 via `window.prompt` override on issue #25: prompt fired with "Why are you ignoring this issue? (required):", row disappeared (15→14 rows) ✓.
+- [x] Switching to Resolved filter: issue shows with "test resolution note" inline (italic, grey) in Action column — no modal ✓.
+- [x] No "Run validation now" button ✓.
 
 ### Data health (`/data-health`)
 
-- [ ] Sources band at top shows one row per configured source (yfinance, stooq) with name, state (closed/open/half_open), last success, last failure, last error, next retry
-- [ ] State cell is color-coded: green closed, red open, amber half-open
-- [ ] When at least one source is `open`, the banner above reads "OHLC source {name} is currently unavailable… Falling back to next available source. The rest of the app continues to work normally."
-- [ ] **No "Yahoo calls used today" widget exists** (per spec fragmentation hazard 6)
-- [ ] Completeness matrix: rows = instruments traded in the last 90 days, columns = 1m/5m/15m/1h/4h/1d
-- [ ] Cell colors: green complete, amber partial, red missing, gray session-closed
-- [ ] Lookback-days input + Reload button work (default 7)
-- [ ] Click any cell → detail panel opens below showing gaps: start/end timestamps and a "Fetch Missing" button per gap
-- [ ] Clicking "Fetch Missing" posts to `/api/chart/{instrument}/fetch` with the gap range, polls `/api/ohlc/jobs/{id}`, and shows "Done — reload to see changes"
-- [ ] Close button hides the detail panel
+- [x] Sources band: yfinance (state=open/red, last failure + last error + next retry) and stooq (state=closed/green) ✓.
+- [x] State cell color-coded: green=closed, red=open ✓.
+- [x] Banner when yfinance open: "OHLC source **yfinance** is currently unavailable… Falling back to next available source. The rest of the app continues to work normally." ✓
+- [x] No "Yahoo calls used today" widget ✓.
+- [x] Completeness matrix: MNQ JUN26 row, 1m/5m/15m/1h/4h/1d columns ✓.
+- [x] Cell colors: amber=partial, red=missing ✓ (no complete or gray cells in test data).
+- [x] **FIXED** — Lookback days input + Reload: `renderMatrix()` was fetching without `?days=` param. Fixed to read `days-input` value before clearing DOM. Reload with days=3 now sends `?days=3` and re-renders with `3` in input ✓.
+- [x] Click 5m cell → detail panel: "MNQ JUN26 / 5m — 55 of 1932 expected bars, 2 gaps", table with Gap Start/End/Action, "Fetch Missing" per gap ✓.
+- [ ] Clicking "Fetch Missing" posts to `/api/chart/{instrument}/fetch`, polls `/api/ohlc/jobs/{id}`, shows "Done — reload to see changes". **BLOCKED**: both sources in circuit-break during test; fetch would fail immediately.
+- [x] Close button hides detail panel ✓.
 
 ### System health (`/system/health`)
 
-- [ ] "Run Healthz Check" button runs `/healthz` and shows ✓ Healthy (green) or ✗ Unhealthy (red with failing component names)
-- [ ] APScheduler jobs table lists every job: `heartbeat`, `import_safety_sweep`, `archive_completed_sessions`, `ohlc_refresh_recent`, `ohlc_refresh_week`
-- [ ] Each row: job_id, trigger, last run, status, next run, avg duration, Run Now button
-- [ ] Click "Run Now" on `heartbeat` → job runs, the `last_run_at` updates after a short delay
-- [ ] Thread pool section: max_workers, spawned_threads, pending_queue
-- [ ] Watchdog section: Alive/Dead with color, watched path
-- [ ] Uptime section: process started timestamp, elapsed uptime (e.g. `2h 15m 30s`), Python version
-- [ ] Auto-refresh toggle — check the box, the page polls `/api/system/health` every 10 seconds (verify in Network tab)
-- [ ] **No Redis row, no Celery row, no worker count row** (per spec — none of those exist)
+- [x] "Run Healthz Check" → "✓ Healthy" in green ✓.
+- [x] APScheduler jobs: heartbeat, import_safety_sweep, ohlc_refresh_recent, archive_completed_sessions, ohlc_refresh_week — all 5 ✓.
+- [x] Each row: job_id, trigger, last run (local time), status (green "success"), next run, avg duration, Run Now button ✓.
+- [x] "Run Now" on heartbeat → last_run_at updated 3:18:05 → 3:19:05 PM after ~3s delay ✓.
+- [x] Thread pool: max_workers=4, spawned_threads=0, pending_queue=0 ✓.
+- [x] Watchdog: Status=Alive (green), watching=data/inbox ✓.
+- [x] Uptime: process started (local time), uptime=2m 9s, Python version ✓.
+- [x] Auto-refresh toggle → 2 `/api/system/health` calls in 10 seconds ✓.
+- [x] No Redis row, no Celery row, no worker count row ✓.
 
 ---
 
