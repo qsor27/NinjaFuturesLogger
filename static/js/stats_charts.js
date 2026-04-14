@@ -35,44 +35,94 @@ export function mountLineChart(container, points, opts = {}) {
   return chart;
 }
 
+// Hand-rolled CSS bar chart. Lightweight Charts' time-axis can't render
+// category labels (day/week/month/hour/histogram-bucket), so we don't use it.
+// See docs/superpowers/plans/2026-04-13-15-statistics.md — bug 2 fix.
 export function mountHistogramChart(container, buckets, opts = {}) {
   container.innerHTML = "";
   if (!buckets.length) {
     container.innerHTML = '<div class="empty-state">No data for this filter</div>';
     return null;
   }
+
+  const values = buckets.map((b) => (b.total_pnl !== undefined ? b.total_pnl : b.count));
+  const hasNegative = values.some((v) => v < 0);
+  const maxAbs = Math.max(1e-9, ...values.map(Math.abs));
+
   const wrap = document.createElement("div");
-  wrap.className = "chart-container";
+  wrap.className = "bar-chart" + (hasNegative ? " has-negative" : "");
   container.appendChild(wrap);
-  const chart = window.LightweightCharts.createChart(wrap, {
-    ...CHART_DEFAULTS,
-    width: wrap.clientWidth,
-    height: wrap.clientHeight,
-    timeScale: {
-      ...CHART_DEFAULTS.timeScale,
-      timeVisible: opts.kind === "hour" ? false : true,
-    },
+
+  buckets.forEach((b, i) => {
+    const value = values[i];
+    const col = document.createElement("div");
+    col.className = "bar-col";
+
+    const label = _formatBucketLabel(b, opts.kind, i);
+    const valueStr = _formatBucketValue(value, opts.kind);
+
+    if (value === 0 && (b.position_count === 0 || b.count === 0)) {
+      col.classList.add("bar-empty");
+    } else {
+      const fill = document.createElement("div");
+      const heightPct = hasNegative
+        ? (Math.abs(value) / maxAbs) * 50
+        : (Math.abs(value) / maxAbs) * 100;
+      fill.className = "bar-fill " + (value >= 0 ? "bar-pos" : "bar-neg");
+      fill.style.height = `${heightPct}%`;
+      col.appendChild(fill);
+    }
+
+    const labelEl = document.createElement("div");
+    labelEl.className = "bar-label";
+    labelEl.textContent = label;
+    col.appendChild(labelEl);
+
+    col.title = `${label}: ${valueStr}`;
+    wrap.appendChild(col);
   });
-  const series = chart.addHistogramSeries({});
-  // Convert each bucket into a Lightweight Charts time/value pair.
-  // For day/week/month buckets, key is a date-ish string -> map to a synthetic
-  // sequential int (Lightweight Charts accepts integer time values).
-  // For hour buckets, key is 0..23.
-  // For distribution buckets, key is the bucket index.
-  const data = buckets.map((b, i) => {
-    const value = b.total_pnl !== undefined ? b.total_pnl : b.count;
-    return {
-      time: i,
-      value: value,
-      color: value >= 0 ? "#10b981" : "#f43f5e",
-    };
-  });
-  series.setData(data);
-  chart.timeScale().fitContent();
-  new ResizeObserver(() => {
-    chart.applyOptions({ width: wrap.clientWidth, height: wrap.clientHeight });
-  }).observe(wrap);
-  return chart;
+
+  return null;
+}
+
+function _formatBucketLabel(b, kind, index) {
+  if (kind === "day") {
+    // "2026-04-13" -> "04-13"
+    return b.bucket.slice(5);
+  }
+  if (kind === "week") {
+    // "2026-W16" -> "W16"
+    const dash = b.bucket.indexOf("-");
+    return dash >= 0 ? b.bucket.slice(dash + 1) : b.bucket;
+  }
+  if (kind === "month") {
+    // "2026-04" -> "2026-04"
+    return b.bucket;
+  }
+  if (kind === "hour") {
+    const h = b.hour !== undefined ? b.hour : index;
+    return `${String(h).padStart(2, "0")}:00`;
+  }
+  if (kind === "distribution") {
+    return `${_formatMoneyCompact(b.bucket_min)}..${_formatMoneyCompact(b.bucket_max)}`;
+  }
+  return String(index);
+}
+
+function _formatBucketValue(value, kind) {
+  if (kind === "distribution" || kind === "hour") {
+    // These bars represent counts when viewed as a histogram; but hour also
+    // carries total_pnl. Show whichever is non-zero meaningfully.
+    return `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  }
+  return _formatPnl(value);
+}
+
+function _formatMoneyCompact(v) {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}k`;
+  return `${sign}$${abs.toFixed(0)}`;
 }
 
 // ---- Calendar heatmap (hand-rolled, no chart library) -------------------

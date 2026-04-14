@@ -244,3 +244,61 @@ body:has(.reports-page) {
 }
 #stats-equity .chart-container { height: 220px; }
 #reports-equity .chart-container { height: 320px; }
+
+/* Hand-rolled histogram bar chart (plan 15 bug 2 fix) */
+.bar-chart {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  height: 220px;
+  padding: 8px 8px 44px 8px;
+  position: relative;
+}
+.bar-chart::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: calc(100% - 44px);
+  height: 1px;
+  background: var(--border-card);
+}
+.bar-chart.has-negative::before {
+  top: calc(50% - 18px);
+}
+.bar-col {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  cursor: default;
+}
+.bar-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 1px;
+  border-radius: 2px 2px 0 0;
+  transition: opacity 0.1s ease;
+}
+.bar-fill.bar-pos { background: var(--pos); }
+.bar-fill.bar-neg { background: var(--neg); border-radius: 0 0 2px 2px; }
+.bar-chart:not(.has-negative) .bar-fill.bar-pos { bottom: 0; }
+.bar-chart.has-negative .bar-fill.bar-pos { bottom: 50%; }
+.bar-chart.has-negative .bar-fill.bar-neg { top: 50%; }
+.bar-col:hover .bar-fill { opacity: 0.75; }
+.bar-col.bar-empty {
+  border: 1px dashed var(--border-card);
+  border-radius: 3px;
+  opacity: 0.35;
+  align-self: stretch;
+}
+.bar-label {
+  position: absolute;
+  bottom: -34px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-45deg);
+  transform-origin: center top;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
