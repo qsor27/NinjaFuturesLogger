@@ -85,6 +85,7 @@ def build_ohlc_blueprint() -> Blueprint:
                 "instrument": instrument,
                 "timeframes": timeframes,
                 "default_timeframe": defaults["default_timeframe"],
+                "volume_visible_default": defaults["volume_visible_default"],
             }
         )
 

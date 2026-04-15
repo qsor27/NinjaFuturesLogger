@@ -223,10 +223,18 @@ export class PriceChart {
         tfs.timeframes.filter((t) => t.available).map((t) => t.timeframe),
       );
       this.defaultTimeframe = tfs.default_timeframe;
+      this.volumeVisible = tfs.volume_visible_default ?? true;
 
       this.timeframe = pickInitialTimeframe(this.availableTimeframes, this.defaultTimeframe);
       this._renderControls();
       if (this.timeframe === null) {
+        const tf = this.defaultTimeframe;
+        const { start, end } = computeFetchRange(this.position.entry_time, tf);
+        this._renderPlaceholder({
+          message: `No chart data available for this position.`,
+          ctaLabel: "Fetch data now",
+          onCta: () => this._fetchOnDemand(start, end),
+        });
         this._setState("no-data");
         return;
       }
