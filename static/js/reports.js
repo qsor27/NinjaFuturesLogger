@@ -9,7 +9,11 @@ import {
   mountLineChart,
 } from "./stats_charts.js";
 
-const ENDPOINTS = ["by-day", "equity-curve", "by-week", "by-month", "distribution"];
+const ENDPOINTS = ["by-day", "equity-curve", "by-week", "by-month", "distribution", "by-instrument", "summary"];
+
+const fmtMoney = (v) => { if (v == null) return "—"; const s = v >= 0 ? "+" : "-"; return `${s}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`; };
+const fmtPercent = (v) => v == null ? "—" : `${(v * 100).toFixed(1)}%`;
+const fmtNum = (v, d = 1) => v == null ? "—" : Number(v).toFixed(d);
 
 async function fetchAll(filter) {
   const qs = filterToQueryString(filter);
@@ -51,6 +55,35 @@ async function refresh(filter) {
   const distHost = document.createElement("div");
   distCard.appendChild(distHost);
   mountHistogramChart(distHost, _tradeCountBuckets(data["by-day"].buckets), { kind: "day-count" });
+
+  const instrCard = document.getElementById("reports-by-instrument");
+  const instrRows = (data["by-instrument"].rows || []).map((r) => `
+    <tr>
+      <td>${r.instrument}</td>
+      <td>${r.position_count}</td>
+      <td class="${r.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(r.total_pnl)}</td>
+      <td>${fmtPercent(r.win_rate)}</td>
+      <td class="${r.avg_pnl_per_position >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(r.avg_pnl_per_position)}</td>
+    </tr>`).join("");
+  instrCard.innerHTML = `<p class="section-label">By Instrument</p>
+    <table class="instrument-table">
+      <thead><tr><th>Instr</th><th>Trades</th><th>P&amp;L</th><th>Win %</th><th>Avg P&amp;L</th></tr></thead>
+      <tbody>${instrRows}</tbody>
+    </table>`;
+
+  const s = data["summary"];
+  const summCard = document.getElementById("reports-summary");
+  summCard.innerHTML = `<p class="section-label">Performance Summary</p>
+    <div class="summary-grid">
+      <div><div class="stat-label">Trades</div><div class="stat-value">${s.total_positions}</div></div>
+      <div><div class="stat-label">Win Rate</div><div class="stat-value">${fmtPercent(s.win_rate)}</div></div>
+      <div><div class="stat-label">Profit Factor</div><div class="stat-value">${fmtNum(s.profit_factor, 2)}</div></div>
+      <div><div class="stat-label">Total P&amp;L</div><div class="stat-value ${s.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(s.total_pnl)}</div></div>
+      <div><div class="stat-label">Avg Win</div><div class="stat-value pnl-pos">${fmtMoney(s.avg_win)}</div></div>
+      <div><div class="stat-label">Avg Loss</div><div class="stat-value pnl-neg">${fmtMoney(s.avg_loss)}</div></div>
+      <div><div class="stat-label">Largest Win</div><div class="stat-value pnl-pos">${fmtMoney(s.largest_win)}</div></div>
+      <div><div class="stat-label">Largest Loss</div><div class="stat-value pnl-neg">${fmtMoney(s.largest_loss)}</div></div>
+    </div>`;
 }
 
 // Group by-day data by trades-per-day count. Each bucket gets the sum P&L

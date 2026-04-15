@@ -15,6 +15,7 @@ const ENDPOINTS = [
   "by-instrument",
   "by-day",
   "by-hour",
+  "distribution",
 ];
 
 async function fetchAll(filter) {
@@ -61,10 +62,14 @@ function renderSummary(container, summary, dayBuckets) {
       <div><div class="stat-label">Win Rate</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Profit Factor</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Avg Hold (min)</div><div class="stat-value"></div></div>
+      <div><div class="stat-label">Median Hold (min)</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Avg Win</div><div class="stat-value pnl-pos"></div></div>
       <div><div class="stat-label">Avg Loss</div><div class="stat-value pnl-neg"></div></div>
       <div><div class="stat-label">Largest Win</div><div class="stat-value pnl-pos"></div></div>
       <div><div class="stat-label">Largest Loss</div><div class="stat-value pnl-neg"></div></div>
+      <div><div class="stat-label">Wins</div><div class="stat-value pnl-pos"></div></div>
+      <div><div class="stat-label">Losses</div><div class="stat-value pnl-neg"></div></div>
+      <div><div class="stat-label">Scratch</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Win Streak</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Loss Streak</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Avg Size</div><div class="stat-value"></div></div>
@@ -78,16 +83,20 @@ function renderSummary(container, summary, dayBuckets) {
   values[1].textContent = fmtPercent(summary.win_rate);
   values[2].textContent = fmtNum(summary.profit_factor, 2);
   values[3].textContent = fmtNum(summary.avg_hold_minutes, 1);
-  values[4].textContent = fmtMoney(summary.avg_win);
-  values[5].textContent = fmtMoney(summary.avg_loss);
-  values[6].textContent = fmtMoney(summary.largest_win);
-  values[7].textContent = fmtMoney(summary.largest_loss);
-  values[8].textContent = String(summary.longest_win_streak);
-  values[9].textContent = String(summary.longest_loss_streak);
-  values[10].textContent = fmtNum(summary.avg_position_size, 1);
-  values[11].textContent = String(summary.open_positions);
-  values[12].textContent = fmtMoney(avgWinDay);
-  values[13].textContent = fmtMoney(avgLossDay);
+  values[4].textContent = fmtNum(summary.median_hold_minutes, 1);
+  values[5].textContent = fmtMoney(summary.avg_win);
+  values[6].textContent = fmtMoney(summary.avg_loss);
+  values[7].textContent = fmtMoney(summary.largest_win);
+  values[8].textContent = fmtMoney(summary.largest_loss);
+  values[9].textContent = String(summary.wins ?? 0);
+  values[10].textContent = String(summary.losses ?? 0);
+  values[11].textContent = String(summary.scratch_count ?? summary.scratches ?? 0);
+  values[12].textContent = String(summary.longest_win_streak);
+  values[13].textContent = String(summary.longest_loss_streak);
+  values[14].textContent = fmtNum(summary.avg_position_size, 1);
+  values[15].textContent = String(summary.open_positions);
+  values[16].textContent = fmtMoney(avgWinDay);
+  values[17].textContent = fmtMoney(avgLossDay);
 
   if (summary.skipped_no_multiplier > 0) {
     const warn = document.createElement("div");
@@ -124,12 +133,13 @@ function renderInstrumentTable(container, breakdown) {
       <td>${r.position_count}</td>
       <td class="${r.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(r.total_pnl)}</td>
       <td>${fmtPercent(r.win_rate)}</td>
+      <td class="${r.avg_pnl_per_position >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(r.avg_pnl_per_position)}</td>
     </tr>
   `).join("");
   container.innerHTML = `
     <p class="section-label">By Instrument</p>
     <table class="instrument-table">
-      <thead><tr><th>Instr</th><th>Trades</th><th>P&amp;L</th><th>Win %</th></tr></thead>
+      <thead><tr><th>Instr</th><th>Trades</th><th>P&amp;L</th><th>Win %</th><th>Avg P&amp;L</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
@@ -159,6 +169,12 @@ async function refresh(filter) {
   const hourHost = document.createElement("div");
   hourCard.appendChild(hourHost);
   mountHistogramChart(hourHost, data["by-hour"].buckets, { kind: "hour" });
+
+  const distCard = document.getElementById("stats-distribution");
+  distCard.innerHTML = '<p class="section-label">P&amp;L Distribution</p>';
+  const distHost = document.createElement("div");
+  distCard.appendChild(distHost);
+  mountHistogramChart(distHost, data["distribution"].buckets, { kind: "distribution" });
 
   document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "1"));
 }
