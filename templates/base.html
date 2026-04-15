@@ -5,35 +5,46 @@
     <meta name="viewport" content="width=1280">
     <title>{% block title %}FuturesTradingLog{% endblock %}</title>
     <style>
-      body { font-family: system-ui, sans-serif; margin: 0; color: #222; }
-      header { background: #1a1a1a; color: #f0f0f0; padding: 12px 24px; display: flex; gap: 24px; align-items: center; }
+      body { font-family: system-ui, sans-serif; margin: 0; background: var(--bg-page); color: var(--text-primary); }
+      header { background: #1a1a1a; color: #f0f0f0; padding: 12px 24px; display: flex; gap: 24px; align-items: center; border-bottom: 1px solid #2a2a2a; }
       header a { color: #f0f0f0; text-decoration: none; font-weight: 600; }
       header a:hover { text-decoration: underline; }
       main { padding: 24px; }
+      a { color: var(--accent); }
+      h1, h2, h3 { color: var(--text-primary); }
+      p { color: var(--text-secondary); }
+      code { background: rgba(51,65,85,0.5); padding: 1px 5px; border-radius: 3px; font-size: 0.9em; color: var(--text-secondary); }
+      button { padding: 6px 12px; font-size: 13px; background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-card); border-radius: 6px; cursor: pointer; font-family: inherit; }
+      button:hover { color: var(--text-primary); }
+      button:disabled { opacity: 0.4; cursor: default; }
+      input[type=checkbox] { accent-color: var(--accent); }
       table { border-collapse: collapse; width: 100%; }
-      th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #ddd; }
-      th { background: #f5f5f5; }
-      tbody tr:hover { background: #fafafa; cursor: pointer; }
-      .pnl-pos { color: #0a7f0a; }
-      .pnl-neg { color: #b00020; }
-      .filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: end; }
-      .filters label { display: flex; flex-direction: column; font-size: 12px; }
-      .filters input, .filters select { padding: 4px 8px; font-size: 14px; }
-      .pagination { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
-      .pagination button { padding: 4px 12px; }
-      .detail-header { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: #f9f9f9; padding: 16px; border-radius: 4px; }
-      .detail-header dt { font-size: 11px; text-transform: uppercase; color: #666; }
-      .detail-header dd { margin: 0; font-size: 16px; font-weight: 600; }
+      th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border-card); }
+      th { background: rgba(51,65,85,0.4); color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+      tbody tr:hover { background: var(--bg-card-hover); cursor: pointer; }
+      .pnl-pos { color: #6ee7b7; }
+      .pnl-neg { color: #fda4af; }
+      .filters { display: flex; gap: 12px; margin-bottom: 16px; align-items: end; flex-wrap: wrap; }
+      .filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--text-secondary); gap: 3px; }
+      .filters input, .filters select { padding: 6px 8px; font-size: 13px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-card); border-radius: 6px; font-family: inherit; }
+      .filters button { background: var(--accent); color: #fff; border-color: var(--accent); }
+      .pagination { margin-top: 16px; display: flex; gap: 12px; align-items: center; font-size: 13px; color: var(--text-secondary); }
+      .detail-header { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; background: var(--bg-card); border: 1px solid var(--border-card); padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+      .detail-header dt { font-size: 11px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; }
+      .detail-header dd { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
       .chart-slot { margin: 16px -24px; }
       .notes-panel { margin: 16px 0; }
-      .notes-panel textarea { width: 100%; min-height: 80px; font-family: inherit; font-size: 14px; }
+      .notes-panel textarea { width: 100%; min-height: 80px; font-family: inherit; font-size: 14px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-card); border-radius: 6px; padding: 8px; box-sizing: border-box; }
+      .notes-panel textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
       .reviewed-toggle { display: inline-flex; align-items: center; gap: 8px; }
-      .danger { background: #b00020; color: white; border: none; padding: 6px 16px; cursor: pointer; }
+      .danger { background: rgba(244,63,94,0.15); color: #fda4af; border: 1px solid rgba(244,63,94,0.4); padding: 6px 16px; cursor: pointer; border-radius: 6px; font-family: inherit; font-size: 13px; }
+      .info-banner { padding: 10px 14px; background: rgba(139,92,246,0.1); border-left: 4px solid var(--accent); border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 13px; color: var(--text-secondary); }
+      .notice { padding: 10px 14px; background: rgba(14,165,233,0.1); border-left: 4px solid #0ea5e9; border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 13px; color: var(--text-secondary); }
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
     {% block extra_styles %}{% endblock %}
   </head>
-  <body>
+  <body data-display-tz="{{ display_tz }}">
     <header>
       <a href="/positions">Positions</a>
       <a href="/statistics">Statistics</a>

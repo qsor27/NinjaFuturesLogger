@@ -79,16 +79,16 @@ function renderIssues(issues, status, posUrlMap = {}) {
       ? `<a href="${posUrl || `/positions?q=${encodeURIComponent(i.execution_id)}`}">${escHtml(i.execution_id)}</a>`
       : "—";
     const noteCell = i.resolution_note
-      ? `<span style="color:#666;font-style:italic">${escHtml(i.resolution_note)}</span>`
+      ? `<span style="color:#94a3b8;font-style:italic">${escHtml(i.resolution_note)}</span>`
       : i.ignore_note
-      ? `<span style="color:#666;font-style:italic">${escHtml(i.ignore_note)}</span>`
+      ? `<span style="color:#94a3b8;font-style:italic">${escHtml(i.ignore_note)}</span>`
       : "";
     const actionCell = i.resolved_at || i.ignored
       ? noteCell
       : `<button class="resolve-btn" data-id="${i.issue_id}">Resolve</button>
          <button class="ignore-btn" data-id="${i.issue_id}">Ignore</button>`;
 
-    const sevColor = i.severity === "high" ? "#b00020" : i.severity === "medium" ? "#c07000" : "#555";
+    const sevColor = i.severity === "high" ? "#f43f5e" : i.severity === "medium" ? "#f59e0b" : "#94a3b8";
     return `<tr>
       <td style="color:${sevColor};font-weight:600">${escHtml(i.severity)}</td>
       <td>${escHtml(i.type)}</td>

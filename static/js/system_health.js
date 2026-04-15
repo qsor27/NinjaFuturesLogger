@@ -20,7 +20,7 @@ async function renderHealthz() {
     const resp = await fetch("/healthz");
     const body = await resp.json();
     const ok = resp.status === 200;
-    result.style.color = ok ? "#0a7f0a" : "#b00020";
+    result.style.color = ok ? "#10b981" : "#f43f5e";
     result.textContent = ok
       ? "✓ Healthy"
       : `✗ Unhealthy: ${Object.entries(body).filter(([, v]) => !v).map(([k]) => k).join(", ")}`;
@@ -45,7 +45,7 @@ function renderJobs(jobs) {
   const rows = jobs.map((j) => {
     const next = j.next_run_time ? new Date(j.next_run_time * 1000).toLocaleString() : "—";
     const last = j.last_run_at ? new Date(j.last_run_at * 1000).toLocaleString() : "—";
-    const statusColor = j.last_run_status === "error" ? "#b00020" : j.last_run_status === "success" ? "#0a7f0a" : "#888";
+    const statusColor = j.last_run_status === "error" ? "#f43f5e" : j.last_run_status === "success" ? "#10b981" : "#94a3b8";
     const avgMs = j.avg_duration_ms != null ? `${j.avg_duration_ms} ms` : "—";
     return `<tr>
       <td>${escHtml(j.job_id)}</td>
@@ -98,7 +98,7 @@ function renderPool(pool) {
 function renderWatchdog(watchdog) {
   const el = document.getElementById("watchdog-section");
   if (!el) return;
-  const aliveColor = watchdog.alive ? "#0a7f0a" : "#b00020";
+  const aliveColor = watchdog.alive ? "#10b981" : "#f43f5e";
   el.innerHTML = `
     <dl class="detail-header">
       <dt>Status</dt><dd style="color:${aliveColor}">${watchdog.alive ? "Alive" : "Dead"}</dd>

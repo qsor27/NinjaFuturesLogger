@@ -23,7 +23,7 @@ async function renderCursorsBand() {
   const resp = await fetch("/api/imports/cursors");
   const { cursors } = await resp.json();
   if (!cursors.length) {
-    band.innerHTML = "<p style='color:#888'>No active inbox files.</p>";
+    band.innerHTML = "<p style='color:#94a3b8'>No active inbox files.</p>";
     return;
   }
   const rows = cursors.map((c) => {
@@ -114,7 +114,7 @@ function renderRunsTable(runs, total) {
     </tr>`;
   });
   container.innerHTML = `
-    <p style="color:#666">${total} total</p>
+    <p style="color:#94a3b8">${total} total</p>
     <table>
       <thead>
         <tr>
