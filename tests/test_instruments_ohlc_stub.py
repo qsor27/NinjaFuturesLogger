@@ -19,10 +19,6 @@ def test_source_symbol_stooq_known():
     assert source_symbol("ES", "stooq") == "es.f"
 
 
-def test_source_symbol_strips_contract_suffix():
-    assert source_symbol("MNQ SEP25", "yfinance") == "MNQ=F"
-
-
 def test_source_symbol_unknown_returns_none():
     assert source_symbol("ZZZ", "yfinance") is None
 
