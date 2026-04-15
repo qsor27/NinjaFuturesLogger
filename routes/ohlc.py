@@ -3,6 +3,7 @@ from flask import Blueprint, current_app, jsonify, request
 from db import connect
 from logging_config import get_logger
 from services.chart_defaults import get_defaults
+from services.ohlc.aggregate import derive_4h
 from services.ohlc.gap_detection import timeframe_seconds
 from services.ohlc.store import read_range
 
@@ -40,13 +41,23 @@ def build_ohlc_blueprint() -> Blueprint:
 
         conn = connect(_db_path())
         try:
-            bars = read_range(
-                conn,
-                instrument=instrument,
-                timeframe=timeframe,
-                start=start,
-                end=end,
-            )
+            if timeframe == "4h":
+                bars_1h = read_range(
+                    conn,
+                    instrument=instrument,
+                    timeframe="1h",
+                    start=start,
+                    end=end,
+                )
+                bars = derive_4h(bars_1h)
+            else:
+                bars = read_range(
+                    conn,
+                    instrument=instrument,
+                    timeframe=timeframe,
+                    start=start,
+                    end=end,
+                )
         finally:
             conn.close()
         return jsonify(
@@ -104,6 +115,10 @@ def build_ohlc_blueprint() -> Blueprint:
             timeframe_seconds(timeframe)
         except ValueError:
             return jsonify({"error": f"unknown timeframe: {timeframe}"}), 400
+        if timeframe == "4h":
+            return jsonify(
+                {"error": "4h candles are derived from 1h bars and cannot be fetched directly"}
+            ), 400
 
         # Deferred import: routes/ohlc.py must not import the fetcher at
         # module load time, because Rule 1 says "no route synchronously

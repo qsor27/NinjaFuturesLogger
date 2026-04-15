@@ -115,3 +115,63 @@ def test_other_instruments_do_not_leak(tmp_config):
         assert all(tf["count"] == 0 for tf in body["timeframes"])
     finally:
         pool.shutdown(wait=True)
+
+
+def test_chart_timeframe_4h_derives_from_1h(tmp_config):
+    app, pool = _make_app(tmp_config)
+    try:
+        base = 1776290400  # 2026-04-14T22:00Z == 17:00 CT, 4h-aligned
+        conn = connect(tmp_config.db_path)
+        try:
+            insert_many(
+                conn,
+                [
+                    Bar(
+                        instrument="MNQ JUN26",
+                        timeframe="1h",
+                        time=base + h * 3600,
+                        open=100 + h,
+                        high=110 + h,
+                        low=90 + h,
+                        close=105 + h,
+                        volume=1000,
+                        source="yfinance",
+                    )
+                    for h in range(4)
+                ],
+            )
+        finally:
+            conn.close()
+
+        resp = app.test_client().get(
+            f"/api/chart/MNQ JUN26?timeframe=4h&start={base}&end={base + 4 * 3600 + 1}"
+        )
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert len(body["bars"]) == 1
+        bar = body["bars"][0]
+        assert bar["time"] == base
+        assert bar["timeframe"] == "4h"
+        assert bar["source"] == "derived-1h"
+        assert bar["open"] == 100
+        assert bar["high"] == 113
+        assert bar["low"] == 90
+        assert bar["close"] == 108
+        assert bar["volume"] == 4000
+    finally:
+        pool.shutdown(wait=True)
+
+
+def test_chart_fetch_endpoint_rejects_4h(tmp_config):
+    app, pool = _make_app(tmp_config)
+    try:
+        resp = app.test_client().post(
+            "/api/chart/MNQ JUN26/fetch",
+            json={"timeframe": "4h", "start": 0, "end": 3600},
+        )
+        assert resp.status_code == 400
+        body = resp.get_json()
+        err = body.get("error", "").lower()
+        assert "4h" in err or "derived" in err
+    finally:
+        pool.shutdown(wait=True)
