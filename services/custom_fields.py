@@ -230,8 +230,7 @@ class CustomFieldsService:
                 for v in validated:
                     if v.value in existing:
                         conn.execute(
-                            "UPDATE custom_field_options SET display_order = ? "
-                            "WHERE option_id = ?",
+                            "UPDATE custom_field_options SET display_order = ? WHERE option_id = ?",
                             (v.display_order, existing[v.value].option_id),
                         )
                     else:
