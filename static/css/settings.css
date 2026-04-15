@@ -1,15 +1,479 @@
-.settings-page {
-  max-width: 960px;
-  margin: 1.5rem auto;
-  padding: 0 1rem;
+/* Settings pages — dark fintech theme, mirrors stats.css variables */
+
+/* Re-declare the same tokens so settings.css is self-contained.
+   stats.css also declares these; last-load wins but values are identical. */
+:root {
+  --bg-page:    #0f1419;
+  --bg-card:    #1e293b;
+  --bg-card-hover: #243044;
+  --border-card: #334155;
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #64748b;
+  --accent:      #8b5cf6;
+  --accent-soft: rgba(139, 92, 246, 0.15);
+  --accent-border: rgba(139, 92, 246, 0.4);
+  --pos: #10b981;
+  --neg: #f43f5e;
 }
-.settings-page h1 { margin-bottom: 0.75rem; }
-.settings-index { list-style: none; padding: 0; }
-.settings-index li { padding: 0.5rem 0; border-bottom: 1px solid #2a2a32; }
-.instruments-table { width: 100%; border-collapse: collapse; }
-.instruments-table th, .instruments-table td { padding: 0.4rem 0.6rem; text-align: left; border-bottom: 1px solid #2a2a32; }
-.instruments-toolbar { margin-bottom: 0.75rem; }
-.field-row { padding: 0.5rem 0; border-bottom: 1px solid #2a2a32; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.options-editor { width: 100%; margin-top: 0.5rem; }
-.options-editor textarea { width: 100%; font-family: inherit; }
-.muted { color: #8a8a92; }
+
+/* ── Page background ── */
+body:has(.settings-shell) {
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Shell / page layout ── */
+.settings-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+.settings-page-header {
+  margin-bottom: 20px;
+}
+.settings-page-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+.settings-page-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ── Sub-navigation tabs ── */
+.settings-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border-card);
+  margin-bottom: 24px;
+}
+.settings-tab {
+  display: inline-block;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 18px;
+  margin-bottom: -1px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.settings-tab:hover { color: var(--text-primary); }
+.settings-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Cards ── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-card);
+}
+.card-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.card-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-card);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.1s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-card);
+}
+.btn-ghost:hover { color: var(--text-primary); border-color: var(--text-muted); }
+.btn-danger {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+.btn-danger:hover { background: rgba(244, 63, 94, 0.20); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ── Dark table ── */
+.dark-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dark-table th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-card);
+  background: transparent;
+}
+.dark-table td {
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.dark-table tbody tr:last-child td { border-bottom: none; }
+.dark-table tbody tr:hover { background: var(--bg-card-hover); }
+.dark-table td.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dark-table td.muted { color: var(--text-muted); font-size: 12px; }
+
+.row-actions { display: flex; gap: 6px; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+.badge-green {
+  background: rgba(16, 185, 129, 0.12);
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.badge-gray {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--text-muted);
+  border-color: rgba(100, 116, 139, 0.25);
+}
+
+/* ── Coverage status dot ── */
+.coverage-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.dot-green { background: var(--pos); }
+.dot-gray  { background: var(--text-muted); }
+
+/* ── Chart-defaults form grid ── */
+.form-grid {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+}
+.form-row { display: contents; }
+.form-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 13px 20px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.form-label small {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-top: 3px;
+}
+.form-control {
+  display: flex;
+  align-items: center;
+  padding: 11px 20px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  gap: 10px;
+}
+.form-row:last-child .form-label,
+.form-row:last-child .form-control { border-bottom: none; }
+
+/* ── Form inputs (scoped to settings-shell to avoid touching global styles) ── */
+.settings-shell input[type=text],
+.settings-shell input[type=number],
+.settings-shell select {
+  background: rgba(15, 20, 25, 0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border-card);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  min-width: 220px;
+}
+.settings-shell input[type=text]:focus,
+.settings-shell input[type=number]:focus,
+.settings-shell select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.settings-shell input[type=checkbox] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ── Status message (chart defaults save feedback) ── */
+.status { font-size: 12px; color: var(--pos); margin: 0; }
+
+/* ── Inline add-field form (custom fields) ── */
+.inline-add-form {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 20px;
+}
+.inline-add-form input,
+.inline-add-form select { min-width: 0; flex: 1; }
+.inline-add-form select { flex: 0 0 140px; }
+
+/* ── Custom field rows ── */
+.field-row {
+  display: flex;
+  align-items: center;
+  padding: 11px 20px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  gap: 12px;
+}
+.field-row:last-child { border-bottom: none; }
+.field-name { font-weight: 500; flex: 1; font-size: 13px; }
+
+/* ── Settings index list ── */
+.settings-index-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.settings-index-list li {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+.settings-index-list li:last-child { border-bottom: none; }
+.settings-index-list a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.settings-index-list a:hover { text-decoration: underline; }
+
+/* ── Instrument dialog ── */
+dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: 12px;
+  color: var(--text-primary);
+  padding: 24px;
+  max-width: 500px;
+  width: 100%;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+dialog h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+dialog input {
+  background: rgba(15, 20, 25, 0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border-card);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+}
+dialog input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+dialog fieldset {
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+dialog legend {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0 6px;
+}
+.dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-card);
+}
+
+/* ── Coverage table — generated entirely by JS without CSS classes ── */
+#coverage-rows table {
+  width: 100%;
+  border-collapse: collapse;
+}
+#coverage-rows th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-card);
+}
+#coverage-rows td {
+  padding: 11px 16px;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+#coverage-rows tbody tr:last-child td { border-bottom: none; }
+#coverage-rows tbody tr:hover { background: var(--bg-card-hover); }
+#coverage-rows button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-card);
+  margin-right: 4px;
+  transition: opacity 0.1s;
+}
+#coverage-rows button:hover { color: var(--text-primary); }
+
+/* ── Instruments table — Edit/Delete buttons generated by JS with data-act attrs ── */
+#instruments-tbody button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-right: 4px;
+  transition: opacity 0.1s;
+}
+#instruments-tbody button:hover { opacity: 0.85; }
+#instruments-tbody button[data-act="edit"] {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-card);
+}
+#instruments-tbody button[data-act="edit"]:hover { color: var(--text-primary); }
+#instruments-tbody button[data-act="del"] {
+  background: rgba(244, 63, 94, 0.12);
+  color: #fda4af;
+  border: 1px solid rgba(244, 63, 94, 0.35);
+}
+
+/* ── Custom fields JS-rendered rows — buttons/inputs without classes ── */
+.field-row button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-card);
+  margin-right: 4px;
+  transition: opacity 0.1s;
+}
+.field-row button:hover { color: var(--text-primary); }
+.field-row input[type=text],
+.field-row textarea {
+  background: rgba(15, 20, 25, 0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border-card);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+}
+.field-row input[type=text]:focus,
+.field-row textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.options-editor textarea {
+  background: rgba(15, 20, 25, 0.6);
+  color: var(--text-primary);
+  border: 1px solid var(--border-card);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* ── Backward-compat shim — some elements may still use .muted ── */
+.muted { color: var(--text-muted); }
