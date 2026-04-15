@@ -72,14 +72,52 @@ def get_multiplier(instrument: str) -> float:
     return cfg.multiplier
 
 
+_MONTH_CODES: dict[str, str] = {
+    "JAN": "F",
+    "FEB": "G",
+    "MAR": "H",
+    "APR": "J",
+    "MAY": "K",
+    "JUN": "M",
+    "JUL": "N",
+    "AUG": "Q",
+    "SEP": "U",
+    "OCT": "V",
+    "NOV": "X",
+    "DEC": "Z",
+}
+
+
+def _render_contract_template(template: str, *, root: str, contract: str) -> str | None:
+    """Render a contract_template like '{ROOT}{M}{YY}.CME' given a 5-char
+    contract suffix like 'JUN26'. Returns None if the suffix is malformed.
+    """
+    if len(contract) != 5:
+        return None
+    month_word = contract[:3].upper()
+    year = contract[3:]
+    if month_word not in _MONTH_CODES or not year.isdigit():
+        return None
+    return template.format(ROOT=root, M=_MONTH_CODES[month_word], YY=year)
+
+
 def source_symbol(instrument: str, source: str) -> str | None:
-    cfg = _REGISTRY.get(base_symbol(instrument))
+    root, contract = parse_instrument(instrument)
+    cfg = _REGISTRY.get(root)
     if cfg is None:
         return None
     if source == "yfinance":
-        return cfg.sources.yfinance.continuous
-    if source == "stooq":
-        return cfg.sources.stooq.continuous
+        mapping = cfg.sources.yfinance
+    elif source == "stooq":
+        mapping = cfg.sources.stooq
+    else:
+        return None
+    if contract is None:
+        return mapping.continuous
+    if mapping.contract_template:
+        return _render_contract_template(
+            mapping.contract_template, root=root, contract=contract
+        )
     return None
 
 
