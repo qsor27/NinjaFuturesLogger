@@ -260,7 +260,7 @@ body:has(.settings-shell) {
 }
 
 /* ── Status message (chart defaults save feedback) ── */
-.status { font-size: 12px; color: var(--pos); margin: 0; }
+.settings-shell .status { font-size: 12px; color: var(--pos); margin: 0; }
 
 /* ── Inline add-field form (custom fields) ── */
 .inline-add-form {
@@ -305,7 +305,7 @@ body:has(.settings-shell) {
 .settings-index-list a:hover { text-decoration: underline; }
 
 /* ── Instrument dialog ── */
-dialog {
+#instrument-dialog {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: 12px;
@@ -314,14 +314,14 @@ dialog {
   max-width: 500px;
   width: 100%;
 }
-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
-dialog h2 {
+#instrument-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+#instrument-dialog h2 {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 20px;
   color: var(--text-primary);
 }
-dialog label {
+#instrument-dialog label {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -331,7 +331,7 @@ dialog label {
   letter-spacing: 0.05em;
   color: var(--text-secondary);
 }
-dialog input {
+#instrument-dialog input {
   background: rgba(15, 20, 25, 0.6);
   color: var(--text-primary);
   border: 1px solid var(--border-card);
@@ -342,18 +342,18 @@ dialog input {
   text-transform: none;
   letter-spacing: normal;
 }
-dialog input:focus {
+#instrument-dialog input:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
-dialog fieldset {
+#instrument-dialog fieldset {
   border: 1px solid var(--border-card);
   border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 14px;
 }
-dialog legend {
+#instrument-dialog legend {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
