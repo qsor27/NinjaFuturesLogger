@@ -62,9 +62,12 @@ class SourceRegistry:
 def build_default_registry(*, clock: Callable[[], int]) -> SourceRegistry:
     """Default order: yfinance primary, stooq fallback.
 
-    Breaker tuning (plan 18):
-    - yfinance: 3 misc failures trips; base 5m cooldown on server/network;
-      15m on rate-limit; 2× escalation per re-open; 4h cap.
+    Breaker tuning:
+    - yfinance: 3 misc failures trips; base 5m cooldown on server/network.
+      Rate-limit backoff is deliberately conservative (plan 19): 1h on the
+      first 429, escalating 4× per re-open to a 12h ceiling (1h → 4h → 12h).
+      A 429 means Yahoo already flagged us as a bot; probing back in 15m is
+      how you get escalated to a full-day IP ban.
     - stooq:    3 misc failures trips; base 10m cooldown on server/network;
       30m on rate-limit; 2× escalation per re-open; 6h cap.
     """
@@ -73,9 +76,9 @@ def build_default_registry(*, clock: Callable[[], int]) -> SourceRegistry:
         YfinanceSource(),
         failure_threshold=3,
         base_cooldown_seconds=300,
-        base_cooldown_rate_limit_seconds=900,
-        max_cooldown_seconds=14400,
-        backoff_multiplier=2.0,
+        base_cooldown_rate_limit_seconds=3600,
+        max_cooldown_seconds=12 * 3600,
+        backoff_multiplier=4.0,
         jitter_fraction=0.15,
     )
     reg.register(
