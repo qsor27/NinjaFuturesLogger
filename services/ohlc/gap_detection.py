@@ -132,10 +132,20 @@ def classify_window(
     reach_cutoff = now - reach
     reachable = [s for s in slots if s >= reach_cutoff]
     out_of_reach = len(slots) - len(reachable)
-    present = set(
-        list_times(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
+    present_times = list_times(
+        conn, instrument=instrument, timeframe=timeframe, start=start, end=end
     )
-    present_count = sum(1 for s in reachable if s in present)
+    # For daily-and-above, the walker anchors at the session open (e.g. 17:00 CT)
+    # but providers like yfinance stamp daily bars at 00:00 UTC — so exact-time
+    # matching never aligns. Bucket both sides to a UTC calendar day instead;
+    # the only thing that matters at these timeframes is "did we get a bar for
+    # this day?".
+    if timeframe_seconds(timeframe) >= 86400:
+        present_days = {t // 86400 for t in present_times}
+        present_count = sum(1 for s in reachable if (s // 86400) in present_days)
+    else:
+        present = set(present_times)
+        present_count = sum(1 for s in reachable if s in present)
     missing = len(reachable) - present_count
     return {
         "expected": len(slots),

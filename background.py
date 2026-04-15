@@ -196,5 +196,35 @@ class BackgroundServices:
         job = self.scheduler.get_job(job_id)
         if job is None:
             return False
-        self.pool.submit(job.func, *job.args, **job.kwargs)
+        fn = job.func
+        args = job.args
+        kwargs = job.kwargs
+
+        # APScheduler event listeners only fire for scheduler-driven runs, so a
+        # direct pool.submit() would leave _job_history untouched and the data-
+        # health panel's "Last run" field stuck at null. Wrap the call so it
+        # records its own start/end into _job_history under the same key.
+        def wrapped() -> None:
+            started_ms = int(time.time() * 1000)
+            is_error = False
+            exc_repr: str | None = None
+            try:
+                fn(*args, **kwargs)
+            except Exception as e:  # noqa: BLE001 — record anything
+                is_error = True
+                exc_repr = repr(e)
+                raise
+            finally:
+                finished_ms = int(time.time() * 1000)
+                record = {
+                    "started_at": started_ms // 1000,
+                    "duration_ms": finished_ms - started_ms,
+                    "status": "error" if is_error else "success",
+                    "error": exc_repr,
+                }
+                if job_id not in self._job_history:
+                    self._job_history[job_id] = deque(maxlen=20)
+                self._job_history[job_id].appendleft(record)
+
+        self.pool.submit(wrapped)
         return True

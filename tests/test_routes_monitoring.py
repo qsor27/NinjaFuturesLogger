@@ -350,6 +350,32 @@ def test_run_job_now_executes_job(svc_config):
         svc.stop()
 
 
+def test_run_job_now_records_job_history(svc_config):
+    """Manual triggers must populate _job_history so the data-health panel's
+    last_run_at field updates — APScheduler listeners only see scheduler-
+    driven runs, so run_job_now has to record its own start/end."""
+    svc = BackgroundServices(svc_config)
+    svc.start()
+    try:
+        svc.scheduler.add_job(
+            lambda: None,
+            trigger="interval",
+            seconds=9999,
+            id="history_manual_job",
+        )
+        result = svc.run_job_now("history_manual_job")
+        assert result is True
+        _time.sleep(0.3)
+        history = list(svc._job_history.get("history_manual_job", []))
+        assert len(history) == 1
+        record = history[0]
+        assert record["status"] == "success"
+        assert record["started_at"] is not None
+        assert record["duration_ms"] is not None
+    finally:
+        svc.stop()
+
+
 # --- monitoring blueprint tests ---
 
 

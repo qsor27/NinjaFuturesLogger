@@ -124,3 +124,37 @@ def test_classify_window_marks_slots_beyond_reach_as_out_of_reach(tmp_path):
     assert summary["missing"] > 0
     reachable = summary["expected"] - summary["out_of_reach"]
     assert 4000 < reachable < 12000
+
+
+def test_classify_window_matches_1d_bars_at_utc_midnight(tmp_path):
+    """yfinance stamps daily bars at 00:00 UTC but the session-aware walker
+    emits slots at 17:00 CT. classify_window must bucket both sides to a
+    UTC calendar day so present bars actually match expected slots."""
+    from pathlib import Path
+
+    from db import connect
+    from migrations import run_migrations
+    from services.ohlc.gap_detection import classify_window
+
+    db = tmp_path / "ftl.db"
+    conn = connect(db)
+    run_migrations(conn, Path("migrations"))
+    base_utc_midnight = 1776124800  # 2026-04-14T00:00:00Z
+    for i in range(5):
+        conn.execute(
+            "INSERT INTO bars (instrument, timeframe, time, open, high, low, close,"
+            " volume, source, fetched_at)"
+            " VALUES ('MNQ JUN26', '1d', ?, 1, 2, 0, 1, 100, 'yfinance', 0)",
+            (base_utc_midnight - i * 86400,),
+        )
+    now = base_utc_midnight + 86400
+    summary = classify_window(
+        conn,
+        instrument="MNQ JUN26",
+        timeframe="1d",
+        start=base_utc_midnight - 4 * 86400,
+        end=now,
+        now=now,
+    )
+    assert summary["present"] == 5
+    assert summary["missing"] == 0
