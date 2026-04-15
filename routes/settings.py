@@ -4,9 +4,17 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 from pydantic import ValidationError
 
 from config import load_config
+from db import connect
 from logging_config import get_logger
 from models.settings import InstrumentConfig
 from services.instruments import get_registry
+from services.ohlc.coverage_state import (
+    list_coverage,
+    reactivate,
+    refresh_instrument_coverage_state,
+    retire_now,
+    set_pinned,
+)
 
 log = get_logger("http.settings")
 
@@ -38,6 +46,73 @@ def build_settings_blueprint() -> Blueprint:
         except KeyError:
             return jsonify({"error": "not found"}), 404
         return "", 204
+
+    # ---- coverage state ----
+
+    def _db_path() -> str:
+        return current_app.config["FTL_DB_PATH"]
+
+    @bp.get("/api/settings/coverage")
+    def coverage_list():
+        import time as _time
+
+        conn = connect(_db_path())
+        try:
+            refresh_instrument_coverage_state(conn, now=int(_time.time()))
+            rows = list_coverage(conn)
+        finally:
+            conn.close()
+        return jsonify(
+            {
+                "rows": [
+                    {
+                        "instrument": r.instrument,
+                        "state": r.state,
+                        "last_execution_at": r.last_execution_at,
+                        "pinned": r.pinned,
+                        "retired_at": r.retired_at,
+                    }
+                    for r in rows
+                ]
+            }
+        )
+
+    @bp.post("/api/settings/coverage/<instrument>/pin")
+    def coverage_pin(instrument: str):
+        import time as _time
+
+        data = request.get_json(silent=True) or {}
+        pinned = bool(data.get("pinned", True))
+        conn = connect(_db_path())
+        try:
+            set_pinned(conn, instrument=instrument, pinned=pinned, now=int(_time.time()))
+            refresh_instrument_coverage_state(conn, now=int(_time.time()))
+        finally:
+            conn.close()
+        return jsonify({"instrument": instrument, "pinned": pinned})
+
+    @bp.post("/api/settings/coverage/<instrument>/retire")
+    def coverage_retire(instrument: str):
+        import time as _time
+
+        conn = connect(_db_path())
+        try:
+            retire_now(conn, instrument=instrument, now=int(_time.time()))
+        finally:
+            conn.close()
+        return jsonify({"instrument": instrument, "state": "retired"})
+
+    @bp.post("/api/settings/coverage/<instrument>/reactivate")
+    def coverage_reactivate(instrument: str):
+        import time as _time
+
+        conn = connect(_db_path())
+        try:
+            reactivate(conn, instrument=instrument, now=int(_time.time()))
+            refresh_instrument_coverage_state(conn, now=int(_time.time()))
+        finally:
+            conn.close()
+        return jsonify({"instrument": instrument, "state": "active"})
 
     # ---- chart defaults ----
 

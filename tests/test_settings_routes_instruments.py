@@ -134,3 +134,74 @@ def test_static_js_files_served(tmp_path: Path):
     for js in ("settings_instruments.js", "settings_chart.js", "settings_custom_fields.js"):
         res = client.get(f"/static/js/{js}")
         assert res.status_code == 200
+
+
+def _seed_execution(db_path: str, instrument: str, ts_seconds_ago: int):
+    import time as _time
+
+    from db import connect
+
+    conn = connect(db_path)
+    now = int(_time.time())
+    conn.execute(
+        "INSERT INTO executions (nt_execution_id, account, instrument, timestamp,"
+        " side, original_action, quantity, price, commission, entry_exit,"
+        " source_filename, imported_at) "
+        "VALUES (?, 'sim', ?, ?, 'Buy', 'Buy', 1, 100.0, 0.0, 'Entry', 'x.csv', 0)",
+        (f"e-{instrument}-{now}", instrument, now - ts_seconds_ago),
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_coverage_list_rows(tmp_path: Path):
+    client = _setup_app(tmp_path)
+    db_path = str(tmp_path / "data" / "ftl.db")
+    _seed_execution(db_path, "MNQ JUN26", 3600)
+    resp = client.get("/api/settings/coverage")
+    body = resp.get_json()
+    assert resp.status_code == 200
+    names = {r["instrument"] for r in body["rows"]}
+    assert "MNQ JUN26" in names
+    row = next(r for r in body["rows"] if r["instrument"] == "MNQ JUN26")
+    assert row["state"] == "active"
+    assert row["pinned"] is False
+
+
+def test_coverage_pin(tmp_path: Path):
+    client = _setup_app(tmp_path)
+    db_path = str(tmp_path / "data" / "ftl.db")
+    _seed_execution(db_path, "MNQ JUN26", 3600)
+    resp = client.post(
+        "/api/settings/coverage/MNQ%20JUN26/pin", json={"pinned": True}
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["instrument"] == "MNQ JUN26"
+    assert body["pinned"] is True
+
+    rows = client.get("/api/settings/coverage").get_json()["rows"]
+    mnq = next(r for r in rows if r["instrument"] == "MNQ JUN26")
+    assert mnq["pinned"] is True
+
+
+def test_coverage_retire_then_reactivate(tmp_path: Path):
+    client = _setup_app(tmp_path)
+    db_path = str(tmp_path / "data" / "ftl.db")
+    _seed_execution(db_path, "CL AUG26", 3600)
+
+    retire_resp = client.post("/api/settings/coverage/CL%20AUG26/retire")
+    assert retire_resp.status_code == 200
+    assert retire_resp.get_json()["state"] == "retired"
+
+    rows = client.get("/api/settings/coverage").get_json()["rows"]
+    cl = next(r for r in rows if r["instrument"] == "CL AUG26")
+    assert cl["state"] == "retired"
+
+    reactivate_resp = client.post("/api/settings/coverage/CL%20AUG26/reactivate")
+    assert reactivate_resp.status_code == 200
+    assert reactivate_resp.get_json()["state"] == "active"
+
+    rows = client.get("/api/settings/coverage").get_json()["rows"]
+    cl = next(r for r in rows if r["instrument"] == "CL AUG26")
+    assert cl["state"] == "active"

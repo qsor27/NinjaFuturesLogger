@@ -99,8 +99,74 @@ async function deleteInstrument(symbol) {
   await refresh();
 }
 
+async function renderCoverage() {
+  const el = document.getElementById("coverage-rows");
+  if (!el) return;
+  const resp = await fetch("/api/settings/coverage");
+  const body = await resp.json();
+  el.replaceChildren();
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  thead.innerHTML = "<tr><th>Instrument</th><th>State</th><th>Pinned</th><th>Actions</th></tr>";
+  table.appendChild(thead);
+  const tb = document.createElement("tbody");
+  for (const row of body.rows) {
+    const tr = document.createElement("tr");
+    const tdName = document.createElement("td");
+    tdName.textContent = row.instrument;
+    const tdState = document.createElement("td");
+    tdState.textContent = row.state;
+    const tdPinned = document.createElement("td");
+    tdPinned.textContent = row.pinned ? "yes" : "no";
+    const tdActions = document.createElement("td");
+
+    const pinBtn = document.createElement("button");
+    pinBtn.textContent = row.pinned ? "Unpin" : "Pin";
+    pinBtn.addEventListener("click", async () => {
+      await fetch(`/api/settings/coverage/${encodeURIComponent(row.instrument)}/pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: !row.pinned }),
+      });
+      await renderCoverage();
+    });
+    tdActions.appendChild(pinBtn);
+
+    tdActions.appendChild(document.createTextNode(" "));
+
+    const toggleBtn = document.createElement("button");
+    if (row.state === "retired") {
+      toggleBtn.textContent = "Reactivate";
+      toggleBtn.addEventListener("click", async () => {
+        await fetch(
+          `/api/settings/coverage/${encodeURIComponent(row.instrument)}/reactivate`,
+          { method: "POST" },
+        );
+        await renderCoverage();
+      });
+    } else {
+      toggleBtn.textContent = "Retire";
+      toggleBtn.addEventListener("click", async () => {
+        if (!confirm(`Retire ${row.instrument}?`)) return;
+        await fetch(
+          `/api/settings/coverage/${encodeURIComponent(row.instrument)}/retire`,
+          { method: "POST" },
+        );
+        await renderCoverage();
+      });
+    }
+    tdActions.appendChild(toggleBtn);
+
+    tr.append(tdName, tdState, tdPinned, tdActions);
+    tb.appendChild(tr);
+  }
+  table.appendChild(tb);
+  el.appendChild(table);
+}
+
 newBtn.addEventListener("click", () => openDialog(null, null));
 cancelBtn.addEventListener("click", () => dialog.close());
 form.addEventListener("submit", saveDialog);
 
 refresh();
+renderCoverage();
