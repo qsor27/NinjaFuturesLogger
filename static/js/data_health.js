@@ -2,7 +2,28 @@ initDataHealth();
 
 async function initDataHealth() {
   await renderSourcesBand();
+  await renderMaintainerPanel();
   await renderMatrix();
+}
+
+async function renderMaintainerPanel() {
+  const el = document.getElementById("maintainer-panel");
+  if (!el) return;
+  const resp = await fetch("/api/data-health/maintainer");
+  const body = await resp.json();
+  const next = body.next_run_at ? new Date(body.next_run_at * 1000).toLocaleString() : "—";
+  const last = body.last_run_at ? new Date(body.last_run_at * 1000).toLocaleString() : "—";
+  const lastStatus = body.last_run_status ?? "—";
+  const tb = body.token_bucket || {};
+  el.innerHTML = `
+    <h3 style="margin-top:1em">Coverage Maintainer</h3>
+    <table>
+      <tr><th>Next run</th><td>${next}</td></tr>
+      <tr><th>Last run</th><td>${last} (${escHtml(lastStatus)})</td></tr>
+      <tr><th>Tokens available</th><td>${tb.available ?? "—"} / ${tb.capacity ?? "—"}</td></tr>
+      <tr><th>Acquired (lifetime)</th><td>${tb.acquired_total ?? 0}</td></tr>
+      <tr><th>Timeouts (lifetime)</th><td>${tb.timeouts_total ?? 0}</td></tr>
+    </table>`;
 }
 
 async function renderSourcesBand() {
@@ -35,8 +56,11 @@ async function renderSourcesBand() {
     const errTooltip = s.last_failure_class
       ? ` title="${escHtml(s.last_failure_class)}"`
       : "";
+    const noteSuffix = s.name === "stooq"
+      ? ' <span style="color:#6c757d;font-size:0.9em">(daily bars only — used as fallback for 1d when yfinance is unavailable)</span>'
+      : '';
     return `<tr>
-      <td>${escHtml(s.name)}</td>
+      <td>${escHtml(s.name)}${noteSuffix}</td>
       <td style="color:${stateColor};font-weight:600">${escHtml(s.state)}${tripsSuffix}</td>
       <td>${lastSuccess}</td>
       <td>${lastFail}</td>
@@ -71,6 +95,8 @@ async function renderMatrix() {
     complete: "background:#d4edda;color:#155724",
     partial: "background:#fff3cd;color:#856404",
     missing: "background:#f8d7da;color:#721c24",
+    out_of_reach: "background:#e2e3e5;color:#6c757d",
+    pending: "background:#cce5ff;color:#004085",
     session_closed: "background:#e2e3e5;color:#383d41",
   };
 
