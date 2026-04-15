@@ -1,21 +1,70 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="settings-page" id="settings-chart" data-endpoint="/api/config/chart-defaults">
-  <h1>Chart defaults</h1>
+<div class="settings-shell" id="settings-chart" data-endpoint="/api/config/chart-defaults">
+
+  <div class="settings-page-header">
+    <h1>Settings</h1>
+  </div>
+
+  <nav class="settings-tabs">
+    <a href="/settings/instruments" class="settings-tab">Instruments</a>
+    <a href="/settings/chart" class="settings-tab active">Chart Defaults</a>
+    <a href="/settings/custom-fields" class="settings-tab">Custom Fields</a>
+  </nav>
+
   <form id="chart-defaults-form">
-    <label>Default timeframe
-      <select name="default_timeframe">
-        <option>1m</option><option>5m</option><option>15m</option>
-        <option>1h</option><option>4h</option><option>1d</option>
-      </select>
-    </label>
-    <label><input type="checkbox" name="volume_visible_default"> Show volume by default</label>
-    <label>Display timezone (optional, for hour-bucketed stats)
-      <input name="display_timezone" placeholder="e.g. America/Chicago or Asia/Tokyo">
-    </label>
-    <button type="submit">Save</button>
-    <p class="status" id="chart-defaults-status"></p>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Chart Defaults</span>
+      </div>
+      <div class="form-grid">
+        <div class="form-row">
+          <div class="form-label">
+            Default timeframe
+            <small>Used when opening a chart for the first time</small>
+          </div>
+          <div class="form-control">
+            <select name="default_timeframe">
+              <option>1m</option><option>5m</option><option>15m</option>
+              <option>1h</option><option>4h</option><option>1d</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">
+            Show volume by default
+            <small>Volume histogram below the price chart</small>
+          </div>
+          <div class="form-control">
+            <input type="checkbox" name="volume_visible_default">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">
+            Display timezone
+            <small>Blank = your browser's local timezone</small>
+          </div>
+          <div class="form-control">
+            <input type="text" name="display_timezone" placeholder="e.g. America/Chicago or Asia/Tokyo">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-label">
+            NinjaTrader source timezone
+            <small>Timezone the NT machine exports CSVs in</small>
+          </div>
+          <div class="form-control">
+            <input type="text" name="source_timezone" placeholder="e.g. America/Los_Angeles">
+          </div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <button type="submit" class="btn btn-accent">Save changes</button>
+        <p class="status" id="chart-defaults-status"></p>
+      </div>
+    </div>
   </form>
-</section>
+
+</div>
 <script type="module" src="{{ url_for('static', filename='js/settings_chart.js') }}"></script>
 {% endblock %}
