@@ -50,9 +50,11 @@ async function renderSourcesBand() {
 
 async function renderMatrix() {
   const el = document.getElementById("completeness-matrix");
+  const days = document.getElementById("days-input")?.value;
   el.innerHTML = "<p>Loading…</p>";
 
-  const resp = await fetch("/api/data-health/completeness");
+  const url = days ? `/api/data-health/completeness?days=${encodeURIComponent(days)}` : "/api/data-health/completeness";
+  const resp = await fetch(url);
   const body = await resp.json();
 
   if (!body.instruments.length) {
