@@ -5,32 +5,10 @@ from pathlib import Path as _Path
 from db import connect as _connect
 from models.execution import Execution
 from models.position import IntegrityIssue
-
-
-def _parse_position_column(value: str) -> int | None:
-    """Parse the exporter's Position column into signed running quantity.
-
-    Returns None if the value cannot be interpreted. `-` means flat (0).
-    `5 L` means +5, `3 S` means -3.
-    """
-    s = value.strip()
-    if s == "-":
-        return 0
-    parts = s.split()
-    if len(parts) != 2:
-        return None
-    qty_s, tag = parts
-    try:
-        qty = int(qty_s)
-    except ValueError:
-        return None
-    if qty < 0:
-        return None
-    if tag == "L":
-        return qty
-    if tag == "S":
-        return -qty
-    return None
+from services.execution_ordering import (
+    order_executions_for_walk,
+    parse_position_column as _parse_position_column,
+)
 
 
 def cross_check_against_source_position_column(
@@ -45,7 +23,7 @@ def cross_check_against_source_position_column(
     """
     issues: list[IntegrityIssue] = []
     running_qty = 0
-    for ex in sorted(executions, key=lambda e: (e.timestamp, e.nt_execution_id)):
+    for ex in order_executions_for_walk(executions):
         signed = ex.quantity if ex.side == "Buy" else -ex.quantity
         running_qty += signed
 

@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 from models.execution import Execution
 from models.position import Fill, IntegrityIssue, Position
+from services.execution_ordering import order_executions_for_walk
 from services.instruments import get_multiplier
 from services.integrity import cross_check_against_source_position_column
 
@@ -107,7 +108,7 @@ def build_positions(
     executions: Sequence[Execution],
 ) -> tuple[list[Position], list[IntegrityIssue]]:
     """Pure function: walk executions and emit positions."""
-    executions = sorted(executions, key=lambda e: (e.timestamp, e.nt_execution_id))
+    executions = order_executions_for_walk(executions)
     positions: list[Position] = []
     issues: list[IntegrityIssue] = []
     current: list[Fill] = []
