@@ -422,9 +422,7 @@ def test_data_health_missing_returns_gaps(monitoring_app):
     now = int(_time.time())
     start = now - 3600
     end = now
-    resp = app.test_client().get(
-        f"/api/data-health/missing/MNQ/1m?start={start}&end={end}"
-    )
+    resp = app.test_client().get(f"/api/data-health/missing/MNQ/1m?start={start}&end={end}")
     assert resp.status_code == 200
     body = resp.get_json()
     assert "gaps" in body

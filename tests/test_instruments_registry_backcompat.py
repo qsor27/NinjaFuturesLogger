@@ -98,8 +98,10 @@ def test_edit_registry_changes_multiplier(tmp_path: Path, monkeypatch):
             ),
             session=InstrumentSession(
                 timezone="America/Chicago",
-                open="17:00", close="16:00",
-                daily_break_start="16:00", daily_break_end="17:00",
+                open="17:00",
+                close="16:00",
+                daily_break_start="16:00",
+                daily_break_end="17:00",
             ),
         ),
     )

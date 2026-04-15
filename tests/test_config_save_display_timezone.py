@@ -10,20 +10,22 @@ from config import load_config, save_display_timezone
 def _seed_config(tmp_path: Path) -> Path:
     path = tmp_path / "app.json"
     path.write_text(
-        json.dumps({
-            "data_dir": str(tmp_path),
-            "db_path": str(tmp_path / "t.db"),
-            "inbox_dir": str(tmp_path / "inbox"),
-            "archive_dir": str(tmp_path / "archive"),
-            "log_dir": str(tmp_path / "log"),
-            "session": {
-                "exchange_timezone": "America/Chicago",
-                "trade_date_rollover": "17:00",
-                "archive_job_time": "18:00",
-            },
-            "thread_pool": {"max_workers": 4},
-            "scheduler": {"heartbeat_seconds": 30},
-        })
+        json.dumps(
+            {
+                "data_dir": str(tmp_path),
+                "db_path": str(tmp_path / "t.db"),
+                "inbox_dir": str(tmp_path / "inbox"),
+                "archive_dir": str(tmp_path / "archive"),
+                "log_dir": str(tmp_path / "log"),
+                "session": {
+                    "exchange_timezone": "America/Chicago",
+                    "trade_date_rollover": "17:00",
+                    "archive_job_time": "18:00",
+                },
+                "thread_pool": {"max_workers": 4},
+                "scheduler": {"heartbeat_seconds": 30},
+            }
+        )
     )
     return path
 

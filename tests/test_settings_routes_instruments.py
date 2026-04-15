@@ -12,20 +12,24 @@ def _setup_app(tmp_path: Path):
     (data_dir / "archive").mkdir()
     (data_dir / "log").mkdir()
     app_json = data_dir / "config" / "app.json"
-    app_json.write_text(json.dumps({
-        "data_dir": str(data_dir),
-        "db_path": str(data_dir / "ftl.db"),
-        "inbox_dir": str(data_dir / "inbox"),
-        "archive_dir": str(data_dir / "archive"),
-        "log_dir": str(data_dir / "log"),
-        "session": {
-            "exchange_timezone": "America/Chicago",
-            "trade_date_rollover": "17:00",
-            "archive_job_time": "18:00",
-        },
-        "thread_pool": {"max_workers": 2},
-        "scheduler": {"heartbeat_seconds": 30},
-    }))
+    app_json.write_text(
+        json.dumps(
+            {
+                "data_dir": str(data_dir),
+                "db_path": str(data_dir / "ftl.db"),
+                "inbox_dir": str(data_dir / "inbox"),
+                "archive_dir": str(data_dir / "archive"),
+                "log_dir": str(data_dir / "log"),
+                "session": {
+                    "exchange_timezone": "America/Chicago",
+                    "trade_date_rollover": "17:00",
+                    "archive_job_time": "18:00",
+                },
+                "thread_pool": {"max_workers": 2},
+                "scheduler": {"heartbeat_seconds": 30},
+            }
+        )
+    )
     config = load_config(app_json)
     app, _ = create_app(config)
     return app.test_client()
@@ -52,8 +56,10 @@ def test_put_instrument_round_trip(tmp_path: Path):
         },
         "session": {
             "timezone": "America/Chicago",
-            "open": "17:00", "close": "16:00",
-            "daily_break_start": "16:00", "daily_break_end": "17:00",
+            "open": "17:00",
+            "close": "16:00",
+            "daily_break_start": "16:00",
+            "daily_break_end": "17:00",
         },
     }
     res = client.put("/api/config/instruments/BTC", json=payload)
@@ -96,8 +102,11 @@ def test_put_instrument_persists_to_json_file(tmp_path: Path):
             "stooq": {"continuous": None, "contract_template": None},
         },
         "session": {
-            "timezone": "UTC", "open": "00:00", "close": "00:00",
-            "daily_break_start": "", "daily_break_end": "",
+            "timezone": "UTC",
+            "open": "00:00",
+            "close": "00:00",
+            "daily_break_start": "",
+            "daily_break_end": "",
         },
     }
     client.put("/api/config/instruments/XYZ", json=payload)

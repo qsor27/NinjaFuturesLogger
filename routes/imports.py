@@ -49,9 +49,7 @@ def build_imports_blueprint() -> Blueprint:
         conn = _db()
         try:
             rows = conn.execute(sql, (*params, limit, offset)).fetchall()
-            total = conn.execute(
-                f"SELECT COUNT(*) FROM import_runs {where}", params
-            ).fetchone()[0]
+            total = conn.execute(f"SELECT COUNT(*) FROM import_runs {where}", params).fetchone()[0]
         finally:
             conn.close()
         return jsonify({"runs": [dict(r) for r in rows], "total": total})

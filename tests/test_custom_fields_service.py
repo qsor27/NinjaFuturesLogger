@@ -117,18 +117,24 @@ def test_replace_options_preserves_option_id_for_unchanged_values():
     db = _fresh_db()
     svc = CustomFieldsService(db)
     d = svc.create_definition(name="setup", field_type="dropdown")
-    svc.replace_options(d.field_id, [
-        {"value": "Breakout", "display_order": 0},
-        {"value": "Reversal", "display_order": 1},
-    ])
+    svc.replace_options(
+        d.field_id,
+        [
+            {"value": "Breakout", "display_order": 0},
+            {"value": "Reversal", "display_order": 1},
+        ],
+    )
     first = svc.list_options(d.field_id)
     first_ids = {o.value: o.option_id for o in first}
 
-    svc.replace_options(d.field_id, [
-        {"value": "Reversal", "display_order": 0},
-        {"value": "Breakout", "display_order": 1},
-        {"value": "Trend", "display_order": 2},
-    ])
+    svc.replace_options(
+        d.field_id,
+        [
+            {"value": "Reversal", "display_order": 0},
+            {"value": "Breakout", "display_order": 1},
+            {"value": "Trend", "display_order": 2},
+        ],
+    )
     second = svc.list_options(d.field_id)
     second_ids = {o.value: o.option_id for o in second}
 
@@ -142,10 +148,13 @@ def test_replace_options_deletes_removed_values():
     db = _fresh_db()
     svc = CustomFieldsService(db)
     d = svc.create_definition(name="setup", field_type="dropdown")
-    svc.replace_options(d.field_id, [
-        {"value": "A", "display_order": 0},
-        {"value": "B", "display_order": 1},
-    ])
+    svc.replace_options(
+        d.field_id,
+        [
+            {"value": "A", "display_order": 0},
+            {"value": "B", "display_order": 1},
+        ],
+    )
     svc.replace_options(d.field_id, [{"value": "A", "display_order": 0}])
     options = svc.list_options(d.field_id)
     assert [o.value for o in options] == ["A"]
@@ -214,9 +223,12 @@ def test_set_execution_value_dropdown_validates_against_options():
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="setup", field_type="dropdown")
-    svc.replace_options(d.field_id, [
-        {"value": "Breakout", "display_order": 0},
-    ])
+    svc.replace_options(
+        d.field_id,
+        [
+            {"value": "Breakout", "display_order": 0},
+        ],
+    )
     svc.set_execution_value("E1", d.field_id, "Breakout")
     with pytest.raises(ValueError):
         svc.set_execution_value("E1", d.field_id, "NotAnOption")

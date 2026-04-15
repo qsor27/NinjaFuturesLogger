@@ -60,6 +60,7 @@ def test_put_writes_file_atomically(tmp_path: Path, monkeypatch):
 
     calls = []
     import os as _os
+
     original = _os.replace
 
     def tracking_replace(src, dst):
@@ -84,8 +85,11 @@ def test_put_writes_file_atomically(tmp_path: Path, monkeypatch):
             stooq=SourceMapping(),
         ),
         session=InstrumentSession(
-            timezone="UTC", open="00:00", close="00:00",
-            daily_break_start="", daily_break_end="",
+            timezone="UTC",
+            open="00:00",
+            close="00:00",
+            daily_break_start="",
+            daily_break_end="",
         ),
     )
     reg.put("NEW", cfg)
@@ -144,8 +148,11 @@ def test_concurrent_writers_serialize(tmp_path: Path):
             tick_size=0.25,
             sources=InstrumentSources(yfinance=SourceMapping(), stooq=SourceMapping()),
             session=InstrumentSession(
-                timezone="UTC", open="00:00", close="00:00",
-                daily_break_start="", daily_break_end="",
+                timezone="UTC",
+                open="00:00",
+                close="00:00",
+                daily_break_start="",
+                daily_break_end="",
             ),
         )
 

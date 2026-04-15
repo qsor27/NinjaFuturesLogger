@@ -19,14 +19,7 @@ def build_settings_blueprint() -> Blueprint:
     @bp.get("/api/config/instruments")
     def list_instruments():
         reg = get_registry()
-        return jsonify(
-            {
-                "instruments": {
-                    symbol: cfg.model_dump()
-                    for symbol, cfg in reg.list()
-                }
-            }
-        )
+        return jsonify({"instruments": {symbol: cfg.model_dump() for symbol, cfg in reg.list()}})
 
     @bp.put("/api/config/instruments/<symbol>")
     def put_instrument(symbol: str):
@@ -102,6 +95,7 @@ def build_settings_blueprint() -> Blueprint:
 
     def _svc():
         from services.custom_fields import CustomFieldsService
+
         return CustomFieldsService(current_app.config["FTL_DB_PATH"])
 
     @bp.get("/api/custom-fields")
@@ -211,12 +205,8 @@ def build_settings_blueprint() -> Blueprint:
             return jsonify({"error": str(e)}), 400
         return jsonify({"ok": True})
 
-    @bp.get(
-        "/api/positions/<account>/<instrument>/<entry_execution_id>/custom-fields"
-    )
-    def get_position_custom_fields(
-        account: str, instrument: str, entry_execution_id: str
-    ):
+    @bp.get("/api/positions/<account>/<instrument>/<entry_execution_id>/custom-fields")
+    def get_position_custom_fields(account: str, instrument: str, entry_execution_id: str):
         from services.positions_service import get_position
 
         p = get_position(

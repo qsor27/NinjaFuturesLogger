@@ -77,9 +77,7 @@ def build_monitoring_blueprint() -> Blueprint:
 
         conn = connect(_db_path())
         try:
-            gaps = find_gaps(
-                conn, instrument=instrument, timeframe=timeframe, start=start, end=end
-            )
+            gaps = find_gaps(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
             expected = _expected_slots(instrument, timeframe, start, end)
             present = list_times(
                 conn, instrument=instrument, timeframe=timeframe, start=start, end=end

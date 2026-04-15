@@ -86,9 +86,7 @@ class BackgroundServices:
             replace_existing=True,
         )
         self.scheduler.add_listener(self._on_job_submitted, EVENT_JOB_SUBMITTED)
-        self.scheduler.add_listener(
-            self._on_job_finished, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR
-        )
+        self.scheduler.add_listener(self._on_job_finished, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
         self.scheduler.start()
         use_handler = handler if handler is not None else _NoopHandler()
         self.observer.schedule(use_handler, self.config.inbox_dir, recursive=False)

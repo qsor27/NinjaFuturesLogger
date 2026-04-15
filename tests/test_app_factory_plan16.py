@@ -12,20 +12,24 @@ def _setup(tmp_path: Path):
     (data_dir / "archive").mkdir()
     (data_dir / "log").mkdir()
     app_json = data_dir / "config" / "app.json"
-    app_json.write_text(json.dumps({
-        "data_dir": str(data_dir),
-        "db_path": str(data_dir / "ftl.db"),
-        "inbox_dir": str(data_dir / "inbox"),
-        "archive_dir": str(data_dir / "archive"),
-        "log_dir": str(data_dir / "log"),
-        "session": {
-            "exchange_timezone": "America/Chicago",
-            "trade_date_rollover": "17:00",
-            "archive_job_time": "18:00",
-        },
-        "thread_pool": {"max_workers": 2},
-        "scheduler": {"heartbeat_seconds": 30},
-    }))
+    app_json.write_text(
+        json.dumps(
+            {
+                "data_dir": str(data_dir),
+                "db_path": str(data_dir / "ftl.db"),
+                "inbox_dir": str(data_dir / "inbox"),
+                "archive_dir": str(data_dir / "archive"),
+                "log_dir": str(data_dir / "log"),
+                "session": {
+                    "exchange_timezone": "America/Chicago",
+                    "trade_date_rollover": "17:00",
+                    "archive_job_time": "18:00",
+                },
+                "thread_pool": {"max_workers": 2},
+                "scheduler": {"heartbeat_seconds": 30},
+            }
+        )
+    )
     return create_app(load_config(app_json))[0].test_client()
 
 

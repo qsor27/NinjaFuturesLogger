@@ -150,9 +150,9 @@ def test_execution_custom_field_values_cascade_on_field_delete():
         conn.execute(
             "INSERT INTO custom_fields (name, field_type, created_at) VALUES ('confidence', 'number', 0)"
         )
-        fid = conn.execute(
-            "SELECT field_id FROM custom_fields WHERE name='confidence'"
-        ).fetchone()[0]
+        fid = conn.execute("SELECT field_id FROM custom_fields WHERE name='confidence'").fetchone()[
+            0
+        ]
         conn.execute(
             "INSERT INTO execution_custom_field_values (execution_id, field_id, value, updated_at) "
             "VALUES ('E2', ?, '4.0', 0)",

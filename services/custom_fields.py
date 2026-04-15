@@ -126,9 +126,7 @@ class CustomFieldsService:
         if field_type is not None and field_type != existing.field_type:
             count = self.affected_executions(field_id)
             if count > 0:
-                raise ValueError(
-                    f"cannot change field_type while {count} executions have values"
-                )
+                raise ValueError(f"cannot change field_type while {count} executions have values")
             if field_type not in _FIELD_TYPES:
                 raise ValueError(f"invalid field_type: {field_type!r}")
         updates: list[tuple[str, Any]] = []
@@ -174,9 +172,7 @@ class CustomFieldsService:
     def delete_definition(self, field_id: int, *, confirm_count: int) -> None:
         actual = self.affected_executions(field_id)
         if confirm_count != actual:
-            raise ValueError(
-                f"confirm_count {confirm_count} does not match actual {actual}"
-            )
+            raise ValueError(f"confirm_count {confirm_count} does not match actual {actual}")
         conn = connect(self._db_path)
         try:
             conn.execute("BEGIN")
@@ -269,6 +265,7 @@ class CustomFieldsService:
                 raise ValueError("date value must be an ISO string")
             try:
                 from datetime import date as _date
+
                 _date.fromisoformat(value)
             except ValueError as e:
                 raise ValueError(f"date must be YYYY-MM-DD: {value!r}") from e

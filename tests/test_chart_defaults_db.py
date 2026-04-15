@@ -42,17 +42,13 @@ def test_save_defaults_updates_updated_at():
     db_path = _fresh_db()
     conn = connect(db_path)
     try:
-        initial_ts = conn.execute(
-            "SELECT updated_at FROM chart_defaults WHERE id=1"
-        ).fetchone()[0]
+        initial_ts = conn.execute("SELECT updated_at FROM chart_defaults WHERE id=1").fetchone()[0]
     finally:
         conn.close()
     save_defaults(db_path, default_timeframe="15m", volume_visible_default=True)
     conn = connect(db_path)
     try:
-        new_ts = conn.execute(
-            "SELECT updated_at FROM chart_defaults WHERE id=1"
-        ).fetchone()[0]
+        new_ts = conn.execute("SELECT updated_at FROM chart_defaults WHERE id=1").fetchone()[0]
     finally:
         conn.close()
     assert new_ts >= initial_ts
