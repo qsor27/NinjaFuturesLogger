@@ -37,5 +37,6 @@ def test_is_out_of_reach_passes_recent_1m_slot():
 
 def test_is_out_of_reach_unknown_timeframe_raises():
     import pytest
+
     with pytest.raises(ValueError):
         is_out_of_reach("2h", slot_ts=0, now=0)

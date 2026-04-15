@@ -25,8 +25,7 @@ def test_empty_input_returns_empty():
 
 def test_single_complete_block_emits_one_bar():
     bars_1h = [
-        _bar(BASE_1700_CT + h * 3600, 100 + h, 110 + h, 90 + h, 105 + h, 1000)
-        for h in range(4)
+        _bar(BASE_1700_CT + h * 3600, 100 + h, 110 + h, 90 + h, 105 + h, 1000) for h in range(4)
     ]
     out = derive_4h(bars_1h)
     assert len(out) == 1
@@ -43,18 +42,12 @@ def test_single_complete_block_emits_one_bar():
 
 
 def test_partial_block_dropped():
-    bars_1h = [
-        _bar(BASE_1700_CT + h * 3600, 100, 110, 90, 105, 1000)
-        for h in range(3)
-    ]
+    bars_1h = [_bar(BASE_1700_CT + h * 3600, 100, 110, 90, 105, 1000) for h in range(3)]
     assert derive_4h(bars_1h) == []
 
 
 def test_multiple_complete_blocks():
-    bars_1h = [
-        _bar(BASE_1700_CT + h * 3600, 100, 110, 90, 105, 1000)
-        for h in range(8)
-    ]
+    bars_1h = [_bar(BASE_1700_CT + h * 3600, 100, 110, 90, 105, 1000) for h in range(8)]
     out = derive_4h(bars_1h)
     assert len(out) == 2
     assert out[0].time == BASE_1700_CT
@@ -73,8 +66,5 @@ def test_gap_in_middle_drops_straddling_block():
 
 def test_13_to_17_ct_block_spanning_daily_break_not_emitted():
     base_1300_ct = BASE_1700_CT - 4 * 3600
-    bars_1h = [
-        _bar(base_1300_ct + h * 3600, 100, 110, 90, 105, 1000)
-        for h in range(3)
-    ]
+    bars_1h = [_bar(base_1300_ct + h * 3600, 100, 110, 90, 105, 1000) for h in range(3)]
     assert derive_4h(bars_1h) == []

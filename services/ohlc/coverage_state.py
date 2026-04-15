@@ -43,9 +43,7 @@ def list_coverage(conn: sqlite3.Connection) -> list[CoverageRow]:
     ]
 
 
-def set_pinned(
-    conn: sqlite3.Connection, *, instrument: str, pinned: bool, now: int
-) -> None:
+def set_pinned(conn: sqlite3.Connection, *, instrument: str, pinned: bool, now: int) -> None:
     conn.execute(
         "INSERT INTO instrument_coverage"
         " (instrument, state, last_execution_at, pinned, retired_at, updated_at)"
@@ -87,8 +85,7 @@ def refresh_instrument_coverage_state(conn: sqlite3.Connection, *, now: int) -> 
     explicitly-retired contract back to active — only reactivate() does.
     """
     rows = conn.execute(
-        "SELECT instrument, MAX(timestamp) AS last_ts"
-        " FROM executions GROUP BY instrument"
+        "SELECT instrument, MAX(timestamp) AS last_ts FROM executions GROUP BY instrument"
     ).fetchall()
     existing = {r.instrument: r for r in list_coverage(conn)}
 

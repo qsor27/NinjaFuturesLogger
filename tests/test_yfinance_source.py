@@ -98,11 +98,13 @@ def test_fetch_volume_nan_becomes_zero(monkeypatch):
 
 
 def test_yfinance_uses_contract_symbol_for_suffixed_instrument(monkeypatch, tmp_path):
+    import json
+
+    import pandas as pd
+
     from services.instruments import set_registry_path
     from services.ohlc import yfinance_source as yf_mod
     from services.ohlc.yfinance_source import YfinanceSource
-    import json
-    import pandas as pd
 
     path = tmp_path / "instruments.json"
     path.write_text(

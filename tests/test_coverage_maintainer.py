@@ -1,20 +1,8 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from db import connect
 from migrations import run_migrations
-from services.instruments import set_registry_path
-
-
-@pytest.fixture(autouse=True)
-def _restore_registry_path():
-    """set_registry_path mutates process-global state. Restore the
-    default so tests in other files aren't poisoned by the tmp_path
-    registry the third test installs."""
-    yield
-    set_registry_path(Path("data/config/instruments.json"))
 from services.ohlc.coverage_maintainer import (
     MAINTAINER_WINDOWS,
     SWEEP_WINDOWS,
@@ -25,6 +13,8 @@ from services.ohlc.coverage_state import (
     refresh_instrument_coverage_state,
     retire_now,
 )
+
+# Registry restoration is handled by the autouse fixture in tests/conftest.py.
 
 
 def _insert_exec(conn, instrument, ts):

@@ -26,8 +26,9 @@ def test_base_symbol_strips_suffix():
 
 
 def test_source_symbol_renders_contract_template_for_yfinance(tmp_path):
-    from services.instruments import set_registry_path, source_symbol
     import json
+
+    from services.instruments import set_registry_path, source_symbol
 
     path = tmp_path / "instruments.json"
     path.write_text(
@@ -66,8 +67,9 @@ def test_source_symbol_renders_contract_template_for_yfinance(tmp_path):
 
 
 def test_source_symbol_all_month_codes(tmp_path):
-    from services.instruments import set_registry_path, source_symbol
     import json
+
+    from services.instruments import set_registry_path, source_symbol
 
     path = tmp_path / "instruments.json"
     path.write_text(
@@ -101,9 +103,18 @@ def test_source_symbol_all_month_codes(tmp_path):
     set_registry_path(path)
 
     pairs = {
-        "JAN": "F", "FEB": "G", "MAR": "H", "APR": "J",
-        "MAY": "K", "JUN": "M", "JUL": "N", "AUG": "Q",
-        "SEP": "U", "OCT": "V", "NOV": "X", "DEC": "Z",
+        "JAN": "F",
+        "FEB": "G",
+        "MAR": "H",
+        "APR": "J",
+        "MAY": "K",
+        "JUN": "M",
+        "JUL": "N",
+        "AUG": "Q",
+        "SEP": "U",
+        "OCT": "V",
+        "NOV": "X",
+        "DEC": "Z",
     }
     for word, code in pairs.items():
         assert source_symbol(f"NQ {word}26", "yfinance") == f"NQ{code}26.CME"

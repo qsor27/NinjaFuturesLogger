@@ -135,9 +135,7 @@ def build_monitoring_blueprint() -> Blueprint:
         next_run_time = getattr(job, "next_run_time", None) if job else None
         return jsonify(
             {
-                "next_run_at": (
-                    next_run_time.timestamp() if next_run_time else None
-                ),
+                "next_run_at": (next_run_time.timestamp() if next_run_time else None),
                 "last_run_at": last["started_at"] if last else None,
                 "last_run_status": last["status"] if last else None,
                 "token_bucket": tb_stats,
@@ -147,9 +145,7 @@ def build_monitoring_blueprint() -> Blueprint:
     return bp
 
 
-def _cell_status(
-    conn, *, instrument: str, timeframe: str, start: int, end: int, now: int
-) -> str:
+def _cell_status(conn, *, instrument: str, timeframe: str, start: int, end: int, now: int) -> str:
     """Compute completeness status for one instrument × timeframe cell."""
     summary = classify_window(
         conn,

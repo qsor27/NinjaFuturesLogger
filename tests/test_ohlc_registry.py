@@ -68,6 +68,7 @@ def test_default_registry_has_plan18_tuning():
 
 def test_yfinance_breaker_tuned_for_rate_limit_conservatism():
     from services.ohlc.registry import build_default_registry
+
     reg = build_default_registry(clock=lambda: 0)
     yf_breaker = next(b for s, b in reg.entries if s.name == "yfinance")
     assert yf_breaker.base_cooldown_rate_limit_seconds == 3600

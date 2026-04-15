@@ -4,10 +4,10 @@ from db import connect
 from migrations import run_migrations
 from services.ohlc.coverage_state import (
     list_coverage,
-    refresh_instrument_coverage_state,
-    set_pinned,
-    retire_now,
     reactivate,
+    refresh_instrument_coverage_state,
+    retire_now,
+    set_pinned,
 )
 
 
@@ -25,9 +25,18 @@ def _insert_execution(conn, *, nt_id, account, instrument, ts):
         " source_filename, imported_at)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         (
-            nt_id, account, instrument, ts,
-            "Buy", "Buy", 1, 100.0, 0.0, "Entry",
-            "test.csv", ts,
+            nt_id,
+            account,
+            instrument,
+            ts,
+            "Buy",
+            "Buy",
+            1,
+            100.0,
+            0.0,
+            "Entry",
+            "test.csv",
+            ts,
         ),
     )
 
@@ -49,7 +58,10 @@ def test_old_execution_becomes_winding_down(tmp_path):
     conn = _setup(tmp_path)
     now = 1_000_000_000
     _insert_execution(
-        conn, nt_id="e1", account="sim", instrument="MNQ MAR26",
+        conn,
+        nt_id="e1",
+        account="sim",
+        instrument="MNQ MAR26",
         ts=now - 40 * 86400,
     )
     refresh_instrument_coverage_state(conn, now=now)
@@ -60,7 +72,10 @@ def test_pinned_overrides_inactivity(tmp_path):
     conn = _setup(tmp_path)
     now = 1_000_000_000
     _insert_execution(
-        conn, nt_id="e1", account="sim", instrument="MNQ MAR26",
+        conn,
+        nt_id="e1",
+        account="sim",
+        instrument="MNQ MAR26",
         ts=now - 100 * 86400,
     )
     refresh_instrument_coverage_state(conn, now=now)
@@ -96,7 +111,10 @@ def test_180_day_safety_backstop(tmp_path):
     conn = _setup(tmp_path)
     now = 1_000_000_000
     _insert_execution(
-        conn, nt_id="e1", account="sim", instrument="MNQ SEP25",
+        conn,
+        nt_id="e1",
+        account="sim",
+        instrument="MNQ SEP25",
         ts=now - 200 * 86400,
     )
     refresh_instrument_coverage_state(conn, now=now)

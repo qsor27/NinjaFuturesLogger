@@ -524,6 +524,7 @@ def test_imports_detail_page_returns_200(tmp_path):
 
 def test_canonical_timeframes_drop_4h_add_weekly_monthly():
     from routes.monitoring import CANONICAL_TIMEFRAMES
+
     assert "4h" not in CANONICAL_TIMEFRAMES
     assert "1wk" in CANONICAL_TIMEFRAMES
     assert "1mo" in CANONICAL_TIMEFRAMES
@@ -572,7 +573,6 @@ def test_data_health_maintainer_endpoint(tmp_path):
 def test_data_health_completeness_emits_out_of_reach(tmp_path):
     """An execution seeded 60 days ago should produce a cell where 1m
     and 5m are marked out_of_reach (at least partially) at a 90-day window."""
-    from pathlib import Path
     import time as _time
 
     from app import create_app

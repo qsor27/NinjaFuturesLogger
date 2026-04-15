@@ -61,7 +61,7 @@ def test_fetch_filters_to_requested_range(monkeypatch):
 
 
 def test_fetch_blank_volume_becomes_zero(monkeypatch):
-    csv_text = "Date,Open,High,Low,Close,Volume\n" "2026-04-10,4200.00,4250.00,4180.00,4230.50,\n"
+    csv_text = "Date,Open,High,Low,Close,Volume\n2026-04-10,4200.00,4250.00,4180.00,4230.50,\n"
     monkeypatch.setattr(ss, "_http_get", lambda url: csv_text)
     bars = StooqSource().fetch("MNQ", "1d", 0, 9_999_999_999)
     assert bars[0].volume == 0
@@ -87,10 +87,11 @@ def test_fetch_propagates_transport_error(monkeypatch):
 
 
 def test_stooq_refuses_suffixed_instrument(monkeypatch, tmp_path):
+    import json
+
     from services.instruments import set_registry_path
     from services.ohlc import stooq_source as stooq_mod
     from services.ohlc.stooq_source import StooqSource
-    import json
 
     path = tmp_path / "instruments.json"
     path.write_text(

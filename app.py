@@ -188,9 +188,7 @@ def create_app(
     )
     services.scheduler.add_job(
         lambda: _fetch_tf_for_active("1wk", window_seconds=10 * 365 * 86400),
-        trigger=CronTrigger(
-            day_of_week="fri", hour=16, minute=1, timezone="America/Chicago"
-        ),
+        trigger=CronTrigger(day_of_week="fri", hour=16, minute=1, timezone="America/Chicago"),
         id="ohlc_weekly_refresh",
         replace_existing=True,
     )
@@ -203,9 +201,7 @@ def create_app(
         tz = ZoneInfo("America/Chicago")
         now_local = datetime.now(tz)
         last_day = calendar.monthrange(now_local.year, now_local.month)[1]
-        run_date = now_local.replace(
-            day=last_day, hour=16, minute=1, second=0, microsecond=0
-        )
+        run_date = now_local.replace(day=last_day, hour=16, minute=1, second=0, microsecond=0)
         if run_date <= now_local:
             m = now_local.month + 1
             y = now_local.year + (1 if m > 12 else 0)

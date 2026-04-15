@@ -172,9 +172,7 @@ def test_coverage_pin(tmp_path: Path):
     client = _setup_app(tmp_path)
     db_path = str(tmp_path / "data" / "ftl.db")
     _seed_execution(db_path, "MNQ JUN26", 3600)
-    resp = client.post(
-        "/api/settings/coverage/MNQ%20JUN26/pin", json={"pinned": True}
-    )
+    resp = client.post("/api/settings/coverage/MNQ%20JUN26/pin", json={"pinned": True})
     assert resp.status_code == 200
     body = resp.get_json()
     assert body["instrument"] == "MNQ JUN26"

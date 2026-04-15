@@ -21,6 +21,7 @@ def test_008_creates_instrument_coverage_table(tmp_path):
 
 def test_008_state_check_constraint(tmp_path):
     import sqlite3
+
     db = tmp_path / "ftl.db"
     conn = connect(db)
     run_migrations(conn, Path("migrations"))

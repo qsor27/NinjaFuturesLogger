@@ -115,9 +115,7 @@ def source_symbol(instrument: str, source: str) -> str | None:
     if contract is None:
         return mapping.continuous
     if mapping.contract_template:
-        return _render_contract_template(
-            mapping.contract_template, root=root, contract=contract
-        )
+        return _render_contract_template(mapping.contract_template, root=root, contract=contract)
     return None
 
 

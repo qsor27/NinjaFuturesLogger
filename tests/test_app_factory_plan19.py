@@ -1,5 +1,5 @@
-from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 from app import create_app
+from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 
 
 def _make_config(tmp_path):
@@ -52,6 +52,7 @@ def test_plan19_drops_post_import_ohlc_hook(tmp_path):
 
 def test_plan19_token_bucket_stored_in_app_config(tmp_path):
     from services.ohlc.rate_limiter import TokenBucket
+
     cfg = _make_config(tmp_path)
     app, services = create_app(cfg, start_background=False)
     try:
