@@ -1,20 +1,41 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="settings-page" id="settings-custom-fields" data-endpoint="/api/custom-fields">
-  <h1>Custom fields</h1>
-  <p class="muted">Define tags and numeric scores you can attach to any trade.</p>
-  <form id="new-field-form">
-    <input name="name" placeholder="Field name (e.g. Setup)" required>
-    <select name="field_type">
-      <option value="text">Text</option>
-      <option value="number">Number</option>
-      <option value="dropdown">Dropdown</option>
-      <option value="date">Date</option>
-      <option value="boolean">Boolean</option>
-    </select>
-    <button type="submit">Add field</button>
-  </form>
-  <div id="fields-list"></div>
-</section>
+<div class="settings-shell" id="settings-custom-fields" data-endpoint="/api/custom-fields">
+
+  <div class="settings-page-header">
+    <h1>Settings</h1>
+  </div>
+
+  <nav class="settings-tabs">
+    <a href="/settings/instruments" class="settings-tab">Instruments</a>
+    <a href="/settings/chart" class="settings-tab">Chart Defaults</a>
+    <a href="/settings/custom-fields" class="settings-tab active">Custom Fields</a>
+  </nav>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Add field</span>
+    </div>
+    <form id="new-field-form" class="inline-add-form">
+      <input type="text" name="name" placeholder="Field name (e.g. Setup)" required>
+      <select name="field_type">
+        <option value="text">Text</option>
+        <option value="number">Number</option>
+        <option value="dropdown">Dropdown</option>
+        <option value="date">Date</option>
+        <option value="boolean">Boolean</option>
+      </select>
+      <button type="submit" class="btn btn-accent">Add field</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Defined fields</span>
+    </div>
+    <div id="fields-list"></div>
+  </div>
+
+</div>
 <script type="module" src="{{ url_for('static', filename='js/settings_custom_fields.js') }}"></script>
 {% endblock %}
