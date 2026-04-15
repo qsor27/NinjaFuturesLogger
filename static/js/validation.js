@@ -45,10 +45,27 @@ async function loadIssues() {
 
   const resp = await fetch(`/api/integrity-issues?${params}`);
   const { issues } = await resp.json();
-  renderIssues(issues, status);
+
+  // Build execution_id → position detail URL map
+  const posUrlMap = {};
+  const pairs = [...new Set(issues.filter(i => i.execution_id).map(i => `${i.account}\t${i.instrument}`))];
+  await Promise.all(pairs.map(async (pair) => {
+    const [acct, inst] = pair.split("\t");
+    const p = new URLSearchParams({ account: acct, instrument: inst });
+    const r = await fetch(`/api/positions?${p}`);
+    const { positions } = await r.json();
+    for (const pos of (positions || [])) {
+      const url = `/positions/${encodeURIComponent(pos.account)}/${encodeURIComponent(pos.instrument)}/${encodeURIComponent(pos.entry_execution_id)}`;
+      for (const eid of (pos.execution_ids || [])) {
+        posUrlMap[eid] = url;
+      }
+    }
+  }));
+
+  renderIssues(issues, status, posUrlMap);
 }
 
-function renderIssues(issues, status) {
+function renderIssues(issues, status, posUrlMap = {}) {
   const el = document.getElementById("issues-table");
   if (!issues.length) {
     el.innerHTML = `<p>No ${status} integrity issues.</p>`;
@@ -57,8 +74,9 @@ function renderIssues(issues, status) {
   const rows = issues.map((i) => {
     const age = Math.floor((Date.now() / 1000 - i.detected_at) / 3600);
     const detected = new Date(i.detected_at * 1000).toLocaleString();
+    const posUrl = i.execution_id && posUrlMap[i.execution_id];
     const execLink = i.execution_id
-      ? `<a href="/positions?q=${encodeURIComponent(i.execution_id)}">${escHtml(i.execution_id)}</a>`
+      ? `<a href="${posUrl || `/positions?q=${encodeURIComponent(i.execution_id)}`}">${escHtml(i.execution_id)}</a>`
       : "—";
     const noteCell = i.resolution_note
       ? `<span style="color:#666;font-style:italic">${escHtml(i.resolution_note)}</span>`
