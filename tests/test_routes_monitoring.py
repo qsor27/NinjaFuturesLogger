@@ -520,3 +520,107 @@ def test_imports_detail_page_returns_200(tmp_path):
     client = _make_full_config_client(tmp_path)
     resp = client.get("/imports/42")
     assert resp.status_code == 200
+
+
+def test_canonical_timeframes_drop_4h_add_weekly_monthly():
+    from routes.monitoring import CANONICAL_TIMEFRAMES
+    assert "4h" not in CANONICAL_TIMEFRAMES
+    assert "1wk" in CANONICAL_TIMEFRAMES
+    assert "1mo" in CANONICAL_TIMEFRAMES
+    assert CANONICAL_TIMEFRAMES == ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"]
+
+
+def test_data_health_maintainer_endpoint(tmp_path):
+    from app import create_app
+    from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
+
+    (tmp_path / "inbox").mkdir()
+    (tmp_path / "archive").mkdir()
+    (tmp_path / "logs").mkdir()
+    cfg = Config(
+        data_dir=str(tmp_path),
+        db_path=str(tmp_path / "t.db"),
+        inbox_dir=str(tmp_path / "inbox"),
+        archive_dir=str(tmp_path / "archive"),
+        log_dir=str(tmp_path / "logs"),
+        session=SessionConfig(
+            exchange_timezone="America/Chicago",
+            trade_date_rollover="16:00",
+            archive_job_time="18:00",
+        ),
+        thread_pool=ThreadPoolConfig(max_workers=2),
+        scheduler=SchedulerConfig(heartbeat_seconds=60),
+    )
+    app, services = create_app(cfg, start_background=False)
+    try:
+        client = app.test_client()
+        resp = client.get("/api/data-health/maintainer")
+        body = resp.get_json()
+        assert resp.status_code == 200
+        assert set(body.keys()) >= {
+            "next_run_at",
+            "last_run_at",
+            "last_run_status",
+            "token_bucket",
+        }
+        assert set(body["token_bucket"].keys()) >= {"capacity", "available"}
+        assert body["token_bucket"]["capacity"] == 30
+    finally:
+        services.stop()
+
+
+def test_data_health_completeness_emits_out_of_reach(tmp_path):
+    """An execution seeded 60 days ago should produce a cell where 1m
+    and 5m are marked out_of_reach (at least partially) at a 90-day window."""
+    from pathlib import Path
+    import time as _time
+
+    from app import create_app
+    from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
+    from db import connect
+
+    (tmp_path / "inbox").mkdir()
+    (tmp_path / "archive").mkdir()
+    (tmp_path / "logs").mkdir()
+    cfg = Config(
+        data_dir=str(tmp_path),
+        db_path=str(tmp_path / "t.db"),
+        inbox_dir=str(tmp_path / "inbox"),
+        archive_dir=str(tmp_path / "archive"),
+        log_dir=str(tmp_path / "logs"),
+        session=SessionConfig(
+            exchange_timezone="America/Chicago",
+            trade_date_rollover="16:00",
+            archive_job_time="18:00",
+        ),
+        thread_pool=ThreadPoolConfig(max_workers=2),
+        scheduler=SchedulerConfig(heartbeat_seconds=60),
+    )
+    app, services = create_app(cfg, start_background=False)
+    try:
+        conn = connect(cfg.db_path)
+        now = int(_time.time())
+        conn.execute(
+            "INSERT INTO executions (nt_execution_id, account, instrument, timestamp,"
+            " side, original_action, quantity, price, commission, entry_exit,"
+            " source_filename, imported_at) "
+            "VALUES (?, 'sim', 'MNQ JUN26', ?, 'Buy', 'Buy', 1, 100.0, 0.0, 'Entry',"
+            " 'x.csv', 0)",
+            ("e-recent", now - 3600),
+        )
+        conn.close()
+
+        client = app.test_client()
+        resp = client.get("/api/data-health/completeness?days=90")
+        body = resp.get_json()
+        assert "MNQ JUN26" in body["cells"]
+        row = body["cells"]["MNQ JUN26"]
+        # 1m window = 90 days, reach = 7 days -> expected cell is out_of_reach
+        # because 0 bars are present and 83/90 days are beyond reach.
+        assert row["1m"] in ("out_of_reach", "missing", "partial")
+        # 4h should NOT appear in the row at all (dropped from canonical).
+        assert "4h" not in row
+        assert "1wk" in row
+        assert "1mo" in row
+    finally:
+        services.stop()

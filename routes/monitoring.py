@@ -4,12 +4,17 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
-from services.ohlc.gap_detection import _expected_slots, find_gaps, timeframe_seconds
+from services.ohlc.gap_detection import (
+    _expected_slots,
+    classify_window,
+    find_gaps,
+    timeframe_seconds,
+)
 from services.ohlc.store import list_times
 
 log = get_logger("http.monitoring")
 
-CANONICAL_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"]
+CANONICAL_TIMEFRAMES = ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"]
 DATA_HEALTH_LOOKBACK_DAYS = 7
 ACTIVE_INSTRUMENTS_LOOKBACK_DAYS = 90
 
@@ -47,7 +52,12 @@ def build_monitoring_blueprint() -> Blueprint:
                 cells[instrument] = {}
                 for tf in CANONICAL_TIMEFRAMES:
                     cells[instrument][tf] = _cell_status(
-                        conn, instrument=instrument, timeframe=tf, start=start, end=now
+                        conn,
+                        instrument=instrument,
+                        timeframe=tf,
+                        start=start,
+                        end=now,
+                        now=now,
                     )
         finally:
             conn.close()
@@ -113,16 +123,48 @@ def build_monitoring_blueprint() -> Blueprint:
             return jsonify({"error": f"job '{job_id}' not found"}), 404
         return jsonify({"ok": True, "job_id": job_id})
 
+    @bp.get("/api/data-health/maintainer")
+    def data_health_maintainer():
+        services = _services()
+        scheduler = services.scheduler
+        job = scheduler.get_job("ohlc_coverage_maintainer")
+        history = services._job_history.get("ohlc_coverage_maintainer", [])
+        last = next(iter(history), None) if history else None
+        token_bucket = current_app.config.get("FTL_OHLC_TOKEN_BUCKET")
+        tb_stats = token_bucket.stats() if token_bucket is not None else {}
+        next_run_time = getattr(job, "next_run_time", None) if job else None
+        return jsonify(
+            {
+                "next_run_at": (
+                    next_run_time.timestamp() if next_run_time else None
+                ),
+                "last_run_at": last["started_at"] if last else None,
+                "last_run_status": last["status"] if last else None,
+                "token_bucket": tb_stats,
+            }
+        )
+
     return bp
 
 
-def _cell_status(conn, *, instrument: str, timeframe: str, start: int, end: int) -> str:
+def _cell_status(
+    conn, *, instrument: str, timeframe: str, start: int, end: int, now: int
+) -> str:
     """Compute completeness status for one instrument × timeframe cell."""
-    expected = _expected_slots(instrument, timeframe, start, end)
-    if not expected:
+    summary = classify_window(
+        conn,
+        instrument=instrument,
+        timeframe=timeframe,
+        start=start,
+        end=end,
+        now=now,
+    )
+    if summary["expected"] == 0:
         return "session_closed"
-    gaps = find_gaps(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
-    if not gaps:
+    if summary["out_of_reach"] == summary["expected"]:
+        return "out_of_reach"
+    if summary["missing"] == 0 and summary["present"] > 0:
         return "complete"
-    present = list_times(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
-    return "missing" if not present else "partial"
+    if summary["present"] == 0 and summary["out_of_reach"] < summary["expected"]:
+        return "missing"
+    return "partial"
