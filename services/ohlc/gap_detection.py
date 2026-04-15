@@ -3,6 +3,7 @@ from datetime import UTC, datetime, time
 from zoneinfo import ZoneInfo
 
 from services.instruments import default_session
+from services.ohlc.reach import PROVIDER_REACH
 from services.ohlc.store import list_times
 
 _TIMEFRAME_SECONDS: dict[str, int] = {
@@ -105,3 +106,38 @@ def find_gaps(
     if run_start is not None:
         gaps.append((run_start, prev_slot + stride))  # type: ignore[operator]
     return gaps
+
+
+def classify_window(
+    conn: sqlite3.Connection,
+    *,
+    instrument: str,
+    timeframe: str,
+    start: int,
+    end: int,
+    now: int,
+) -> dict:
+    """Summarize a window as {expected, present, missing, out_of_reach}.
+
+    A slot is `out_of_reach` if the provider cannot serve it even on a
+    fresh fetch (yfinance 1m -> only last 7 days). Everything beyond the
+    reach threshold is classified as out_of_reach, not missing.
+    """
+    if start >= end:
+        return {"expected": 0, "present": 0, "missing": 0, "out_of_reach": 0}
+    slots = _expected_slots(instrument, timeframe, start, end)
+    reach = PROVIDER_REACH.get(timeframe, PROVIDER_REACH["1d"])
+    reach_cutoff = now - reach
+    reachable = [s for s in slots if s >= reach_cutoff]
+    out_of_reach = len(slots) - len(reachable)
+    present = set(
+        list_times(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
+    )
+    present_count = sum(1 for s in reachable if s in present)
+    missing = len(reachable) - present_count
+    return {
+        "expected": len(slots),
+        "present": present_count,
+        "missing": missing,
+        "out_of_reach": out_of_reach,
+    }

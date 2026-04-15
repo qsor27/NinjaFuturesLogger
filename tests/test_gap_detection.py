@@ -97,3 +97,30 @@ def test_skips_daily_break(migrated_db):
     finally:
         conn.close()
     assert gaps == []
+
+
+def test_classify_window_marks_slots_beyond_reach_as_out_of_reach(tmp_path):
+    from pathlib import Path
+
+    from db import connect
+    from migrations import run_migrations
+    from services.ohlc.gap_detection import classify_window
+
+    db = tmp_path / "ftl.db"
+    conn = connect(db)
+    run_migrations(conn, Path("migrations"))
+    now = 1_000_000_000
+    summary = classify_window(
+        conn,
+        instrument="MNQ JUN26",
+        timeframe="1m",
+        start=now - 30 * 86400,
+        end=now,
+        now=now,
+    )
+    assert summary["expected"] > 0
+    assert summary["present"] == 0
+    assert summary["out_of_reach"] > 0
+    assert summary["missing"] > 0
+    reachable = summary["expected"] - summary["out_of_reach"]
+    assert 4000 < reachable < 12000
