@@ -95,3 +95,53 @@ def test_fetch_volume_nan_becomes_zero(monkeypatch):
     monkeypatch.setattr(yfs, "_download", lambda *a, **k: _FakeDF(rows))
     bars = YfinanceSource().fetch("MNQ", "1m", 1_700_000_000, 1_700_000_120)
     assert bars[0].volume == 0
+
+
+def test_yfinance_uses_contract_symbol_for_suffixed_instrument(monkeypatch, tmp_path):
+    from services.instruments import set_registry_path
+    from services.ohlc import yfinance_source as yf_mod
+    from services.ohlc.yfinance_source import YfinanceSource
+    import json
+    import pandas as pd
+
+    path = tmp_path / "instruments.json"
+    path.write_text(
+        json.dumps(
+            {
+                "MNQ": {
+                    "display_name": "Micro E-mini Nasdaq-100",
+                    "multiplier": 2.0,
+                    "tick_size": 0.25,
+                    "sources": {
+                        "yfinance": {
+                            "continuous": "MNQ=F",
+                            "contract_template": "{ROOT}{M}{YY}.CME",
+                        },
+                        "stooq": {
+                            "continuous": "mnq.f",
+                            "contract_template": None,
+                        },
+                    },
+                    "session": {
+                        "timezone": "America/Chicago",
+                        "open": "17:00",
+                        "close": "16:00",
+                        "daily_break_start": "16:00",
+                        "daily_break_end": "17:00",
+                    },
+                }
+            }
+        )
+    )
+    set_registry_path(path)
+
+    seen = {}
+
+    def fake_download(symbol, *, start, end, interval):
+        seen["symbol"] = symbol
+        return pd.DataFrame()
+
+    monkeypatch.setattr(yf_mod, "_download", fake_download)
+    bars = YfinanceSource().fetch("MNQ JUN26", "1h", 0, 3600)
+    assert seen["symbol"] == "MNQM26.CME"
+    assert bars == []

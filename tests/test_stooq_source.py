@@ -84,3 +84,46 @@ def test_fetch_propagates_transport_error(monkeypatch):
     monkeypatch.setattr(ss, "_http_get", boom)
     with pytest.raises(RuntimeError):
         StooqSource().fetch("MNQ", "1d", 0, 9_999_999_999)
+
+
+def test_stooq_refuses_suffixed_instrument(monkeypatch, tmp_path):
+    from services.instruments import set_registry_path
+    from services.ohlc import stooq_source as stooq_mod
+    from services.ohlc.stooq_source import StooqSource
+    import json
+
+    path = tmp_path / "instruments.json"
+    path.write_text(
+        json.dumps(
+            {
+                "MNQ": {
+                    "display_name": "Micro E-mini Nasdaq-100",
+                    "multiplier": 2.0,
+                    "tick_size": 0.25,
+                    "sources": {
+                        "yfinance": {"continuous": "MNQ=F", "contract_template": None},
+                        "stooq": {"continuous": "mnq.f", "contract_template": None},
+                    },
+                    "session": {
+                        "timezone": "America/Chicago",
+                        "open": "17:00",
+                        "close": "16:00",
+                        "daily_break_start": "16:00",
+                        "daily_break_end": "17:00",
+                    },
+                }
+            }
+        )
+    )
+    set_registry_path(path)
+
+    called = {"n": 0}
+
+    def fake_http_get(url):
+        called["n"] += 1
+        return ""
+
+    monkeypatch.setattr(stooq_mod, "_http_get", fake_http_get)
+    bars = StooqSource().fetch("MNQ JUN26", "1d", 0, 3600)
+    assert bars == []
+    assert called["n"] == 0
