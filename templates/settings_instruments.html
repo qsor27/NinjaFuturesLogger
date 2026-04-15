@@ -1,20 +1,40 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="settings-page" id="settings-instruments" data-endpoint="/api/config/instruments">
-  <h1>Instruments</h1>
-  <p class="muted">Changes take effect immediately for new fetches and P&amp;L computation.</p>
-  <div class="instruments-toolbar">
-    <button id="new-instrument-btn" type="button">Add instrument</button>
+<div class="settings-shell" id="settings-instruments" data-endpoint="/api/config/instruments">
+
+  <div class="settings-page-header">
+    <h1>Settings</h1>
   </div>
-  <table class="instruments-table">
-    <thead>
-      <tr>
-        <th>Symbol</th><th>Display name</th><th>Multiplier</th><th>Tick</th>
-        <th>yfinance</th><th>stooq</th><th>Session</th><th>Actions</th>
-      </tr>
-    </thead>
-    <tbody id="instruments-tbody"></tbody>
-  </table>
+
+  <nav class="settings-tabs">
+    <a href="/settings/instruments" class="settings-tab active">Instruments</a>
+    <a href="/settings/chart" class="settings-tab">Chart Defaults</a>
+    <a href="/settings/custom-fields" class="settings-tab">Custom Fields</a>
+  </nav>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Instruments</span>
+      <button id="new-instrument-btn" type="button" class="btn btn-accent btn-sm">+ Add instrument</button>
+    </div>
+    <table class="dark-table instruments-table">
+      <thead>
+        <tr>
+          <th>Symbol</th><th>Display name</th><th>Multiplier</th><th>Tick</th>
+          <th>yfinance</th><th>stooq</th><th>Session</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="instruments-tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Coverage</span>
+    </div>
+    <div id="coverage-rows"></div>
+  </div>
+
   <dialog id="instrument-dialog">
     <form id="instrument-form" method="dialog">
       <h2 id="dialog-title">Edit instrument</h2>
@@ -33,13 +53,12 @@
         <label>Break end <input name="session_break_end" placeholder="HH:MM"></label>
       </fieldset>
       <div class="dialog-actions">
-        <button type="button" id="dialog-cancel">Cancel</button>
-        <button type="submit">Save</button>
+        <button type="button" id="dialog-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-accent">Save</button>
       </div>
     </form>
   </dialog>
-  <h2 style="margin-top:2em">Coverage</h2>
-  <div id="coverage-rows"></div>
-</section>
+
+</div>
 <script type="module" src="{{ url_for('static', filename='js/settings_instruments.js') }}"></script>
 {% endblock %}
