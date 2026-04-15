@@ -15,7 +15,7 @@ async function refresh() {
   for (const [symbol, cfg] of Object.entries(body.instruments).sort()) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td></td><td></td><td></td><td></td><td></td><td></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       <td><button data-act="edit"></button> <button data-act="del"></button></td>
     `;
     const cells = tr.querySelectorAll("td");
@@ -25,7 +25,10 @@ async function refresh() {
     cells[3].textContent = cfg.tick_size;
     cells[4].textContent = cfg.sources?.yfinance?.continuous ?? "";
     cells[5].textContent = cfg.sources?.stooq?.continuous ?? "";
-    const [editBtn, delBtn] = cells[6].querySelectorAll("button");
+    const s = cfg.session;
+    cells[6].textContent = s ? `${s.timezone} · ${s.open}–${s.close}` : "";
+    cells[6].title = s ? `Break ${s.daily_break_start}–${s.daily_break_end}` : "";
+    const [editBtn, delBtn] = cells[7].querySelectorAll("button");
     editBtn.textContent = "Edit";
     delBtn.textContent = "Delete";
     editBtn.addEventListener("click", () => openDialog(symbol, cfg));
