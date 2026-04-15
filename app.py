@@ -1,3 +1,4 @@
+import calendar
 import time as _time
 from datetime import datetime
 from pathlib import Path
@@ -12,9 +13,9 @@ from config import Config
 from db import connect
 from logging_config import configure_logging, get_logger
 from migrations import run_migrations
+from migrations_python import apply_json_migrations
 from routes import health as health_routes
 from routes.imports import build_imports_blueprint
-from routes.links import build_links_blueprint
 from routes.monitoring import build_monitoring_blueprint
 from routes.ohlc import build_ohlc_blueprint
 from routes.pages import build_pages_blueprint
@@ -24,9 +25,14 @@ from routes.stats import build_stats_blueprint
 from routes.user_metadata import build_user_metadata_blueprint
 from services.import_pipeline import ImportPipeline
 from services.import_watchdog import TickHandler
-from services.instruments import DEFAULT_TIMEFRAMES
 from services.integrity import run_integrity_diff
+from services.ohlc.coverage_maintainer import (
+    coverage_maintainer_tick,
+    historical_sweep_tick,
+)
+from services.ohlc.coverage_state import list_coverage, refresh_instrument_coverage_state
 from services.ohlc.jobs import FetchJobRegistry
+from services.ohlc.rate_limiter import TokenBucket
 from services.ohlc.registry import build_default_registry
 from services.time_utils import resolve_current_trade_date
 
@@ -48,6 +54,8 @@ def create_app(
         run_migrations(conn, Path("migrations"))
     finally:
         conn.close()
+
+    apply_json_migrations(Path(config.data_dir) / "config" / "instruments.json")
 
     from services.instruments import get_registry, set_registry_path
 
@@ -76,47 +84,20 @@ def create_app(
     ohlc_registry = build_default_registry(clock=lambda: int(_time.time()))
     ohlc_jobs = FetchJobRegistry()
 
-    def _ohlc_hook(_result, parsed, affected):
-        if not parsed:
-            return
+    token_bucket = TokenBucket(capacity=30, refill_per_sec=0.5, clock=_time.monotonic)
+
+    def _fetch(*, db_path, instrument, timeframe, start, end):
         from services.ohlc.fetcher import fetch_range  # deferred to allow tests to monkeypatch
 
-        min_ts = min(e.timestamp for e in parsed)
-        max_ts = max(e.timestamp for e in parsed)
-        start = min_ts - 3600
-        end = max_ts + 3600
-        for _account, instrument in affected:
-            for timeframe in DEFAULT_TIMEFRAMES:
-
-                def _run(inst=instrument, tf=timeframe, st=start, en=end):
-                    try:
-                        fetch_range(
-                            db_path=config.db_path,
-                            registry=ohlc_registry,
-                            instrument=inst,
-                            timeframe=tf,
-                            start=st,
-                            end=en,
-                        )
-                    except Exception:
-                        log.exception(
-                            "ohlc fetch failed",
-                            extra={"inst": inst, "tf": tf},
-                        )
-
-                ohlc_jobs.submit(
-                    services.pool,
-                    _run,
-                    meta={
-                        "instrument": instrument,
-                        "timeframe": timeframe,
-                        "start": start,
-                        "end": end,
-                        "trigger": "post_import",
-                    },
-                )
-
-    pipeline.post_tick_hooks.append(_ohlc_hook)
+        fetch_range(
+            db_path=db_path,
+            registry=ohlc_registry,
+            instrument=instrument,
+            timeframe=timeframe,
+            start=start,
+            end=end,
+            token_bucket=token_bucket,
+        )
 
     app = Flask(__name__)
     app.config["BACKGROUND_SERVICES"] = services
@@ -130,13 +111,13 @@ def create_app(
     app.config["FTL_OHLC_REGISTRY"] = ohlc_registry
     app.config["FTL_OHLC_JOBS"] = ohlc_jobs
     app.config["FTL_OHLC_POOL"] = services.pool
+    app.config["FTL_OHLC_TOKEN_BUCKET"] = token_bucket
 
     app.register_blueprint(health_routes.bp)
     app.register_blueprint(build_imports_blueprint())
     app.register_blueprint(build_positions_blueprint())
     app.register_blueprint(build_ohlc_blueprint())
     app.register_blueprint(build_user_metadata_blueprint())
-    app.register_blueprint(build_links_blueprint())
     app.register_blueprint(build_settings_blueprint())
     app.register_blueprint(build_pages_blueprint())
     app.register_blueprint(build_stats_blueprint())
@@ -157,50 +138,89 @@ def create_app(
         replace_existing=True,
     )
 
-    def _refresh(window_seconds: int) -> None:
-        now = int(_time.time())
-        start = now - window_seconds
-        seven_days_ago = now - 7 * 86400
-        from services.ohlc.fetcher import fetch_range
+    services.scheduler.add_job(
+        lambda: coverage_maintainer_tick(
+            db_path=config.db_path, fetch_fn=_fetch, now=int(_time.time())
+        ),
+        trigger=IntervalTrigger(minutes=30),
+        id="ohlc_coverage_maintainer",
+        replace_existing=True,
+    )
+    services.scheduler.add_job(
+        lambda: historical_sweep_tick(
+            db_path=config.db_path, fetch_fn=_fetch, now=int(_time.time())
+        ),
+        trigger=IntervalTrigger(hours=4),
+        id="ohlc_historical_sweep",
+        replace_existing=True,
+    )
 
+    def _fetch_tf_for_active(tf: str, *, window_seconds: int) -> None:
         conn = connect(config.db_path)
         try:
-            rows = conn.execute(
-                "SELECT DISTINCT instrument FROM executions WHERE timestamp >= ?",
-                (seven_days_ago,),
-            ).fetchall()
+            now = int(_time.time())
+            refresh_instrument_coverage_state(conn, now=now)
+            rows = [r for r in list_coverage(conn) if r.state == "active"]
         finally:
             conn.close()
+        end = int(_time.time())
+        start = end - window_seconds
         for row in rows:
-            instrument = row["instrument"]
-            for timeframe in DEFAULT_TIMEFRAMES:
-                try:
-                    fetch_range(
-                        db_path=config.db_path,
-                        registry=ohlc_registry,
-                        instrument=instrument,
-                        timeframe=timeframe,
-                        start=start,
-                        end=now,
-                    )
-                except Exception:
-                    log.exception(
-                        "scheduled ohlc refresh failed",
-                        extra={"inst": instrument, "tf": timeframe},
-                    )
+            try:
+                _fetch(
+                    db_path=config.db_path,
+                    instrument=row.instrument,
+                    timeframe=tf,
+                    start=start,
+                    end=end,
+                )
+            except Exception:
+                log.exception(
+                    "scheduled refresh failed",
+                    extra={"instrument": row.instrument, "tf": tf},
+                )
 
     services.scheduler.add_job(
-        lambda: _refresh(6 * 3600),
-        trigger=IntervalTrigger(minutes=15),
-        id="ohlc_refresh_recent",
+        lambda: _fetch_tf_for_active("1d", window_seconds=10 * 365 * 86400),
+        trigger=CronTrigger(hour=16, minute=1, timezone="America/Chicago"),
+        id="ohlc_daily_refresh",
         replace_existing=True,
     )
     services.scheduler.add_job(
-        lambda: _refresh(7 * 86400),
-        trigger=IntervalTrigger(hours=4),
-        id="ohlc_refresh_week",
+        lambda: _fetch_tf_for_active("1wk", window_seconds=10 * 365 * 86400),
+        trigger=CronTrigger(
+            day_of_week="fri", hour=16, minute=1, timezone="America/Chicago"
+        ),
+        id="ohlc_weekly_refresh",
         replace_existing=True,
     )
+
+    def _run_monthly():
+        _fetch_tf_for_active("1mo", window_seconds=40 * 365 * 86400)
+        _schedule_next_monthly()
+
+    def _schedule_next_monthly():
+        tz = ZoneInfo("America/Chicago")
+        now_local = datetime.now(tz)
+        last_day = calendar.monthrange(now_local.year, now_local.month)[1]
+        run_date = now_local.replace(
+            day=last_day, hour=16, minute=1, second=0, microsecond=0
+        )
+        if run_date <= now_local:
+            m = now_local.month + 1
+            y = now_local.year + (1 if m > 12 else 0)
+            m = ((m - 1) % 12) + 1
+            last_day = calendar.monthrange(y, m)[1]
+            run_date = run_date.replace(year=y, month=m, day=last_day)
+        services.scheduler.add_job(
+            _run_monthly,
+            trigger="date",
+            run_date=run_date,
+            id="ohlc_monthly_refresh",
+            replace_existing=True,
+        )
+
+    _schedule_next_monthly()
 
     if start_background:
         services.start(handler=TickHandler(pipeline))
