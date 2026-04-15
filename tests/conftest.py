@@ -5,6 +5,15 @@ import pytest
 from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 from db import connect
 from migrations import run_migrations
+from services.instruments import set_registry_path
+
+
+@pytest.fixture(autouse=True)
+def _reset_instrument_registry():
+    """Restore the default registry path after every test so tests that
+    call set_registry_path(tmp_path/…) don't leak into later tests."""
+    yield
+    set_registry_path(Path("data/config/instruments.json"))
 
 
 @pytest.fixture
