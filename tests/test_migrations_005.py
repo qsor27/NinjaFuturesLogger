@@ -44,41 +44,6 @@ def test_execution_flags_shape(tmp_path: Path):
         conn.close()
 
 
-def test_link_groups_shape(tmp_path: Path):
-    conn = _migrate(tmp_path)
-    try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(link_groups)").fetchall()}
-        assert cols == {"link_group_id", "label", "created_at"}
-    finally:
-        conn.close()
-
-
-def test_position_links_shape(tmp_path: Path):
-    conn = _migrate(tmp_path)
-    try:
-        cols = {r[1] for r in conn.execute("PRAGMA table_info(position_links)").fetchall()}
-        assert cols == {
-            "link_group_id",
-            "account",
-            "instrument",
-            "entry_execution_id",
-            "ordinal",
-        }
-        pk_cols = sorted(
-            r[1] for r in conn.execute("PRAGMA table_info(position_links)").fetchall() if r[5] > 0
-        )
-        assert pk_cols == [
-            "account",
-            "entry_execution_id",
-            "instrument",
-            "link_group_id",
-        ]
-        fks = conn.execute("PRAGMA foreign_key_list(position_links)").fetchall()
-        assert any(fk[2] == "link_groups" and fk[6] == "CASCADE" for fk in fks)
-    finally:
-        conn.close()
-
-
 def test_cascade_delete_execution_cleans_note_and_flag(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:

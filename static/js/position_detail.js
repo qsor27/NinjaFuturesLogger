@@ -17,7 +17,6 @@ const chartRoot = document.getElementById("chart-root");
 const notesPanel = document.getElementById("notes-panel");
 const reviewedToggle = document.getElementById("reviewed-toggle");
 const executionsRoot = document.getElementById("executions-root");
-const linksPanel = document.getElementById("links-panel");
 const deleteBtn = document.getElementById("delete-button");
 
 const ENTRY_KEY = `${account}/${instrument}/${entryExecutionId}`;
@@ -155,21 +154,6 @@ document.addEventListener("chart:execution-clicked", (ev) => {
   if (id) flashRow(id);
 });
 
-function renderLinksPanel() {
-  linksPanel.innerHTML = "";
-  const btn = document.createElement("button");
-  setText(btn, "Add this position to a new link group");
-  btn.addEventListener("click", async () => {
-    const label = prompt("Link group label (optional):", "");
-    const resp = await postJSON("/api/links", {
-      label: label || null,
-      members: [{ account, instrument, entry_execution_id: entryExecutionId }],
-    });
-    alert(`Created link group ${resp.link_group_id}. Edit members on /links/${resp.link_group_id}.`);
-  });
-  linksPanel.appendChild(btn);
-}
-
 deleteBtn.addEventListener("click", async () => {
   const detail = await fetchJSON(DETAIL_URL);
   const realIds = [...new Set(detail.position.execution_ids.map(stripSuffix))];
@@ -192,7 +176,6 @@ deleteBtn.addEventListener("click", async () => {
       mountCustomFields(cfContainer, detail, detail.position.entry_execution_id);
     }
     renderExecutions(execs.executions, detail);
-    renderLinksPanel();
 
     // Mount the chart. PriceChart.init does its own fetches for markers,
     // bars, available timeframes, and source snapshots. It is fire-and-forget

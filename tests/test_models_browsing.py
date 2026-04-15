@@ -1,10 +1,4 @@
-import pytest
-from pydantic import ValidationError
-
 from models.browsing import (
-    LinkGroup,
-    LinkGroupDetail,
-    LinkMember,
     PageMeta,
     PositionListPage,
 )
@@ -30,39 +24,6 @@ def _pos(**overrides):
     )
     base.update(overrides)
     return Position(**base)
-
-
-def test_link_member_minimal():
-    m = LinkMember(account="Sim101", instrument="MNQ", entry_execution_id="a", ordinal=0)
-    assert m.ordinal == 0
-
-
-def test_link_member_rejects_unknown_field():
-    with pytest.raises(ValidationError):
-        LinkMember(account="x", instrument="y", entry_execution_id="z", ordinal=0, bogus=1)
-
-
-def test_link_group_minimal():
-    g = LinkGroup(link_group_id=1, label="trade idea", created_at=100)
-    assert g.label == "trade idea"
-
-
-def test_link_group_nullable_label():
-    g = LinkGroup(link_group_id=1, label=None, created_at=100)
-    assert g.label is None
-
-
-def test_link_group_detail_members_list():
-    g = LinkGroupDetail(
-        link_group_id=1,
-        label=None,
-        created_at=100,
-        members=[
-            LinkMember(account="A", instrument="MNQ", entry_execution_id="a", ordinal=0),
-            LinkMember(account="A", instrument="MNQ", entry_execution_id="b", ordinal=1),
-        ],
-    )
-    assert len(g.members) == 2
 
 
 def test_page_meta_shape():

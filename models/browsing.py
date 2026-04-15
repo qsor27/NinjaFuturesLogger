@@ -6,26 +6,6 @@ from models.position import Position
 Outcome = Literal["winner", "loser", "scratch", "open"]
 
 
-class LinkMember(StrictModel):
-    account: str
-    instrument: str
-    entry_execution_id: str
-    ordinal: int
-
-
-class LinkGroup(StrictModel):
-    link_group_id: int
-    label: str | None
-    created_at: int
-
-
-class LinkGroupDetail(StrictModel):
-    link_group_id: int
-    label: str | None
-    created_at: int
-    members: list[LinkMember]
-
-
 class PageMeta(StrictModel):
     page: int
     page_size: int

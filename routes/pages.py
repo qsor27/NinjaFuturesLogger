@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, render_template, url_for
+from flask import Blueprint, render_template
 
 
 def build_pages_blueprint() -> Blueprint:
@@ -16,16 +16,6 @@ def build_pages_blueprint() -> Blueprint:
             instrument=instrument,
             entry_execution_id=entry_execution_id,
         )
-
-    @bp.get("/links/<int:link_group_id>")
-    def link_group(link_group_id: int):
-        return render_template("link_group.html", link_group_id=link_group_id)
-
-    @bp.get("/links")
-    def links_index():
-        # For now, the link-groups index reuses the positions list as the
-        # landing page. A dedicated index can ship later if there's demand.
-        return redirect(url_for("pages.positions_list"))
 
     @bp.get("/statistics")
     def statistics_page():

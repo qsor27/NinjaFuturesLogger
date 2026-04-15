@@ -29,25 +29,3 @@ def test_position_detail_page_renders_with_data_attrs(tmp_config):
         assert 'src="/static/js/position_detail.js"' in html
     finally:
         services.stop()
-
-
-def test_link_group_page_renders_with_id(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/links/42")
-        assert resp.status_code == 200
-        html = resp.get_data(as_text=True)
-        assert 'data-link-group-id="42"' in html
-        assert 'id="link-root"' in html
-        assert 'src="/static/js/link_group.js"' in html
-    finally:
-        services.stop()
-
-
-def test_links_index_redirects_or_renders_positions(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/links")
-        assert resp.status_code in (200, 302)
-    finally:
-        services.stop()

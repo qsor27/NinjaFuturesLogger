@@ -1,9 +1,6 @@
 from models.bar import AttemptRecord, Bar, FetchResult
 from models.base import StrictModel
 from models.browsing import (
-    LinkGroup,
-    LinkGroupDetail,
-    LinkMember,
     Outcome,
     PageMeta,
     PositionListPage,
@@ -52,9 +49,6 @@ __all__ = [
     "Bar",
     "AttemptRecord",
     "FetchResult",
-    "LinkGroup",
-    "LinkGroupDetail",
-    "LinkMember",
     "Marker",
     "Outcome",
     "PageMeta",

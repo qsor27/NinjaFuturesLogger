@@ -157,17 +157,21 @@ class ImportPipeline:
                 cursor = 0
 
             if size == cursor:
-                return self._finish(
-                    conn,
-                    filename,
-                    started_at,
-                    cursor,
-                    cursor,
-                    lines=[],
-                    parsed=[],
-                    rejects=[],
-                    status="ok",
-                    mtime=mtime,
+                return (
+                    TickResult(
+                        filename=filename,
+                        status="ok",
+                        lines_read=0,
+                        rows_parsed=0,
+                        rows_inserted=0,
+                        rows_skipped_duplicate=0,
+                        rows_rejected=0,
+                        cursor_before=cursor,
+                        cursor_after=cursor,
+                        tick_id=None,
+                        error=None,
+                    ),
+                    [],
                 )
 
             with open(path, "rb") as f:
