@@ -47,6 +47,23 @@ def base_symbol(instrument: str) -> str:
     return instrument.split(" ", 1)[0]
 
 
+def parse_instrument(instrument: str) -> tuple[str, str | None]:
+    """Split a NinjaTrader instrument string into (root, contract_suffix).
+
+    Accepts "MNQ" or "MNQ JUN26". Raises ValueError for empty strings or
+    strings with more than one space. The contract suffix is whatever follows
+    the single space — rendering into a source symbol happens in source_symbol().
+    """
+    if not instrument:
+        raise ValueError("empty instrument string")
+    parts = instrument.split(" ")
+    if len(parts) == 1:
+        return parts[0], None
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    raise ValueError(f"malformed instrument: {instrument!r}")
+
+
 def get_multiplier(instrument: str) -> float:
     """Dollars per point for the instrument. Unknown symbols return 1.0."""
     cfg = _REGISTRY.get(base_symbol(instrument))
