@@ -11,14 +11,24 @@ _STOOQ_INTERVALS: dict[str, str] = {"1d": "d"}
 def _http_get(url: str) -> str:
     """Indirection so tests can monkeypatch without hitting the network.
 
-    Real implementation calls requests.get and returns the response text.
-    Raises requests.HTTPError on 4xx/5xx so the circuit breaker can detect
-    it via .response.status_code.
+    Plan 18: HTTP and connect errors are caught and tagged with a
+    FailureClassification so the breaker can escalate appropriately on
+    rate-limits vs 5xx vs connection failures.
     """
     import requests  # deferred so the test suite never imports it
 
-    resp = requests.get(url, timeout=15)
-    resp.raise_for_status()
+    from services.ohlc._classify import attach_classification, classify_http_error
+
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+    except requests.HTTPError as http_err:
+        cls, retry_after = classify_http_error(http_err)
+        raise attach_classification(
+            http_err, failure_class=cls, retry_after_seconds=retry_after
+        ) from None
+    except (requests.ConnectionError, requests.Timeout) as net_err:
+        raise attach_classification(net_err, failure_class="network") from None
     return resp.text
 
 

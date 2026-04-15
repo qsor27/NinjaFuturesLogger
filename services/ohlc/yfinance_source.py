@@ -16,18 +16,35 @@ def _download(symbol: str, *, start, end, interval):
     Detecting the error via _ERRORS and re-raising restores the spec
     contract: "if an adapter can't produce Bar objects from a response,
     it raises."
+
+    Plan 18: HTTP/network errors from the underlying requests transport
+    are caught and tagged with a FailureClassification so the breaker can
+    escalate appropriately. A bad-symbol lookup (the _ERRORS path) is
+    deliberately left as "other" — a trader typo should not fast-trip the
+    breaker.
     """
+    import requests
     import yfinance as yf  # deferred so the test suite never imports it
     import yfinance.shared as _yfs
 
+    from services.ohlc._classify import attach_classification, classify_http_error
+
     _yfs._ERRORS.pop(symbol, None)  # clear any stale entry from a prior call
 
-    df = yf.Ticker(symbol).history(
-        start=start,
-        end=end,
-        interval=interval,
-        auto_adjust=False,
-    )
+    try:
+        df = yf.Ticker(symbol).history(
+            start=start,
+            end=end,
+            interval=interval,
+            auto_adjust=False,
+        )
+    except requests.HTTPError as http_err:
+        cls, retry_after = classify_http_error(http_err)
+        raise attach_classification(
+            http_err, failure_class=cls, retry_after_seconds=retry_after
+        ) from None
+    except (requests.ConnectionError, requests.Timeout) as net_err:
+        raise attach_classification(net_err, failure_class="network") from None
 
     if symbol in _yfs._ERRORS:
         raise RuntimeError(f"yfinance lookup failed for {symbol!r}: {_yfs._ERRORS[symbol]}")

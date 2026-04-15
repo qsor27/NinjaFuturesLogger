@@ -143,5 +143,13 @@ def test_get_sources_returns_per_source_breaker_state(tmp_config):
         assert names == {"yfinance", "stooq"}
         for s in body["sources"]:
             assert s["state"] == "closed"
+            # Plan 18: adaptive-breaker fields must be surfaced
+            assert "consecutive_trips" in s
+            assert "current_cooldown_seconds" in s
+            assert "next_retry_at" in s
+            assert "last_failure_class" in s
+            assert s["consecutive_trips"] == 0
+            assert s["next_retry_at"] is None
+            assert s["last_failure_class"] is None
     finally:
         pool.shutdown(wait=True)

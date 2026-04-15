@@ -1,3 +1,4 @@
+import random
 from collections.abc import Callable, Iterator
 
 from services.ohlc.circuit_breaker import CircuitBreaker
@@ -24,13 +25,25 @@ class SourceRegistry:
         source: OhlcSource,
         *,
         failure_threshold: int,
-        cooldown_seconds: int,
+        base_cooldown_seconds: int,
+        base_cooldown_rate_limit_seconds: int | None = None,
+        max_cooldown_seconds: int | None = None,
+        backoff_multiplier: float = 2.0,
+        jitter_fraction: float = 0.15,
     ) -> None:
+        # Seed an RNG per source so runs are reproducible and two
+        # sources that trip simultaneously re-probe at different times.
+        rng = random.Random(hash(source.name)).random
         breaker = CircuitBreaker(
             name=source.name,
             failure_threshold=failure_threshold,
-            cooldown_seconds=cooldown_seconds,
+            base_cooldown_seconds=base_cooldown_seconds,
+            base_cooldown_rate_limit_seconds=base_cooldown_rate_limit_seconds,
+            max_cooldown_seconds=max_cooldown_seconds,
+            backoff_multiplier=backoff_multiplier,
+            jitter_fraction=jitter_fraction,
             clock=self._clock,
+            rng=rng,
         )
         self.entries.append((source, breaker))
 
@@ -49,11 +62,29 @@ class SourceRegistry:
 def build_default_registry(*, clock: Callable[[], int]) -> SourceRegistry:
     """Default order: yfinance primary, stooq fallback.
 
-    The breaker parameters match doc 14:
-    - yfinance: 3 failures, 600s cooldown
-    - stooq:    3 failures, 1800s cooldown
+    Breaker tuning (plan 18):
+    - yfinance: 3 misc failures trips; base 5m cooldown on server/network;
+      15m on rate-limit; 2× escalation per re-open; 4h cap.
+    - stooq:    3 misc failures trips; base 10m cooldown on server/network;
+      30m on rate-limit; 2× escalation per re-open; 6h cap.
     """
     reg = SourceRegistry(clock=clock)
-    reg.register(YfinanceSource(), failure_threshold=3, cooldown_seconds=600)
-    reg.register(StooqSource(), failure_threshold=3, cooldown_seconds=1800)
+    reg.register(
+        YfinanceSource(),
+        failure_threshold=3,
+        base_cooldown_seconds=300,
+        base_cooldown_rate_limit_seconds=900,
+        max_cooldown_seconds=14400,
+        backoff_multiplier=2.0,
+        jitter_fraction=0.15,
+    )
+    reg.register(
+        StooqSource(),
+        failure_threshold=3,
+        base_cooldown_seconds=600,
+        base_cooldown_rate_limit_seconds=1800,
+        max_cooldown_seconds=21600,
+        backoff_multiplier=2.0,
+        jitter_fraction=0.15,
+    )
     return reg

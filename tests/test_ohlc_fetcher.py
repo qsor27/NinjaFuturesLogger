@@ -40,7 +40,7 @@ def _registry_with(sources, *, threshold=3, cooldown=10):
 
     reg = SourceRegistry(clock=clock)
     for s in sources:
-        reg.register(s, failure_threshold=threshold, cooldown_seconds=cooldown)
+        reg.register(s, failure_threshold=threshold, base_cooldown_seconds=cooldown)
     return reg
 
 

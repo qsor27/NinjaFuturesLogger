@@ -27,15 +27,20 @@ async function renderSourcesBand() {
     const stateColor = s.state === "closed" ? "#0a7f0a" : s.state === "open" ? "#b00020" : "#c07000";
     const lastSuccess = s.last_success_at ? new Date(s.last_success_at * 1000).toLocaleString() : "—";
     const lastFail = s.last_failure_at ? new Date(s.last_failure_at * 1000).toLocaleString() : "—";
-    const nextRetry = s.state === "open" && s.opened_at
-      ? new Date((s.opened_at + 600) * 1000).toLocaleString()
+    // Plan 18: breaker reports next_retry_at directly (adaptive cooldown).
+    const nextRetry = s.next_retry_at
+      ? new Date(s.next_retry_at * 1000).toLocaleString()
       : "—";
+    const tripsSuffix = s.consecutive_trips > 1 ? ` (trip ${s.consecutive_trips})` : "";
+    const errTooltip = s.last_failure_class
+      ? ` title="${escHtml(s.last_failure_class)}"`
+      : "";
     return `<tr>
       <td>${escHtml(s.name)}</td>
-      <td style="color:${stateColor};font-weight:600">${escHtml(s.state)}</td>
+      <td style="color:${stateColor};font-weight:600">${escHtml(s.state)}${tripsSuffix}</td>
       <td>${lastSuccess}</td>
       <td>${lastFail}</td>
-      <td>${escHtml(s.last_error ?? "—")}</td>
+      <td${errTooltip}>${escHtml(s.last_error ?? "—")}</td>
       <td>${nextRetry}</td>
     </tr>`;
   });

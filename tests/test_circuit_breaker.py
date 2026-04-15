@@ -29,7 +29,7 @@ def _make(clock: _Clock, *, threshold: int = 3, cooldown: int = 600):
     return CircuitBreaker(
         name="test",
         failure_threshold=threshold,
-        cooldown_seconds=cooldown,
+        base_cooldown_seconds=cooldown,
         clock=clock,
     )
 
@@ -106,6 +106,10 @@ def test_half_open_success_closes():
 
 
 def test_half_open_failure_reopens_with_fresh_cooldown():
+    # Plan 18: re-open after half-open failure escalates the cooldown
+    # (trip 2 = 2× base with default multiplier). Fresh-window behavior
+    # is preserved — the cooldown timer restarts — but the window length
+    # doubles.
     clock = _Clock()
     cb = _make(clock, cooldown=10)
     for _ in range(3):
@@ -115,10 +119,10 @@ def test_half_open_failure_reopens_with_fresh_cooldown():
     cb.record_failure(RuntimeError("still broken"))
     assert cb.state == "open"
 
-    clock.advance(5)
-    assert cb.allows() is False
-    clock.advance(6)
-    assert cb.allows() is True
+    clock.advance(10)
+    assert cb.allows() is False  # 10s elapsed of 20s cooldown
+    clock.advance(11)
+    assert cb.allows() is True  # 21s elapsed — past 20s cooldown
 
 
 def test_status_snapshot_returns_introspection_dict():

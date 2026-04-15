@@ -29,8 +29,8 @@ def test_sources_for_skips_open_breakers():
     yf = YfinanceSource()
     st = StooqSource()
     reg = SourceRegistry(clock=_clock)
-    reg.register(yf, failure_threshold=3, cooldown_seconds=600)
-    reg.register(st, failure_threshold=3, cooldown_seconds=1800)
+    reg.register(yf, failure_threshold=3, base_cooldown_seconds=600)
+    reg.register(st, failure_threshold=3, base_cooldown_seconds=1800)
 
     # Trip yfinance breaker
     yf_breaker = reg.entries[0][1]
@@ -45,3 +45,22 @@ def test_status_snapshots_returns_one_per_source():
     reg = build_default_registry(clock=_clock)
     snaps = reg.status_snapshots()
     assert {s["name"] for s in snaps} == {"yfinance", "stooq"}
+
+
+def test_default_registry_has_plan18_tuning():
+    reg = build_default_registry(clock=_clock)
+    yf = reg.entries[0][1]
+    assert yf.failure_threshold == 3
+    assert yf.base_cooldown_seconds == 300
+    assert yf.base_cooldown_rate_limit_seconds == 900
+    assert yf.max_cooldown_seconds == 14400
+    assert yf.backoff_multiplier == 2.0
+    assert yf.jitter_fraction == 0.15
+
+    st = reg.entries[1][1]
+    assert st.failure_threshold == 3
+    assert st.base_cooldown_seconds == 600
+    assert st.base_cooldown_rate_limit_seconds == 1800
+    assert st.max_cooldown_seconds == 21600
+    assert st.backoff_multiplier == 2.0
+    assert st.jitter_fraction == 0.15
