@@ -4,6 +4,7 @@ from db import connect
 from logging_config import get_logger
 from models.bar import AttemptRecord, Bar, FetchResult
 from services.ohlc.gap_detection import find_gaps
+from services.ohlc.rate_limiter import TokenBucket
 from services.ohlc.registry import SourceRegistry
 from services.ohlc.store import insert_many
 
@@ -18,6 +19,7 @@ def fetch_range(
     timeframe: str,
     start: int,
     end: int,
+    token_bucket: TokenBucket | None = None,
 ) -> FetchResult:
     """The single OHLC orchestration entry point.
 
@@ -79,7 +81,11 @@ def fetch_range(
                 )
                 continue
             try:
-                bars = source.fetch(instrument, timeframe, gap_start, gap_end)
+                if token_bucket is not None:
+                    with token_bucket.acquire(timeout=60):
+                        bars = source.fetch(instrument, timeframe, gap_start, gap_end)
+                else:
+                    bars = source.fetch(instrument, timeframe, gap_start, gap_end)
                 breaker.record_success()
                 bars_collected.extend(bars)
                 attempts.append(
@@ -92,6 +98,16 @@ def fetch_range(
                 )
                 gap_filled = True
                 break
+            except TimeoutError as te:
+                attempts.append(
+                    AttemptRecord(
+                        source=source.name,
+                        outcome="skipped",
+                        count=0,
+                        error=repr(te),
+                    )
+                )
+                continue
             except Exception as e:
                 breaker.record_failure(e)
                 attempts.append(

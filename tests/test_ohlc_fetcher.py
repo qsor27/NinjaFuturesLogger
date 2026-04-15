@@ -174,3 +174,74 @@ def test_no_source_supports_timeframe_returns_no_source_status(migrated_db):
     )
     assert result.status == "no_source_for_timeframe"
     assert result.bars_added == 0
+
+
+def test_fetcher_acquires_token_before_source_call(tmp_path):
+    import time
+    from pathlib import Path
+
+    from db import connect
+    from migrations import run_migrations
+    from models.bar import Bar
+    from services.ohlc.circuit_breaker import CircuitBreaker
+    from services.ohlc.fetcher import fetch_range
+    from services.ohlc.rate_limiter import TokenBucket
+    from services.ohlc.registry import SourceRegistry
+
+    db = tmp_path / "ftl.db"
+    conn = connect(db)
+    run_migrations(conn, Path("migrations"))
+    conn.close()
+
+    class RecordingSource:
+        name = "rec"
+        supported_timeframes = frozenset({"1m"})
+
+        def __init__(self):
+            self.calls = 0
+
+        def fetch(self, instrument, timeframe, start, end):
+            self.calls += 1
+            return [
+                Bar(
+                    instrument=instrument,
+                    timeframe=timeframe,
+                    time=start,
+                    open=1,
+                    high=2,
+                    low=0,
+                    close=1,
+                    volume=1,
+                    source="rec",
+                )
+            ]
+
+    clock = [int(time.time())]
+    reg = SourceRegistry(clock=lambda: clock[0])
+    src = RecordingSource()
+    reg.entries.append(
+        (
+            src,
+            CircuitBreaker(
+                name="rec",
+                failure_threshold=3,
+                base_cooldown_seconds=1,
+                clock=lambda: clock[0],
+            ),
+        )
+    )
+    bucket = TokenBucket(capacity=2, refill_per_sec=0.0, clock=time.monotonic)
+    start_ts = clock[0] - 120
+    end_ts = start_ts + 60
+    res = fetch_range(
+        db_path=db,
+        registry=reg,
+        instrument="MNQ",
+        timeframe="1m",
+        start=start_ts,
+        end=end_ts,
+        token_bucket=bucket,
+    )
+    assert src.calls == 1
+    assert bucket.stats()["acquired_total"] == 1
+    assert res.bars_added == 1
