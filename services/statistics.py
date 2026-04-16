@@ -220,4 +220,7 @@ def _side_stats(positions: list[Position]) -> SideStats:
         position_count=s.total_positions,
         total_pnl=s.total_pnl,
         win_rate=s.win_rate,
+        avg_win=s.avg_win,
+        avg_loss=s.avg_loss,
+        profit_factor=s.profit_factor,
     )
