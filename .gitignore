@@ -17,3 +17,13 @@ data/config/instruments.json
 .claude/
 pip_install.log
 .superpowers/
+
+# Internal development docs — not for public repo
+CLAUDE.md
+docs/rebuild-spec/
+docs/superpowers/
+docs/handoffs/
+docs/agent-runs/
+docs/GrowthIdeas.md
+docs/browser-ac-handoff.md
+docs/browser-acceptance-checklist.md
