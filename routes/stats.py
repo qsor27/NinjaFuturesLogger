@@ -80,4 +80,8 @@ def build_stats_blueprint() -> Blueprint:
     def distribution():
         return _dispatch("distribution")
 
+    @bp.get("/api/stats/by-day-of-week")
+    def by_day_of_week():
+        return _dispatch("by_day_of_week")
+
     return bp

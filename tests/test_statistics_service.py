@@ -277,3 +277,15 @@ def test_distribution(tmp_path):
     r = svc.distribution(StatsFilter())
     assert r.bucket_count == 10
     assert len(r.buckets) == 10
+
+
+def test_by_day_of_week(tmp_path):
+    # Seeded position is on 2026-04-13 = Monday (dow 0)
+    svc = _service(_fresh(tmp_path))
+    r = svc.by_day_of_week(StatsFilter())
+    assert len(r.buckets) == 5
+    assert r.buckets[0].day_name == "Mon"
+    assert r.buckets[0].trades == 1
+    assert r.buckets[0].trading_days == 1
+    # Other days have zero trades
+    assert all(b.trades == 0 for b in r.buckets[1:])

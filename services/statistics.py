@@ -15,6 +15,7 @@ from db import connect
 from models.execution import Execution
 from models.position import Position
 from models.statistics import (
+    DayOfWeekResponse,
     DistributionResponse,
     EquityCurveResponse,
     EquitySeries,
@@ -29,6 +30,7 @@ from models.statistics import (
 from services.positions import build_positions
 from services.statistics_aggregations import (
     _session_date_of,
+    bucket_by_day_of_week,
     bucket_by_hour,
     bucket_by_session_date,
     compute_summary,
@@ -212,6 +214,10 @@ class StatisticsService:
         loaded = self._load_closed_positions(filter)
         buckets = pnl_histogram(loaded.closed_with_pnl, n_buckets=10)
         return DistributionResponse(buckets=buckets, bucket_count=10)
+
+    def by_day_of_week(self, filter: StatsFilter) -> DayOfWeekResponse:
+        loaded = self._load_closed_positions(filter)
+        return DayOfWeekResponse(buckets=bucket_by_day_of_week(loaded.closed_with_pnl))
 
 
 def _side_stats(positions: list[Position]) -> SideStats:
