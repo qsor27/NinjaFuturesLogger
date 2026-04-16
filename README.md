@@ -173,20 +173,38 @@ You should see the NinjaFuturesLogger interface. It will be empty until you star
 
 ## Step 4 — Install the NinjaTrader Indicator
 
-The `ExecutionExporter` indicator runs inside NinjaTrader and writes a CSV file every time you execute a trade. It is a NinjaScript indicator — you import the source file once and NinjaTrader compiles it automatically.
+The `ExecutionExporter` indicator runs inside NinjaTrader and writes a CSV file every time you execute a trade. It is a NinjaScript indicator. NinjaTrader does not have a "import a single `.cs` file" button — you place the source file into NinjaTrader's `Custom` folder and then compile it from inside the NinjaScript Editor. The steps below are the ones that actually work.
 
-### Get the indicator file
+### 4a. Download the indicator file
 
-Download [`ExecutionExporter.cs`](ninjascript/ExecutionExporter.cs) from this repository. You can right-click the **Raw** button and save it anywhere (your Downloads folder is fine).
+Download [`ExecutionExporter.cs`](ninjascript/ExecutionExporter.cs) from this repository. On GitHub, open the file and click the **Download raw file** button (or right-click **Raw** → **Save link as...**). Save it somewhere temporary like your Downloads folder.
 
-### Import into NinjaTrader 8
+### 4b. Find your NinjaTrader `Custom\Indicators` folder
+
+Open File Explorer, click once in the address bar, paste the line below, and press Enter:
+
+```
+%USERPROFILE%\Documents\NinjaTrader 8\bin\Custom\Indicators
+```
+
+Windows will expand `%USERPROFILE%` to your user profile. This resolves correctly whether or not your `Documents` folder is redirected into OneDrive — Windows uses the same path for either case.
+
+If the `Indicators` subfolder does not exist, NinjaTrader 8 is not fully installed yet — open it once first so it creates the folder structure, then come back.
+
+### 4c. Copy the `.cs` file into that folder
+
+Move (or copy) `ExecutionExporter.cs` from your Downloads folder into `...\NinjaTrader 8\bin\Custom\Indicators\`. The file must sit **directly** in `Indicators\` — do not place it inside a sub-folder.
+
+### 4d. Compile inside NinjaTrader
 
 1. Open NinjaTrader 8.
-2. In the top menu, go to **Tools → Edit NinjaScript → Indicator...**
-3. The NinjaScript Editor window opens. In its menu, go to **File → Open**.
-4. Navigate to where you saved `ExecutionExporter.cs` and open it.
-5. Press **F5** (or click the **Compile** button in the toolbar). The Output tab at the bottom should show `Compile succeeded with 0 error(s), 0 warning(s)`.
+2. In the **Control Center** window's top menu, go to **New → NinjaScript Editor**.
+3. In the NinjaScript Editor's left-hand tree, double-click the **Indicators** folder to expand it, then double-click any indicator in the list (for example `ExecutionExporter`, which will be there now that you copied it in). The indicator's source opens in the editor — this is only to give the editor focus so the compile button is active.
+4. Press **F5**. (Alternative: right-click inside the code window and choose **Compile**.)
+5. Watch the **Errors** tab at the bottom of the editor. It should say `0 errors` and the status bar should read something like `Compile succeeded`.
 6. Close the NinjaScript Editor.
+
+If the compile fails with errors that do not mention `ExecutionExporter`, you have a pre-existing broken indicator from elsewhere in `bin\Custom\` — NinjaTrader compiles the entire `Custom` tree into one DLL, so any broken file blocks the whole compile. Fix or remove the offending file and try again.
 
 ---
 
