@@ -59,6 +59,7 @@ class HourBucket(StrictModel):
     hour: int  # 0..23 in display_timezone
     position_count: int
     total_pnl: float
+    win_rate: float | None = None  # wins / (wins + losses) among trades in this hour
 
 
 class HourBucketResponse(StrictModel):
@@ -117,3 +118,18 @@ class DayOfWeekBucket(StrictModel):
 
 class DayOfWeekResponse(StrictModel):
     buckets: list[DayOfWeekBucket]  # always 5 rows, Mon–Fri order
+
+
+class TradesPerDayBucket(StrictModel):
+    trades_per_day: int       # bucket key
+    days: int                 # unique session dates with this trade count
+    total_trades: int         # trades_per_day * days
+    wins: int
+    losses: int
+    total_pnl: float          # sum across those days
+    avg_pnl: float            # total_pnl / days
+    win_rate: float | None    # per-trade win rate on those days
+
+
+class TradesPerDayResponse(StrictModel):
+    buckets: list[TradesPerDayBucket]

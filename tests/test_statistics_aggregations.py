@@ -504,3 +504,126 @@ def test_dow_all_five_days():
     result = bucket_by_day_of_week(positions)
     assert [b.trades for b in result] == [1, 1, 1, 1, 1]
     assert [b.total_pnl for b in result] == [10.0, 20.0, 30.0, 40.0, 50.0]
+
+
+# --- bucket_by_hour: win_rate field ---------------------------------------
+
+
+def test_bucket_by_hour_win_rate_none_when_empty():
+    result = bucket_by_hour([], display_tz=ZoneInfo("America/Chicago"))
+    assert all(b.win_rate is None for b in result)
+
+
+def test_bucket_by_hour_win_rate_single_winner():
+    # 09:00 UTC = 04:00 Chicago; one winning position
+    positions = [_pos(eid="w", entry_time=1776070800, exit_time=1776070860,
+                      dollars_pnl=10.0, commission=0.0)]
+    result = bucket_by_hour(positions, display_tz=ZoneInfo("America/Chicago"))
+    assert result[4].win_rate == 1.0
+    # Hours with no trades remain None
+    assert result[0].win_rate is None
+
+
+def test_bucket_by_hour_win_rate_mixed_same_hour():
+    # Two winners, one loser, all in hour 04 (09:00 UTC)
+    positions = [
+        _pos(eid="w1", entry_time=1776070800, exit_time=1776070860,
+             dollars_pnl=10.0, commission=0.0),
+        _pos(eid="w2", entry_time=1776070820, exit_time=1776070880,
+             dollars_pnl=20.0, commission=0.0),
+        _pos(eid="l1", entry_time=1776070840, exit_time=1776070900,
+             dollars_pnl=-15.0, commission=0.0),
+    ]
+    result = bucket_by_hour(positions, display_tz=ZoneInfo("America/Chicago"))
+    assert result[4].win_rate == pytest.approx(2 / 3)
+
+
+def test_bucket_by_hour_win_rate_scratch_excluded():
+    # Scratches (|pnl| <= commission) should not count toward wins or losses
+    scratch = _pos(eid="s", entry_time=1776070800, exit_time=1776070860,
+                   dollars_pnl=1.0, commission=2.0)
+    result = bucket_by_hour([scratch], display_tz=ZoneInfo("America/Chicago"))
+    assert result[4].position_count == 1
+    assert result[4].win_rate is None  # 0 wins, 0 losses → None
+
+
+# --- bucket_by_trades_per_day ---------------------------------------------
+
+
+from services.statistics_aggregations import bucket_by_trades_per_day  # noqa: E402,I001
+
+
+def test_tpd_empty_returns_empty():
+    assert bucket_by_trades_per_day([]) == []
+
+
+def test_tpd_single_day_one_trade():
+    positions = [_at(1776070800, eid="a", pnl=100.0)]
+    result = bucket_by_trades_per_day(positions)
+    assert len(result) == 1
+    b = result[0]
+    assert b.trades_per_day == 1
+    assert b.days == 1
+    assert b.total_trades == 1
+    assert b.wins == 1
+    assert b.losses == 0
+    assert b.total_pnl == pytest.approx(100.0)
+    assert b.avg_pnl == pytest.approx(100.0)
+    assert b.win_rate == 1.0
+
+
+def test_tpd_multiple_days_same_bucket():
+    # Two different Mondays each with exactly 1 trade:
+    # Mon 2026-04-13: winner +100, Mon 2026-04-20: loser -50
+    positions = [
+        _pos(eid="w", entry_time=1776070800, exit_time=1776070860,
+             dollars_pnl=100.0, commission=0.0),
+        _pos(eid="l", entry_time=1776675600, exit_time=1776675660,
+             dollars_pnl=-50.0, commission=0.0),
+    ]
+    result = bucket_by_trades_per_day(positions)
+    assert len(result) == 1
+    b = result[0]
+    assert b.trades_per_day == 1
+    assert b.days == 2
+    assert b.wins == 1
+    assert b.losses == 1
+    assert b.total_pnl == pytest.approx(50.0)
+    assert b.avg_pnl == pytest.approx(25.0)
+    assert b.win_rate == pytest.approx(0.5)
+
+
+def test_tpd_per_trade_win_rate_not_per_day():
+    # One day with 3 trades: 2 winners, 1 loser
+    # Per-day success would be 100% (the day was profitable overall)
+    # Per-trade win rate is 2/3 (what we want)
+    positions = [
+        _pos(eid="w1", entry_time=1776070800, exit_time=1776070860,
+             dollars_pnl=100.0, commission=0.0),
+        _pos(eid="w2", entry_time=1776070820, exit_time=1776070880,
+             dollars_pnl=50.0, commission=0.0),
+        _pos(eid="l", entry_time=1776070840, exit_time=1776070900,
+             dollars_pnl=-80.0, commission=0.0),
+    ]
+    result = bucket_by_trades_per_day(positions)
+    assert len(result) == 1
+    b = result[0]
+    assert b.trades_per_day == 3
+    assert b.days == 1
+    assert b.total_trades == 3
+    assert b.wins == 2
+    assert b.losses == 1
+    assert b.win_rate == pytest.approx(2 / 3)
+
+
+def test_tpd_sorted_by_trades_per_day():
+    # One day with 1 trade, another day with 3 trades
+    # Expect buckets in ascending order: 1, 3
+    positions = [
+        _at(1776070800, eid="a", pnl=10.0),
+        _at(1776675600, eid="b", pnl=20.0),
+        _at(1776675620, eid="c", pnl=30.0),
+        _at(1776675640, eid="d", pnl=40.0),
+    ]
+    result = bucket_by_trades_per_day(positions)
+    assert [b.trades_per_day for b in result] == [1, 3]

@@ -289,3 +289,47 @@ def test_by_day_of_week(tmp_path):
     assert r.buckets[0].trading_days == 1
     # Other days have zero trades
     assert all(b.trades == 0 for b in r.buckets[1:])
+
+
+def test_by_hour_display_tz_override(tmp_path):
+    # Seed: entry_time 1776070800 = 2026-04-13 09:00 UTC
+    #   → hour 4 in America/Chicago (default)
+    #   → hour 5 in America/New_York
+    svc = _service(_fresh(tmp_path))
+    r_default = svc.by_hour(StatsFilter())
+    assert r_default.timezone == "America/Chicago"
+    assert r_default.buckets[4].position_count == 1
+
+    r_ny = svc.by_hour(StatsFilter(), display_tz_override="America/New_York")
+    assert r_ny.timezone == "America/New_York"
+    assert r_ny.buckets[5].position_count == 1
+    assert r_ny.buckets[4].position_count == 0
+
+
+def test_by_hour_invalid_tz_falls_back_to_default(tmp_path):
+    svc = _service(_fresh(tmp_path))
+    r = svc.by_hour(StatsFilter(), display_tz_override="Not/A_RealZone")
+    assert r.timezone == "America/Chicago"
+    assert r.buckets[4].position_count == 1
+
+
+def test_by_hour_has_win_rate_field(tmp_path):
+    # The single seeded position is a winner (+$10 × multiplier, 0 commission)
+    svc = _service(_fresh(tmp_path))
+    r = svc.by_hour(StatsFilter())
+    assert r.buckets[4].win_rate == 1.0
+    # Hours with no trades have None
+    assert r.buckets[0].win_rate is None
+
+
+def test_by_trades_per_day(tmp_path):
+    # Seeded: one session date (2026-04-13) with exactly 1 trade
+    svc = _service(_fresh(tmp_path))
+    r = svc.by_trades_per_day(StatsFilter())
+    assert len(r.buckets) == 1
+    b = r.buckets[0]
+    assert b.trades_per_day == 1
+    assert b.days == 1
+    assert b.total_trades == 1
+    assert b.wins == 1
+    assert b.win_rate == 1.0

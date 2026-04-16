@@ -26,6 +26,7 @@ from models.statistics import (
     StatsFilter,
     StatsSummary,
     TimeBucketResponse,
+    TradesPerDayResponse,
 )
 from services.positions import build_positions
 from services.statistics_aggregations import (
@@ -33,6 +34,7 @@ from services.statistics_aggregations import (
     bucket_by_day_of_week,
     bucket_by_hour,
     bucket_by_session_date,
+    bucket_by_trades_per_day,
     compute_summary,
     cumulative_equity,
     per_instrument,
@@ -182,13 +184,30 @@ class StatisticsService:
         )
         return TimeBucketResponse(granularity=granularity, buckets=buckets)
 
-    def by_hour(self, filter: StatsFilter) -> HourBucketResponse:
+    def by_hour(
+        self, filter: StatsFilter, *, display_tz_override: str | None = None
+    ) -> HourBucketResponse:
         loaded = self._load_closed_positions(filter)
-        tz_name = self._config.display_timezone or self._config.session.exchange_timezone
-        tz = ZoneInfo(tz_name)
+        if display_tz_override:
+            try:
+                tz = ZoneInfo(display_tz_override)
+                tz_name = display_tz_override
+            except Exception:
+                # Fall back to configured default on an unparseable IANA name
+                tz_name = self._config.display_timezone or self._config.session.exchange_timezone
+                tz = ZoneInfo(tz_name)
+        else:
+            tz_name = self._config.display_timezone or self._config.session.exchange_timezone
+            tz = ZoneInfo(tz_name)
         return HourBucketResponse(
             timezone=tz_name,
             buckets=bucket_by_hour(loaded.closed_with_pnl, display_tz=tz),
+        )
+
+    def by_trades_per_day(self, filter: StatsFilter) -> TradesPerDayResponse:
+        loaded = self._load_closed_positions(filter)
+        return TradesPerDayResponse(
+            buckets=bucket_by_trades_per_day(loaded.closed_with_pnl)
         )
 
     def by_side(self, filter: StatsFilter) -> SideBreakdown:

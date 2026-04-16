@@ -22,6 +22,7 @@ from models.statistics import (
     InstrumentStats,
     StatsSummary,
     TimeBucket,
+    TradesPerDayBucket,
 )
 from services.outcomes import classify_outcome
 from services.time_utils import compute_session_date
@@ -246,15 +247,38 @@ def bucket_by_hour(
     *,
     display_tz: ZoneInfo,
 ) -> list[HourBucket]:
-    """24 buckets, one per hour of day in `display_tz`. Always continuous."""
+    """24 buckets, one per hour of day in `display_tz`. Always continuous.
+
+    `win_rate` is wins / (wins + losses) among trades entered in that hour,
+    or None when no winners/losers occupy the hour (all scratches or empty).
+    """
     counts = [0] * 24
     pnls = [0.0] * 24
+    wins = [0] * 24
+    n_losses = [0] * 24
     for p in positions:
         local = datetime.fromtimestamp(p.entry_time, tz=display_tz)
         h = local.hour
         counts[h] += 1
         pnls[h] += p.dollars_pnl or 0.0
-    return [HourBucket(hour=h, position_count=counts[h], total_pnl=pnls[h]) for h in range(24)]
+        outcome = classify_outcome(p)
+        if outcome == "winner":
+            wins[h] += 1
+        elif outcome == "loser":
+            n_losses[h] += 1
+    result: list[HourBucket] = []
+    for h in range(24):
+        w, nl = wins[h], n_losses[h]
+        win_rate = w / (w + nl) if (w + nl) > 0 else None
+        result.append(
+            HourBucket(
+                hour=h,
+                position_count=counts[h],
+                total_pnl=pnls[h],
+                win_rate=win_rate,
+            )
+        )
+    return result
 
 
 def cumulative_equity(positions: list[Position]) -> list[EquityPoint]:
@@ -376,6 +400,56 @@ def bucket_by_day_of_week(positions: list[Position]) -> list[DayOfWeekBucket]:
                 avg_pnl=pnl_sums[dow] / td if td > 0 else 0.0,
                 win_rate=w / (w + n_losses) if (w + n_losses) > 0 else None,
                 total_pnl=pnl_sums[dow],
+            )
+        )
+    return result
+
+
+def bucket_by_trades_per_day(positions: list[Position]) -> list[TradesPerDayBucket]:
+    """Group session dates by how many positions were entered on them.
+
+    For each "N trades/day" bucket, `win_rate` is the per-trade win rate of
+    the trades that occurred on those days — i.e. wins / (wins + losses)
+    across all trades on all days in the bucket — not the rate of profitable
+    days. `avg_pnl` is the per-day average P&L for the bucket.
+    """
+    per_day: dict[date, list[Position]] = {}
+    for p in positions:
+        per_day.setdefault(_session_date_of(p), []).append(p)
+
+    agg: dict[int, dict] = {}
+    for _sd, day_positions in per_day.items():
+        k = len(day_positions)
+        if k == 0:
+            continue
+        entry = agg.setdefault(
+            k,
+            {"days": 0, "wins": 0, "losses": 0, "total_pnl": 0.0, "total_trades": 0},
+        )
+        entry["days"] += 1
+        entry["total_trades"] += k
+        for p in day_positions:
+            entry["total_pnl"] += p.dollars_pnl or 0.0
+            outcome = classify_outcome(p)
+            if outcome == "winner":
+                entry["wins"] += 1
+            elif outcome == "loser":
+                entry["losses"] += 1
+
+    result: list[TradesPerDayBucket] = []
+    for k in sorted(agg.keys()):
+        e = agg[k]
+        w, nl = e["wins"], e["losses"]
+        result.append(
+            TradesPerDayBucket(
+                trades_per_day=k,
+                days=e["days"],
+                total_trades=e["total_trades"],
+                wins=w,
+                losses=nl,
+                total_pnl=e["total_pnl"],
+                avg_pnl=e["total_pnl"] / e["days"] if e["days"] > 0 else 0.0,
+                win_rate=w / (w + nl) if (w + nl) > 0 else None,
             )
         )
     return result

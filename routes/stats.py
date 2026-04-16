@@ -66,7 +66,13 @@ def build_stats_blueprint() -> Blueprint:
 
     @bp.get("/api/stats/by-hour")
     def by_hour():
-        return _dispatch("by_hour")
+        try:
+            filter_ = _parse_filter(request.args)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        display_tz = request.args.get("display_tz") or None
+        resp = _service().by_hour(filter_, display_tz_override=display_tz)
+        return jsonify(resp.model_dump())
 
     @bp.get("/api/stats/by-side")
     def by_side():
@@ -83,5 +89,9 @@ def build_stats_blueprint() -> Blueprint:
     @bp.get("/api/stats/by-day-of-week")
     def by_day_of_week():
         return _dispatch("by_day_of_week")
+
+    @bp.get("/api/stats/by-trades-per-day")
+    def by_trades_per_day():
+        return _dispatch("by_trades_per_day")
 
     return bp
