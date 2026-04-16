@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
+from services.instruments import effective_commission, get_multiplier
 from services.integrity_db import mark_ignored, mark_resolved_by_user
 from services.markers import build_markers
 from services.position_filters import PositionFilter
@@ -141,8 +142,25 @@ def build_positions_blueprint() -> Blueprint:
             ).fetchall()
         finally:
             conn.close()
-        filtered = [dict(r) for r in rows if r["nt_execution_id"] in wanted]
-        return jsonify({"executions": filtered})
+        sign = 1 if p.side == "Long" else -1
+        multiplier = get_multiplier(p.instrument)
+        executions = []
+        for r in rows:
+            if r["nt_execution_id"] not in wanted:
+                continue
+            e = dict(r)
+            if e["entry_exit"] == "Exit":
+                eff_comm = effective_commission(p.instrument, e["commission"], e["quantity"])
+                pnl_points = (e["price"] - p.entry_price) * e["quantity"] * sign
+                e["avg_entry_price"] = p.entry_price
+                e["pnl_points"] = round(pnl_points, 4)
+                e["pnl_dollars_net"] = round(pnl_points * multiplier - eff_comm, 2)
+            else:
+                e["avg_entry_price"] = None
+                e["pnl_points"] = None
+                e["pnl_dollars_net"] = None
+            executions.append(e)
+        return jsonify({"executions": executions})
 
     @bp.get("/api/positions/<account>/<instrument>/<entry_execution_id>/markers")
     def get_markers(account: str, instrument: str, entry_execution_id: str):
