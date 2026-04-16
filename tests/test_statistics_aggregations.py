@@ -407,7 +407,7 @@ def test_per_instrument_groups_distinct_symbols():
     assert instruments == ["ES", "MNQ"]
 
 
-from services.statistics_aggregations import bucket_by_day_of_week  # noqa: E402
+from services.statistics_aggregations import bucket_by_day_of_week  # noqa: E402,I001
 
 
 # Timestamps (all 09:00 UTC, before 16:00 CDT rollover, so session date == calendar date):

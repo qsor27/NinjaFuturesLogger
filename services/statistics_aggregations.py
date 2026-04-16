@@ -366,7 +366,7 @@ def bucket_by_day_of_week(positions: list[Position]) -> list[DayOfWeekBucket]:
     result: list[DayOfWeekBucket] = []
     for dow in range(5):
         td = len(trading_day_sets[dow])
-        w, l = wins[dow], losses[dow]
+        w, n_losses = wins[dow], losses[dow]
         result.append(
             DayOfWeekBucket(
                 dow=dow,
@@ -374,7 +374,7 @@ def bucket_by_day_of_week(positions: list[Position]) -> list[DayOfWeekBucket]:
                 trading_days=td,
                 trades=trade_counts[dow],
                 avg_pnl=pnl_sums[dow] / td if td > 0 else 0.0,
-                win_rate=w / (w + l) if (w + l) > 0 else None,
+                win_rate=w / (w + n_losses) if (w + n_losses) > 0 else None,
                 total_pnl=pnl_sums[dow],
             )
         )
