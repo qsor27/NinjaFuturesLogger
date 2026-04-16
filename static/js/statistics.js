@@ -13,9 +13,10 @@ const ENDPOINTS = [
   "by-side",
   "equity-curve",
   "by-instrument",
-  "by-day",
+  "by-day",         // still fetched: drives summary avg-day calc + trades-per-day table
   "by-hour",
   "distribution",
+  "by-day-of-week",
 ];
 
 async function fetchAll(filter) {
@@ -43,8 +44,8 @@ function fmtNum(v, digits = 1) {
 }
 
 function _avgDayPnl(dayBuckets, positive) {
-  const days = dayBuckets.filter((b) =>
-    b.position_count > 0 && (positive ? b.total_pnl > 0 : b.total_pnl < 0)
+  const days = dayBuckets.filter(
+    (b) => b.position_count > 0 && (positive ? b.total_pnl > 0 : b.total_pnl < 0),
   );
   if (!days.length) return null;
   return days.reduce((s, b) => s + b.total_pnl, 0) / days.length;
@@ -71,7 +72,7 @@ function renderSummary(container, summary, dayBuckets) {
       <div><div class="stat-label">Losses</div><div class="stat-value pnl-neg"></div></div>
       <div><div class="stat-label">Scratch</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Win Streak</div><div class="stat-value"></div></div>
-      <div><div class="stat-label">Loss Streak</div><div class="stat-value"></div></div>
+      <div><div class="stat-label">Loss Streak</div><div class="stat-value pnl-neg"></div></div>
       <div><div class="stat-label">Avg Size</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Open</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Avg Win Day</div><div class="stat-value pnl-pos"></div></div>
@@ -107,27 +108,53 @@ function renderSummary(container, summary, dayBuckets) {
 }
 
 function renderBySide(container, breakdown) {
+  function sideCol(label, s) {
+    return `
+      <div class="side-col">
+        <div class="side-col-header">
+          ${label}<span class="side-count">${s.position_count} trades</span>
+        </div>
+        <div class="side-stat">
+          <span class="side-stat-label">Total P&L</span>
+          <span class="side-stat-value ${s.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(s.total_pnl)}</span>
+        </div>
+        <div class="side-stat">
+          <span class="side-stat-label">Win Rate</span>
+          <span class="side-stat-value">${fmtPercent(s.win_rate)}</span>
+        </div>
+        <div class="side-stat">
+          <span class="side-stat-label">Avg Win</span>
+          <span class="side-stat-value pnl-pos">${fmtMoney(s.avg_win)}</span>
+        </div>
+        <div class="side-stat">
+          <span class="side-stat-label">Avg Loss</span>
+          <span class="side-stat-value pnl-neg">${fmtMoney(s.avg_loss)}</span>
+        </div>
+        <div class="side-stat">
+          <span class="side-stat-label">Profit Factor</span>
+          <span class="side-stat-value">${fmtNum(s.profit_factor, 2)}</span>
+        </div>
+      </div>
+    `;
+  }
   container.innerHTML = `
     <p class="section-label">Long vs Short</p>
-    <div class="summary-grid" style="grid-template-columns:1fr 1fr;">
-      <div><div class="stat-label">Long</div>
-        <div class="stat-value ${breakdown.long.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(breakdown.long.total_pnl)}</div>
-        <div class="stat-label" style="margin-top:8px;">${breakdown.long.position_count} trades · ${fmtPercent(breakdown.long.win_rate)}</div>
-      </div>
-      <div><div class="stat-label">Short</div>
-        <div class="stat-value ${breakdown.short.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(breakdown.short.total_pnl)}</div>
-        <div class="stat-label" style="margin-top:8px;">${breakdown.short.position_count} trades · ${fmtPercent(breakdown.short.win_rate)}</div>
-      </div>
+    <div class="side-grid">
+      ${sideCol("Long", breakdown.long)}
+      ${sideCol("Short", breakdown.short)}
     </div>
   `;
 }
 
 function renderInstrumentTable(container, breakdown) {
   if (!breakdown.rows.length) {
-    container.innerHTML = '<p class="section-label">By Instrument</p><div class="empty-state">No data</div>';
+    container.innerHTML =
+      '<p class="section-label">By Instrument</p><div class="empty-state">No data</div>';
     return;
   }
-  const rowsHtml = breakdown.rows.map((r) => `
+  const rowsHtml = breakdown.rows
+    .map(
+      (r) => `
     <tr>
       <td>${r.instrument}</td>
       <td>${r.position_count}</td>
@@ -135,7 +162,9 @@ function renderInstrumentTable(container, breakdown) {
       <td>${fmtPercent(r.win_rate)}</td>
       <td class="${r.avg_pnl_per_position >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(r.avg_pnl_per_position)}</td>
     </tr>
-  `).join("");
+  `,
+    )
+    .join("");
   container.innerHTML = `
     <p class="section-label">By Instrument</p>
     <table class="instrument-table">
@@ -145,12 +174,91 @@ function renderInstrumentTable(container, breakdown) {
   `;
 }
 
+function renderDayOfWeek(container, dowData) {
+  if (!dowData.buckets || dowData.buckets.every((b) => b.trades === 0)) {
+    container.innerHTML =
+      '<p class="section-label">By Day of Week</p><div class="empty-state">No data for this filter</div>';
+    return;
+  }
+  const rowsHtml = dowData.buckets
+    .map(
+      (b) => `
+    <tr>
+      <td>${b.day_name}</td>
+      <td>${b.trades}</td>
+      <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
+      <td>${fmtPercent(b.win_rate)}</td>
+      <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+    </tr>
+  `,
+    )
+    .join("");
+  container.innerHTML = `
+    <p class="section-label">By Day of Week</p>
+    <table class="instrument-table">
+      <thead><tr><th>Day</th><th>Trades</th><th>Avg P&amp;L</th><th>Win Rate</th><th>Total P&amp;L</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function renderTradesPerDay(container, byDayBuckets) {
+  const buckets = _tradeCountBuckets(byDayBuckets);
+  if (!buckets.length) {
+    container.innerHTML =
+      '<p class="section-label">Trades per Day</p><div class="empty-state">No data for this filter</div>';
+    return;
+  }
+  const rowsHtml = buckets
+    .map((b) => {
+      const winPct = b.days > 0 ? Math.round((b.win_days / b.days) * 100) : 0;
+      return `
+      <tr>
+        <td>${b.trades_per_day}</td>
+        <td>${b.days}</td>
+        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+        <td>${b.win_days}</td>
+        <td>${winPct}%</td>
+      </tr>
+    `;
+    })
+    .join("");
+  container.innerHTML = `
+    <p class="section-label">Trades per Day</p>
+    <table class="instrument-table">
+      <thead><tr><th>Trades/Day</th><th>Days</th><th>Net P&amp;L</th><th>Win Days</th><th>Win %</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function _tradeCountBuckets(byDayBuckets) {
+  const map = new Map();
+  for (const b of byDayBuckets) {
+    if (b.position_count === 0) continue;
+    const k = b.position_count;
+    if (!map.has(k)) map.set(k, { trades_per_day: k, total_pnl: 0, days: 0, win_days: 0 });
+    const entry = map.get(k);
+    entry.total_pnl += b.total_pnl;
+    entry.days += 1;
+    if (b.total_pnl > 0) entry.win_days += 1;
+  }
+  return [...map.values()].sort((a, b) => a.trades_per_day - b.trades_per_day);
+}
+
 async function refresh(filter) {
   document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "0.5"));
   const data = await fetchAll(filter);
-  renderSummary(document.getElementById("stats-summary"), data["summary"], data["by-day"].buckets);
+
+  renderSummary(
+    document.getElementById("stats-summary"),
+    data["summary"],
+    data["by-day"].buckets,
+  );
   renderBySide(document.getElementById("stats-by-side"), data["by-side"]);
   renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);
+  renderDayOfWeek(document.getElementById("stats-by-dow"), data["by-day-of-week"]);
+  renderTradesPerDay(document.getElementById("stats-trades-per-day"), data["by-day"].buckets);
 
   const equityCard = document.getElementById("stats-equity");
   equityCard.innerHTML = '<p class="section-label">Equity Curve</p>';
@@ -158,17 +266,13 @@ async function refresh(filter) {
   equityCard.appendChild(equityHost);
   mountLineChart(equityHost, data["equity-curve"].series);
 
-  const dayCard = document.getElementById("stats-by-day");
-  dayCard.innerHTML = '<p class="section-label">By Day</p>';
-  const dayHost = document.createElement("div");
-  dayCard.appendChild(dayHost);
-  mountHistogramChart(dayHost, data["by-day"].buckets, { kind: "day" });
-
+  // Filter to hours that had trades — avoids 24-bar wall of zeros
+  const activeHourBuckets = data["by-hour"].buckets.filter((b) => b.position_count > 0);
   const hourCard = document.getElementById("stats-by-hour");
   hourCard.innerHTML = `<p class="section-label">By Hour (${data["by-hour"].timezone})</p>`;
   const hourHost = document.createElement("div");
   hourCard.appendChild(hourHost);
-  mountHistogramChart(hourHost, data["by-hour"].buckets, { kind: "hour" });
+  mountHistogramChart(hourHost, activeHourBuckets, { kind: "hour" });
 
   const distCard = document.getElementById("stats-distribution");
   distCard.innerHTML = '<p class="section-label">P&amp;L Distribution</p>';
