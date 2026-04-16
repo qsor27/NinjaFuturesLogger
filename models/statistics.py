@@ -103,3 +103,17 @@ class HistogramBucket(StrictModel):
 class DistributionResponse(StrictModel):
     buckets: list[HistogramBucket]
     bucket_count: int
+
+
+class DayOfWeekBucket(StrictModel):
+    dow: int           # 0=Mon … 4=Fri
+    day_name: str      # "Mon" … "Fri"
+    trading_days: int  # unique session dates for this weekday
+    trades: int
+    avg_pnl: float     # total_pnl / trading_days, 0.0 when trading_days == 0
+    win_rate: float | None
+    total_pnl: float
+
+
+class DayOfWeekResponse(StrictModel):
+    buckets: list[DayOfWeekBucket]  # always 5 rows, Mon–Fri order
