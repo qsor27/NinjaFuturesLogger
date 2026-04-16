@@ -149,13 +149,65 @@ export function nextPollDelay(elapsedMs) {
   return POLL_INTERVAL_MS;
 }
 
+// Timezone helper — reads `document.body.dataset.displayTz` (set by base.html).
+// Empty string = use the browser's local timezone.
+function _displayTz() {
+  return (typeof document !== "undefined" && document.body?.dataset?.displayTz) || undefined;
+}
+
+// Format a unix-seconds timestamp as "YYYY-MM-DD HH:mm" in the display tz.
+// Used for the chart crosshair overlay and the timeScale time formatter.
+function _formatChartDateTime(unixSeconds) {
+  const parts = new Intl.DateTimeFormat(undefined, {
+    timeZone: _displayTz(),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(unixSeconds * 1000));
+  const g = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${g.year}-${g.month}-${g.day} ${g.hour}:${g.minute}`;
+}
+
+// Tick mark formatter for TradingView Lightweight Charts timeScale. The
+// library calls this for every visible tick with a tickMarkType enum:
+// 0=Year 1=Month 2=DayOfMonth 3=Time 4=TimeWithSeconds. Return a short label
+// in the display tz for each bucket.
+function _formatTickMark(unixSeconds, tickMarkType) {
+  const d = new Date(unixSeconds * 1000);
+  const tz = _displayTz();
+  if (tickMarkType === 0) {
+    return new Intl.DateTimeFormat(undefined, { timeZone: tz, year: "numeric" }).format(d);
+  }
+  if (tickMarkType === 1) {
+    return new Intl.DateTimeFormat(undefined, { timeZone: tz, month: "short" }).format(d);
+  }
+  if (tickMarkType === 2) {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: tz,
+      month: "short",
+      day: "2-digit",
+    }).format(d);
+  }
+  const opts = {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  };
+  if (tickMarkType === 4) opts.second = "2-digit";
+  return new Intl.DateTimeFormat(undefined, opts).format(d);
+}
+
 // Format the OHLC overlay box (AC 15). Returns a string with newlines.
 export function formatOhlcOverlay(bar) {
   if (!bar) return "";
   const change = bar.close - bar.open;
   const pct = bar.open !== 0 ? (change / bar.open) * 100 : 0;
   const sign = change >= 0 ? "+" : "";
-  const time = new Date(bar.time * 1000).toLocaleString();
+  const time = _formatChartDateTime(bar.time);
   return [
     time,
     `O ${bar.open.toFixed(2)}`,
@@ -451,6 +503,10 @@ export class PriceChart {
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: _formatTickMark,
+      },
+      localization: {
+        timeFormatter: _formatChartDateTime,
       },
       rightPriceScale: {
         scaleMargins: { top: 0.1, bottom: 0.1 },

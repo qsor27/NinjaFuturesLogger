@@ -59,11 +59,24 @@ export function buildQuery(params) {
   return s ? "?" + s : "";
 }
 
-// Format a unix-seconds timestamp as a local datetime string.
+// Format a unix-seconds timestamp in the configured display timezone.
+// Reads `document.body.dataset.displayTz` (set by base.html from the server
+// config) so every page renders times in the trader's exchange timezone
+// instead of whatever the browser happens to be set to.
 export function formatTime(unixSeconds) {
   if (unixSeconds === null || unixSeconds === undefined) return "—";
   const d = new Date(unixSeconds * 1000);
-  return d.toLocaleString();
+  const tz = document.body?.dataset?.displayTz || undefined;
+  return d.toLocaleString(undefined, {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 // Format a dollars number with sign, two decimals, and a CSS class hint.

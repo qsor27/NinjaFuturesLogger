@@ -79,8 +79,15 @@ async function renderSourcesBand() {
 
 async function renderMatrix() {
   const el = document.getElementById("completeness-matrix");
-  const days = document.getElementById("days-input")?.value;
+  const urlDays = new URLSearchParams(window.location.search).get("days");
+  const days = document.getElementById("days-input")?.value ?? urlDays;
   el.innerHTML = "<p>Loading…</p>";
+
+  if (days) {
+    const next = new URL(window.location.href);
+    next.searchParams.set("days", days);
+    window.history.replaceState(null, "", next);
+  }
 
   const url = days ? `/api/data-health/completeness?days=${encodeURIComponent(days)}` : "/api/data-health/completeness";
   const resp = await fetch(url);
@@ -127,6 +134,16 @@ async function renderMatrix() {
   });
   document.getElementById("reload-btn").addEventListener("click", async () => {
     await renderMatrix();
+  });
+  const daysInput = document.getElementById("days-input");
+  daysInput.addEventListener("change", async () => {
+    await renderMatrix();
+  });
+  daysInput.addEventListener("keydown", async (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      await renderMatrix();
+    }
   });
 }
 
@@ -184,6 +201,10 @@ async function fetchGap(instrument, timeframe, start, end, btn) {
   if (resp.status === 202) {
     btn.textContent = `Job ${body.job_id} started`;
     pollJob(body.job_id, btn);
+  } else if (resp.status === 409 && body.error === "out_of_reach") {
+    btn.textContent = "Out of reach";
+    btn.title = body.detail || "Provider does not serve this range";
+    btn.disabled = true;
   } else {
     btn.textContent = "Error";
     btn.disabled = false;

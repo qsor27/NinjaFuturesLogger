@@ -65,29 +65,60 @@ class YfinanceSource:
         if symbol is None:
             return []
 
-        start_dt = datetime.fromtimestamp(start, tz=UTC)
-        end_dt = datetime.fromtimestamp(end, tz=UTC)
-        df = _download(symbol, start=start_dt, end=end_dt, interval=timeframe)
-        if df is None or df.empty:
+        # yfinance enforces a 7-day-per-request limit for 1m data. Chunk any
+        # 1m range longer than that and concat — the fetcher still sees one
+        # call per gap. Other intraday timeframes are served in a single
+        # request at their native reach limits (5m/15m/1h: 60d / 730d).
+        if timeframe == "1m":
+            chunk_seconds = 7 * 86400
+        else:
+            chunk_seconds = None
+
+        frames = []
+        if chunk_seconds is None:
+            start_dt = datetime.fromtimestamp(start, tz=UTC)
+            end_dt = datetime.fromtimestamp(end, tz=UTC)
+            frames.append(_download(symbol, start=start_dt, end=end_dt, interval=timeframe))
+        else:
+            cursor = start
+            while cursor < end:
+                chunk_end = min(cursor + chunk_seconds, end)
+                frames.append(
+                    _download(
+                        symbol,
+                        start=datetime.fromtimestamp(cursor, tz=UTC),
+                        end=datetime.fromtimestamp(chunk_end, tz=UTC),
+                        interval=timeframe,
+                    )
+                )
+                cursor = chunk_end
+
+        frames = [df for df in frames if df is not None and not df.empty]
+        if not frames:
             return []
 
         bars: list[Bar] = []
-        for row in df.itertuples(index=True, name="Bar"):
-            ts = int(row.Index.timestamp())
-            volume = row.Volume
-            if volume is None or (isinstance(volume, float) and math.isnan(volume)):
-                volume = 0
-            bars.append(
-                Bar(
-                    instrument=instrument,
-                    timeframe=timeframe,
-                    time=ts,
-                    open=float(row.Open),
-                    high=float(row.High),
-                    low=float(row.Low),
-                    close=float(row.Close),
-                    volume=int(volume),
-                    source="yfinance",
+        seen_ts: set[int] = set()
+        for df in frames:
+            for row in df.itertuples(index=True, name="Bar"):
+                ts = int(row.Index.timestamp())
+                if ts in seen_ts:
+                    continue
+                seen_ts.add(ts)
+                volume = row.Volume
+                if volume is None or (isinstance(volume, float) and math.isnan(volume)):
+                    volume = 0
+                bars.append(
+                    Bar(
+                        instrument=instrument,
+                        timeframe=timeframe,
+                        time=ts,
+                        open=float(row.Open),
+                        high=float(row.High),
+                        low=float(row.Low),
+                        close=float(row.Close),
+                        volume=int(volume),
+                        source="yfinance",
+                    )
                 )
-            )
         return bars

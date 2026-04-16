@@ -110,11 +110,12 @@ def test_classify_window_marks_slots_beyond_reach_as_out_of_reach(tmp_path):
     conn = connect(db)
     run_migrations(conn, Path("migrations"))
     now = 1_000_000_000
+    # 1m reach is 30 days; ask for a 60-day window so half is out of reach.
     summary = classify_window(
         conn,
         instrument="MNQ JUN26",
         timeframe="1m",
-        start=now - 30 * 86400,
+        start=now - 60 * 86400,
         end=now,
         now=now,
     )
@@ -123,7 +124,8 @@ def test_classify_window_marks_slots_beyond_reach_as_out_of_reach(tmp_path):
     assert summary["out_of_reach"] > 0
     assert summary["missing"] > 0
     reachable = summary["expected"] - summary["out_of_reach"]
-    assert 4000 < reachable < 12000
+    # ~30 days of session minutes minus the daily break — roughly 40k slots.
+    assert 35_000 < reachable < 50_000
 
 
 def test_classify_window_matches_1d_bars_at_utc_midnight(tmp_path):
@@ -156,5 +158,9 @@ def test_classify_window_matches_1d_bars_at_utc_midnight(tmp_path):
         end=now,
         now=now,
     )
-    assert summary["present"] == 5
+    # Apr 10–14 2026 spans a weekend (Sat Apr 11, Sun Apr 12); the walker
+    # only expects Mon–Fri slots for 1d, so 3 of the 5 inserted bars map to
+    # an expected slot. The point this test guards is that UTC-midnight
+    # stamped bars *do* get matched — not the weekday count itself.
+    assert summary["present"] == 3
     assert summary["missing"] == 0

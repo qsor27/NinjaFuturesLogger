@@ -2,7 +2,7 @@ import sqlite3
 from datetime import UTC, datetime, time
 from zoneinfo import ZoneInfo
 
-from services.instruments import default_session
+from services.instruments import default_session, is_full_closure
 from services.ohlc.reach import PROVIDER_REACH
 from services.ohlc.store import list_times
 
@@ -59,9 +59,22 @@ def _expected_slots(
         bs = _hhmm(session.daily_break_start)
         be = _hhmm(session.daily_break_end)
 
+    # Daily+ bars from futures providers are only emitted for trade dates
+    # (Mon–Fri). Without this, every Saturday/Sunday slot shows up as a
+    # perpetual missing gap that no fetch can ever fill.
+    skip_weekends = stride >= 86400
+
     slots: list[int] = []
     t = aligned_start
     while t < end:
+        if skip_weekends:
+            weekday = datetime.fromtimestamp(t, tz=UTC).weekday()
+            if weekday >= 5:
+                t += stride
+                continue
+            if is_full_closure(instrument, t):
+                t += stride
+                continue
         if not has_break or not _is_in_break(t, tz, bs, be):
             slots.append(t)
         t += stride
@@ -87,16 +100,28 @@ def find_gaps(
     expected = _expected_slots(instrument, timeframe, start, end)
     if not expected:
         return []
-    present = set(
-        list_times(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
+    present_times = list_times(
+        conn, instrument=instrument, timeframe=timeframe, start=start, end=end
     )
 
     stride = timeframe_seconds(timeframe)
+    if stride >= 86400:
+        # Daily and above: yfinance stamps daily futures bars at local
+        # midnight (04:00/05:00 UTC), but _expected_slots walks epoch-
+        # aligned 00:00 UTC slots. Exact equality never matches, so bucket
+        # both sides to the UTC calendar day — "did we get a bar for this
+        # day?" is all that matters at these timeframes.
+        present_buckets = {t // 86400 for t in present_times}
+        is_present = lambda slot: (slot // 86400) in present_buckets  # noqa: E731
+    else:
+        present = set(present_times)
+        is_present = lambda slot: slot in present  # noqa: E731
+
     gaps: list[tuple[int, int]] = []
     run_start: int | None = None
     prev_slot: int | None = None
     for slot in expected:
-        if slot in present:
+        if is_present(slot):
             if run_start is not None:
                 gaps.append((run_start, prev_slot + stride))  # type: ignore[operator]
                 run_start = None

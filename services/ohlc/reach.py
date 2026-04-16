@@ -7,7 +7,10 @@ this yet" in gap detection and data-health.
 """
 
 PROVIDER_REACH: dict[str, int] = {
-    "1m": 7 * 86400,
+    # Yahoo's own error says: "1m data ... must be within the last 30 days."
+    # Per-request chunk size is a separate concept (7 days) — handled inside
+    # YfinanceSource.fetch. This constant is the total historical window.
+    "1m": 30 * 86400,
     "5m": 60 * 86400,
     "15m": 60 * 86400,
     "1h": 730 * 86400,

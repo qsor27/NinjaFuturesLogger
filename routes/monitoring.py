@@ -10,6 +10,7 @@ from services.ohlc.gap_detection import (
     find_gaps,
     timeframe_seconds,
 )
+from services.ohlc.reach import PROVIDER_REACH
 from services.ohlc.store import list_times
 
 log = get_logger("http.monitoring")
@@ -85,13 +86,35 @@ def build_monitoring_blueprint() -> Blueprint:
         start = int(request.args.get("start", now - default_days * 86400))
         end = int(request.args.get("end", now))
 
+        # Clamp the gap-listing window to the provider reach for this
+        # timeframe — listing gaps that no source can ever serve only
+        # invites the user to click "Fetch Missing" on something that
+        # will fail. Callers (chart + data-health) both expect the
+        # returned `start` / `end` to reflect what was actually scanned.
+        reach = PROVIDER_REACH.get(timeframe)
+        # Only clamp intraday timeframes — daily/weekly/monthly reach is
+        # effectively unlimited at the provider, and unit tests pass
+        # 1970-era timestamps that shouldn't be silently dropped.
+        if reach is not None and reach < 365 * 86400:
+            reach_floor = now - reach
+            scan_start = max(start, reach_floor)
+        else:
+            scan_start = start
+
         conn = connect(_db_path())
         try:
-            gaps = find_gaps(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
-            expected = _expected_slots(instrument, timeframe, start, end)
-            present = list_times(
-                conn, instrument=instrument, timeframe=timeframe, start=start, end=end
-            )
+            if scan_start >= end:
+                gaps: list[tuple[int, int]] = []
+                expected: list[int] = []
+                present: list[int] = []
+            else:
+                gaps = find_gaps(
+                    conn, instrument=instrument, timeframe=timeframe, start=scan_start, end=end
+                )
+                expected = _expected_slots(instrument, timeframe, scan_start, end)
+                present = list_times(
+                    conn, instrument=instrument, timeframe=timeframe, start=scan_start, end=end
+                )
         finally:
             conn.close()
 
@@ -99,7 +122,7 @@ def build_monitoring_blueprint() -> Blueprint:
             {
                 "instrument": instrument,
                 "timeframe": timeframe,
-                "start": start,
+                "start": scan_start,
                 "end": end,
                 "expected_slots": len(expected),
                 "present_bars": len(present),

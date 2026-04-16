@@ -8,6 +8,7 @@ async function load() {
   form.elements.default_timeframe.value = body.default_timeframe;
   form.elements.volume_visible_default.checked = Boolean(body.volume_visible_default);
   form.elements.display_timezone.value = body.display_timezone || "";
+  form.elements.source_timezone.value = body.source_timezone || "";
 }
 
 async function save(event) {
@@ -17,6 +18,7 @@ async function save(event) {
     default_timeframe: form.elements.default_timeframe.value,
     volume_visible_default: form.elements.volume_visible_default.checked,
     display_timezone: form.elements.display_timezone.value || null,
+    source_timezone: form.elements.source_timezone.value || null,
   };
   const res = await fetch(endpoint, {
     method: "PUT",

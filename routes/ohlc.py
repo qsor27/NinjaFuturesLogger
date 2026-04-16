@@ -120,6 +120,35 @@ def build_ohlc_blueprint() -> Blueprint:
                 {"error": "4h candles are derived from 1h bars and cannot be fetched directly"}
             ), 400
 
+        # Provider-reach clamp: yfinance only serves 1m data for the last
+        # ~30 days (similar caps for other intraday timeframes). Out-of-
+        # reach fetches produce a RuntimeError that trips the circuit
+        # breaker and blocks subsequent fetches until cooldown. Clamp
+        # `start` forward; if the whole range is unreachable, return 409
+        # so the UI can show a clear message.
+        import time as _time
+
+        from services.ohlc.reach import PROVIDER_REACH
+
+        reach = PROVIDER_REACH.get(timeframe)
+        # Only clamp intraday timeframes (reach < 1 year). Daily/weekly/
+        # monthly are effectively unlimited at yfinance, and unit tests
+        # use synthetic 1970-era timestamps that shouldn't be blocked.
+        if reach is not None and reach < 365 * 86400:
+            reach_floor = int(_time.time()) - reach
+            if end <= reach_floor:
+                return jsonify(
+                    {
+                        "error": "out_of_reach",
+                        "detail": (
+                            f"{timeframe} data is only available for the last "
+                            f"{reach // 86400} days; requested window ends before that."
+                        ),
+                    }
+                ), 409
+            if start < reach_floor:
+                start = reach_floor
+
         # Deferred import: routes/ohlc.py must not import the fetcher at
         # module load time, because Rule 1 says "no route synchronously
         # invokes the fetcher." Importing it inside the closure that

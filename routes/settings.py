@@ -127,18 +127,21 @@ def build_settings_blueprint() -> Blueprint:
                 "default_timeframe": d["default_timeframe"],
                 "volume_visible_default": d["volume_visible_default"],
                 "display_timezone": cfg.display_timezone,
+                "source_timezone": cfg.session.source_timezone,
             }
         )
 
     @bp.put("/api/config/chart-defaults")
     def put_chart_defaults():
-        from config import save_display_timezone
+        from config import save_display_timezone, save_source_timezone
         from services.chart_defaults import save_defaults
 
         body = request.get_json(silent=True) or {}
         tf = body.get("default_timeframe")
         vv = body.get("volume_visible_default")
         dtz = body.get("display_timezone")
+        source_tz_provided = "source_timezone" in body
+        stz = body.get("source_timezone")
 
         if tf not in ("1m", "5m", "15m", "1h", "4h", "1d"):
             return jsonify({"error": "invalid default_timeframe"}), 400
@@ -149,12 +152,19 @@ def build_settings_blueprint() -> Blueprint:
                 ZoneInfo(dtz)
             except Exception:
                 return jsonify({"error": "invalid display_timezone"}), 400
+        if source_tz_provided and stz is not None:
+            try:
+                ZoneInfo(stz)
+            except Exception:
+                return jsonify({"error": "invalid source_timezone"}), 400
 
         db_path = current_app.config["FTL_DB_PATH"]
         save_defaults(db_path, default_timeframe=tf, volume_visible_default=vv)
 
         cfg_path = current_app.config["FTL_CONFIG_PATH"]
         save_display_timezone(cfg_path, dtz)
+        if source_tz_provided:
+            save_source_timezone(cfg_path, stz)
 
         current_app.config["FTL_CONFIG"] = load_config(cfg_path)
 
@@ -163,6 +173,7 @@ def build_settings_blueprint() -> Blueprint:
                 "default_timeframe": tf,
                 "volume_visible_default": vv,
                 "display_timezone": dtz,
+                "source_timezone": current_app.config["FTL_CONFIG"].session.source_timezone,
             }
         )
 

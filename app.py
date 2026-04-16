@@ -63,7 +63,7 @@ def create_app(
     get_registry().load()
 
     services = BackgroundServices(config)
-    trader_tz = ZoneInfo(config.session.exchange_timezone)
+    trader_tz = ZoneInfo(config.session.source_timezone or config.session.exchange_timezone)
 
     def _integrity_hook(_result, _parsed, affected):
         for acct, inst in affected:
@@ -112,6 +112,12 @@ def create_app(
     app.config["FTL_OHLC_JOBS"] = ohlc_jobs
     app.config["FTL_OHLC_POOL"] = services.pool
     app.config["FTL_OHLC_TOKEN_BUCKET"] = token_bucket
+
+    @app.context_processor
+    def _inject_display_tz() -> dict[str, str]:
+        cfg: Config = app.config["FTL_CONFIG"]
+        # Empty string = use the browser's local tz. A non-empty value overrides.
+        return {"display_tz": cfg.display_timezone or ""}
 
     app.register_blueprint(health_routes.bp)
     app.register_blueprint(build_imports_blueprint())
