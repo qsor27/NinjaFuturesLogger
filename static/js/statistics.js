@@ -3,24 +3,36 @@ import {
   filterToQueryString,
   renderFilterBar,
 } from "./stats_filter.js";
-import {
-  mountHistogramChart,
-  mountLineChart,
-} from "./stats_charts.js";
+import { mountLineChart } from "./stats_charts.js";
 
 const ENDPOINTS = [
   "summary",
   "by-side",
   "equity-curve",
   "by-instrument",
-  "by-day",         // still fetched: drives summary avg-day calc + trades-per-day table
+  "by-day",             // drives summary avg win-day / avg loss-day
   "by-hour",
-  "distribution",
   "by-day-of-week",
+  "by-trades-per-day",
 ];
 
+// Browser-local IANA timezone — forwarded to /api/stats/by-hour so hour
+// buckets reflect the viewer's clock, not the exchange (or a configured
+// default). Harmless for endpoints that ignore it.
+function browserTz() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchAll(filter) {
-  const qs = filterToQueryString(filter);
+  let qs = filterToQueryString(filter);
+  const tz = browserTz();
+  if (tz) {
+    qs += qs ? `&display_tz=${encodeURIComponent(tz)}` : `?display_tz=${encodeURIComponent(tz)}`;
+  }
   const responses = await Promise.all(
     ENDPOINTS.map((name) => fetch(`/api/stats/${name}${qs}`).then((r) => r.json())),
   );
@@ -202,48 +214,62 @@ function renderDayOfWeek(container, dowData) {
   `;
 }
 
-function renderTradesPerDay(container, byDayBuckets) {
-  const buckets = _tradeCountBuckets(byDayBuckets);
-  if (!buckets.length) {
-    container.innerHTML =
-      '<p class="section-label">Trades per Day</p><div class="empty-state">No data for this filter</div>';
+function renderByHour(container, hourData) {
+  const active = (hourData.buckets || []).filter((b) => b.position_count > 0);
+  const header = `<p class="section-label">By Hour (${hourData.timezone})</p>`;
+  if (!active.length) {
+    container.innerHTML = `${header}<div class="empty-state">No data for this filter</div>`;
     return;
   }
-  const rowsHtml = buckets
+  const rowsHtml = active
     .map((b) => {
-      const winPct = b.days > 0 ? Math.round((b.win_days / b.days) * 100) : 0;
+      const avgPnl = b.position_count > 0 ? b.total_pnl / b.position_count : 0;
       return `
-      <tr>
-        <td>${b.trades_per_day}</td>
-        <td>${b.days}</td>
-        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
-        <td>${b.win_days}</td>
-        <td>${winPct}%</td>
-      </tr>
-    `;
+    <tr>
+      <td>${String(b.hour).padStart(2, "0")}:00</td>
+      <td>${b.position_count}</td>
+      <td class="${avgPnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(avgPnl)}</td>
+      <td>${fmtPercent(b.win_rate)}</td>
+      <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+    </tr>
+  `;
     })
     .join("");
   container.innerHTML = `
-    <p class="section-label">Trades per Day</p>
+    ${header}
     <table class="instrument-table">
-      <thead><tr><th>Trades/Day</th><th>Days</th><th>Net P&amp;L</th><th>Win Days</th><th>Win %</th></tr></thead>
+      <thead><tr><th>Hour</th><th>Trades</th><th>Avg P&amp;L</th><th>Win Rate</th><th>Total P&amp;L</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
 }
 
-function _tradeCountBuckets(byDayBuckets) {
-  const map = new Map();
-  for (const b of byDayBuckets) {
-    if (b.position_count === 0) continue;
-    const k = b.position_count;
-    if (!map.has(k)) map.set(k, { trades_per_day: k, total_pnl: 0, days: 0, win_days: 0 });
-    const entry = map.get(k);
-    entry.total_pnl += b.total_pnl;
-    entry.days += 1;
-    if (b.total_pnl > 0) entry.win_days += 1;
+function renderTradesPerDay(container, tpdData) {
+  if (!tpdData.buckets || !tpdData.buckets.length) {
+    container.innerHTML =
+      '<p class="section-label">Trades per Day</p><div class="empty-state">No data for this filter</div>';
+    return;
   }
-  return [...map.values()].sort((a, b) => a.trades_per_day - b.trades_per_day);
+  const rowsHtml = tpdData.buckets
+    .map(
+      (b) => `
+    <tr>
+      <td>${b.trades_per_day}</td>
+      <td>${b.days}</td>
+      <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
+      <td>${fmtPercent(b.win_rate)}</td>
+      <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+    </tr>
+  `,
+    )
+    .join("");
+  container.innerHTML = `
+    <p class="section-label">Trades per Day</p>
+    <table class="instrument-table">
+      <thead><tr><th>Trades/Day</th><th>Days</th><th>Avg P&amp;L</th><th>Win Rate</th><th>Total P&amp;L</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
 }
 
 async function refresh(filter) {
@@ -258,27 +284,17 @@ async function refresh(filter) {
   renderBySide(document.getElementById("stats-by-side"), data["by-side"]);
   renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);
   renderDayOfWeek(document.getElementById("stats-by-dow"), data["by-day-of-week"]);
-  renderTradesPerDay(document.getElementById("stats-trades-per-day"), data["by-day"].buckets);
+  renderByHour(document.getElementById("stats-by-hour"), data["by-hour"]);
+  renderTradesPerDay(
+    document.getElementById("stats-trades-per-day"),
+    data["by-trades-per-day"],
+  );
 
   const equityCard = document.getElementById("stats-equity");
   equityCard.innerHTML = '<p class="section-label">Equity Curve</p>';
   const equityHost = document.createElement("div");
   equityCard.appendChild(equityHost);
   mountLineChart(equityHost, data["equity-curve"].series);
-
-  // Filter to hours that had trades — avoids 24-bar wall of zeros
-  const activeHourBuckets = data["by-hour"].buckets.filter((b) => b.position_count > 0);
-  const hourCard = document.getElementById("stats-by-hour");
-  hourCard.innerHTML = `<p class="section-label">By Hour (${data["by-hour"].timezone})</p>`;
-  const hourHost = document.createElement("div");
-  hourCard.appendChild(hourHost);
-  mountHistogramChart(hourHost, activeHourBuckets, { kind: "hour" });
-
-  const distCard = document.getElementById("stats-distribution");
-  distCard.innerHTML = '<p class="section-label">P&amp;L Distribution</p>';
-  const distHost = document.createElement("div");
-  distCard.appendChild(distHost);
-  mountHistogramChart(distHost, data["distribution"].buckets, { kind: "distribution" });
 
   document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "1"));
 }
