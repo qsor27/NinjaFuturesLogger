@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from models.position import Position
 from models.statistics import (
+    DayOfWeekBucket,
     EquityPoint,
     HistogramBucket,
     HourBucket,
@@ -331,3 +332,50 @@ def per_instrument(positions: list[Position]) -> list[InstrumentStats]:
             )
         )
     return rows
+
+
+_DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+
+
+def bucket_by_day_of_week(positions: list[Position]) -> list[DayOfWeekBucket]:
+    """Always returns 5 buckets (Mon–Fri), zero-filled for days with no trades.
+
+    Uses session date (exchange-tz rollover) for weekday attribution so that
+    a Sunday-evening entry at 17:00 CT maps to Monday, not Sunday.
+    """
+    pnl_sums = [0.0] * 5
+    trade_counts = [0] * 5
+    wins = [0] * 5
+    losses = [0] * 5
+    trading_day_sets: list[set] = [set() for _ in range(5)]
+
+    for p in positions:
+        sd = _session_date_of(p)
+        dow = sd.weekday()  # 0=Mon … 6=Sun
+        if dow > 4:  # skip weekend session dates (rare but possible)
+            continue
+        pnl_sums[dow] += p.dollars_pnl or 0.0
+        trade_counts[dow] += 1
+        trading_day_sets[dow].add(sd)
+        outcome = classify_outcome(p)
+        if outcome == "winner":
+            wins[dow] += 1
+        elif outcome == "loser":
+            losses[dow] += 1
+
+    result: list[DayOfWeekBucket] = []
+    for dow in range(5):
+        td = len(trading_day_sets[dow])
+        w, l = wins[dow], losses[dow]
+        result.append(
+            DayOfWeekBucket(
+                dow=dow,
+                day_name=_DOW_NAMES[dow],
+                trading_days=td,
+                trades=trade_counts[dow],
+                avg_pnl=pnl_sums[dow] / td if td > 0 else 0.0,
+                win_rate=w / (w + l) if (w + l) > 0 else None,
+                total_pnl=pnl_sums[dow],
+            )
+        )
+    return result

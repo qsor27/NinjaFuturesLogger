@@ -405,3 +405,102 @@ def test_per_instrument_groups_distinct_symbols():
     rows = per_instrument([a, b])
     instruments = sorted(r.instrument for r in rows)
     assert instruments == ["ES", "MNQ"]
+
+
+from services.statistics_aggregations import bucket_by_day_of_week  # noqa: E402
+
+
+# Timestamps (all 09:00 UTC, before 16:00 CDT rollover, so session date == calendar date):
+# 1776070800 = 2026-04-13 Mon (dow 0)  — confirmed by existing test_bucket_by_week_iso_week_keys
+# 1776157200 = 2026-04-14 Tue (dow 1)
+# 1776243600 = 2026-04-15 Wed (dow 2)  — confirmed by existing test_bucket_by_day_continuous_fill
+# 1776330000 = 2026-04-16 Thu (dow 3)
+# 1776416400 = 2026-04-17 Fri (dow 4)
+# 1776675600 = 2026-04-20 Mon (dow 0)  — confirmed by existing test_bucket_by_week_continuous_two_weeks
+
+
+def test_dow_always_returns_five_rows():
+    result = bucket_by_day_of_week([])
+    assert len(result) == 5
+    assert [b.dow for b in result] == [0, 1, 2, 3, 4]
+    assert [b.day_name for b in result] == ["Mon", "Tue", "Wed", "Thu", "Fri"]
+
+
+def test_dow_empty_rows_zeroed():
+    result = bucket_by_day_of_week([])
+    assert all(b.trades == 0 for b in result)
+    assert all(b.trading_days == 0 for b in result)
+    assert all(b.total_pnl == 0.0 for b in result)
+    assert all(b.avg_pnl == 0.0 for b in result)
+    assert all(b.win_rate is None for b in result)
+
+
+def test_dow_single_monday_position():
+    positions = [_at(1776070800, eid="a", pnl=100.0)]
+    result = bucket_by_day_of_week(positions)
+    mon = result[0]
+    assert mon.trades == 1
+    assert mon.trading_days == 1
+    assert mon.total_pnl == 100.0
+    assert mon.avg_pnl == 100.0
+    # Other days untouched
+    assert all(b.trades == 0 for b in result[1:])
+
+
+def test_dow_win_rate_and_avg_pnl_across_two_mondays():
+    # Two Monday sessions: +100 and -50 → win_rate 0.5, avg_pnl 25.0
+    positions = [
+        _at(1776070800, eid="a", pnl=100.0),   # 2026-04-13 Mon
+        _at(1776675600, eid="b", pnl=-50.0),   # 2026-04-20 Mon
+    ]
+    result = bucket_by_day_of_week(positions)
+    mon = result[0]
+    assert mon.trading_days == 2
+    assert mon.trades == 2
+    assert mon.total_pnl == pytest.approx(50.0)
+    assert mon.avg_pnl == pytest.approx(25.0)
+    assert mon.win_rate == pytest.approx(0.5)
+
+
+def test_dow_win_rate_none_when_all_scratches():
+    # commission == |pnl| → scratch → win_rate is None
+    scratch = _pos(eid="s", entry_time=1776070800, exit_time=1776070860,
+                   dollars_pnl=2.0, commission=2.0)
+    result = bucket_by_day_of_week([scratch])
+    assert result[0].win_rate is None
+
+
+def test_dow_uses_session_date_not_entry_calendar_date():
+    # 1776115800 = 2026-04-13 21:30 UTC = 16:30 CDT → session date 2026-04-14 (Tue)
+    # Confirmed by existing test_bucket_uses_session_date_not_calendar
+    positions = [_at(1776115800, eid="rollover", pnl=10.0)]
+    result = bucket_by_day_of_week(positions)
+    assert result[0].trades == 0   # Monday gets nothing
+    assert result[1].trades == 1   # Tuesday gets the rollover trade
+
+
+def test_dow_multiple_trades_same_day_count_as_one_trading_day():
+    # Three trades all on 2026-04-13 (Mon) → trading_days == 1
+    positions = [
+        _at(1776070800, eid="a", pnl=10.0),
+        _at(1776071400, eid="b", pnl=20.0),
+        _at(1776072000, eid="c", pnl=30.0),
+    ]
+    result = bucket_by_day_of_week(positions)
+    assert result[0].trading_days == 1
+    assert result[0].trades == 3
+    assert result[0].total_pnl == pytest.approx(60.0)
+    assert result[0].avg_pnl == pytest.approx(60.0)  # 60 / 1 trading day
+
+
+def test_dow_all_five_days():
+    positions = [
+        _at(1776070800, eid="mon", pnl=10.0),  # Mon
+        _at(1776157200, eid="tue", pnl=20.0),  # Tue
+        _at(1776243600, eid="wed", pnl=30.0),  # Wed
+        _at(1776330000, eid="thu", pnl=40.0),  # Thu
+        _at(1776416400, eid="fri", pnl=50.0),  # Fri
+    ]
+    result = bucket_by_day_of_week(positions)
+    assert [b.trades for b in result] == [1, 1, 1, 1, 1]
+    assert [b.total_pnl for b in result] == [10.0, 20.0, 30.0, 40.0, 50.0]
