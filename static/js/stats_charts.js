@@ -131,30 +131,8 @@ export function mountHistogramChart(container, buckets, opts = {}) {
     }
 
     const labelEl = document.createElement("div");
-    if (kind === "week" || kind === "month" || kind === "day-count") {
-      // Multi-line label: bucket name + dollar amount + context count.
-      labelEl.className = "bar-label bar-label-multi";
-      const nameLine = document.createElement("span");
-      nameLine.textContent = label;
-      labelEl.appendChild(nameLine);
-
-      const valLine = document.createElement("span");
-      valLine.className = "bar-label-value " + (value >= 0 ? "pnl-pos" : "pnl-neg");
-      valLine.textContent = _formatPnl(value);
-      labelEl.appendChild(valLine);
-
-      const cntLine = document.createElement("span");
-      cntLine.className = "bar-label-count";
-      if (kind === "day-count") {
-        cntLine.textContent = `${b.days} day${b.days === 1 ? "" : "s"}`;
-      } else if (b.position_count !== undefined) {
-        cntLine.textContent = `${b.position_count} trade${b.position_count === 1 ? "" : "s"}`;
-      }
-      labelEl.appendChild(cntLine);
-    } else {
-      labelEl.className = "bar-label";
-      labelEl.textContent = label;
-    }
+    labelEl.className = "bar-label";
+    labelEl.textContent = label;
     col.appendChild(labelEl);
 
     col.title = `${label}: ${valueStr}`;
@@ -165,28 +143,12 @@ export function mountHistogramChart(container, buckets, opts = {}) {
 }
 
 function _formatBucketLabel(b, kind, index) {
-  if (kind === "day") {
-    // "2026-04-13" -> "04-13"
-    return b.bucket.slice(5);
-  }
-  if (kind === "week") {
-    // "2026-W16" -> "W16"
-    const dash = b.bucket.indexOf("-");
-    return dash >= 0 ? b.bucket.slice(dash + 1) : b.bucket;
-  }
-  if (kind === "month") {
-    // "2026-04" -> "2026-04"
-    return b.bucket;
-  }
   if (kind === "hour") {
     const h = b.hour !== undefined ? b.hour : index;
     return `${String(h).padStart(2, "0")}:00`;
   }
   if (kind === "distribution") {
     return `${_formatMoneyCompact(b.bucket_min)}..${_formatMoneyCompact(b.bucket_max)}`;
-  }
-  if (kind === "day-count") {
-    return `${b.trades_per_day} trade${b.trades_per_day === 1 ? "" : "s"}/day`;
   }
   return String(index);
 }

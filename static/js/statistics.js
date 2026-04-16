@@ -91,7 +91,7 @@ function renderSummary(container, summary, dayBuckets) {
   values[8].textContent = fmtMoney(summary.largest_loss);
   values[9].textContent = String(summary.wins ?? 0);
   values[10].textContent = String(summary.losses ?? 0);
-  values[11].textContent = String(summary.scratch_count ?? summary.scratches ?? 0);
+  values[11].textContent = String(summary.scratches ?? 0);
   values[12].textContent = String(summary.longest_win_streak);
   values[13].textContent = String(summary.longest_loss_streak);
   values[14].textContent = fmtNum(summary.avg_position_size, 1);

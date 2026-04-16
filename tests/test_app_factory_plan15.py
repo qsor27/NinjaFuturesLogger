@@ -13,6 +13,7 @@ def test_all_stats_routes_are_wired(tmp_config):
             "/api/stats/by-month",
             "/api/stats/by-hour",
             "/api/stats/by-side",
+            "/api/stats/by-day-of-week",
             "/api/stats/equity-curve",
             "/api/stats/distribution",
         ]:

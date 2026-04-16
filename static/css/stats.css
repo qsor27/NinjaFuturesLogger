@@ -103,19 +103,19 @@ body:has(.calendar-page) {
 .bento-1x1 { grid-column: span 1; }
 
 .reports-page > section,
-.reports-row-2col > section {
+.calendar-row-2col > section {
   background: var(--bg-card);
   border: 1px solid var(--border-card);
   border-radius: 10px;
   padding: 18px;
   margin: 0 16px 16px;
 }
-.reports-row-2col {
+.calendar-row-2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
-.reports-row-2col > section {
+.calendar-row-2col > section {
   margin: 0;
 }
 
@@ -321,35 +321,6 @@ body:has(.calendar-page) {
   font-size: 10px;
   color: var(--text-muted);
   white-space: nowrap;
-}
-
-/* Week / month bars: no rotation, three-line label (name + value + count) */
-.bar-chart.kind-week,
-.bar-chart.kind-month,
-.bar-chart.kind-day-count {
-  padding-bottom: 68px;
-}
-.bar-chart.kind-week::before,
-.bar-chart.kind-month::before,
-.bar-chart.kind-day-count::before {
-  top: calc(100% - 68px);
-}
-.bar-label-multi {
-  transform: translateX(-50%); /* no rotation */
-  bottom: -60px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  text-align: center;
-}
-.bar-label-value {
-  font-size: 11px;
-  font-weight: 600;
-}
-.bar-label-count {
-  font-size: 10px;
-  color: var(--text-muted);
 }
 
 /* Distribution bars: count annotation above the bar (bottom set in JS) */

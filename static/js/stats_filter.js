@@ -1,5 +1,5 @@
 // Plan 15 — shared filter bar module. URL query params are the source of truth.
-// Both /statistics and /reports import this and pass onApply.
+// Both /statistics and /calendar import this and pass onApply.
 
 export function parseFilterFromUrl() {
   const url = new URL(window.location.href);
