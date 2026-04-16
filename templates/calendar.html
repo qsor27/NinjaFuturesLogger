@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Calendar — FuturesTradingLog{% endblock %}
+{% block extra_styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/stats.css') }}">
+{% endblock %}
+{% block content %}
+  <div id="calendar-root" class="calendar-page">
+    <div id="stats-filter-bar"></div>
+    <section id="calendar-heatmap"></section>
+    <div class="reports-row-2col">
+      <section id="calendar-by-week"></section>
+      <section id="calendar-by-month"></section>
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/lightweight-charts.standalone.production.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='js/calendar.js') }}"></script>
+{% endblock %}
