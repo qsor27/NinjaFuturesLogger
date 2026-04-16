@@ -1,13 +1,16 @@
 services:
   web:
     build: .
-    image: futurestradinglog:foundation
-    container_name: futurestradinglog
+    image: ghcr.io/qsor27/ninjafutureslogger:latest
+    container_name: ninjafutureslogger
     restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
-      - C:/Containers/NinjaFuturesLogger:/app/data
+      # EDIT THIS LINE: replace the left side with the path to your data folder.
+      # Use forward slashes even on Windows. Example: C:/FuturesTradingLog
+      # Do NOT use a folder inside OneDrive, Dropbox, Google Drive, or any cloud sync.
+      - C:/FuturesTradingLog:/app/data
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
       interval: 30s

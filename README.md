@@ -1,48 +1,288 @@
-# FuturesTradingLog
+# NinjaFuturesLogger
 
-A single-user web application for analyzing futures trading activity exported from NinjaTrader.
+A self-hosted web application for reviewing and analyzing your NinjaTrader 8 futures trades. It runs on your own machine, imports trade executions automatically as you trade, and gives you a searchable journal with charts and statistics.
 
-**This repository is a rebuild.** It starts from a complete specification and no prior code. If you are an AI assistant or a human developer opening this repo for the first time, your entry point is:
+---
 
-> **[`docs/rebuild-spec/00-README.md`](docs/rebuild-spec/00-README.md)**
+## How It Works
 
-That document is the map. It lists every other spec doc in the order you should read them, and it summarizes the load-bearing architectural decisions that shape every feature.
+Understanding the moving parts before you start makes every step obvious:
 
-## Before you write any code
+1. **NinjaTrader writes CSV files.** An indicator you install in NinjaTrader (`ExecutionExporter`) writes a CSV file every time you execute a trade. It writes to a folder on your hard drive that you choose.
+2. **The app watches that folder.** A Docker container running on your machine monitors the same folder. The moment a new CSV appears, it imports the trades automatically.
+3. **You open a browser.** The app is available at `http://localhost:8000`. No internet connection required after setup.
 
-1. Read `docs/rebuild-spec/00-README.md` end-to-end.
-2. Read `docs/rebuild-spec/01-mission-and-principles.md`. The Six Rules are non-negotiable.
-3. Read `docs/rebuild-spec/02-glossary.md`. The domain vocabulary is precise and some terms (Side vs. Position side, Action vs. Side, Execution vs. Position) are easy to confuse.
-4. Then read the feature docs in the order listed in `00-README.md`'s build-order section: 10 → 11 → 14 → 12 → 13 → 15 → 16 → 17.
+The critical connection is that **the folder NinjaTrader writes to and the folder the app watches must be the same folder.** Setting this up correctly is the most important part of the install.
 
-Do not read or copy from any prior FuturesTradingLog codebase. If you need to answer "what did the old app do here?", the answer belongs in a feature doc's acceptance criteria or fragmentation-hazards section — not in old source files. If a spec doc is unclear, raise the ambiguity with the project owner rather than inferring from legacy code.
+---
 
-## Repository layout at first commit
+## What You Need
+
+- A Windows PC running NinjaTrader 8
+- [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) (free)
+- About 10 minutes
+
+---
+
+## Step 1 — Install Docker Desktop
+
+Docker Desktop is the software that runs the app in an isolated container on your machine. Think of it as a lightweight, self-contained environment — it keeps the app and all its dependencies from interfering with anything else on your PC.
+
+1. Download Docker Desktop from [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/).
+2. Run the installer. Accept all defaults.
+3. Restart your PC if prompted.
+4. After restarting, Docker Desktop will start automatically (look for the whale icon in your system tray).
+5. Verify it's working: open a Command Prompt and run:
+   ```
+   docker --version
+   ```
+   You should see something like `Docker version 28.x.x`. If you get an error, make sure Docker Desktop is running.
+
+> **Note:** Docker Desktop must be running whenever you want to use NinjaFuturesLogger. It starts with Windows by default after installation.
+
+---
+
+## Step 2 — Create Your Data Folder
+
+This folder is where all your trade data lives — the database, the imported CSVs, and the logs. You will point both the app and the NinjaTrader indicator at this location.
+
+### Pick a location
+
+Choose a folder on a **local drive** (your C: drive or another internal/external hard drive). The location is entirely up to you.
+
+**Avoid any folder that syncs to the cloud.** This means do not use:
+- OneDrive (`C:\Users\YourName\OneDrive\...`)
+- Dropbox
+- Google Drive (with local sync)
+- Box Drive
+- iCloud Drive
+- SharePoint synced folders
+
+**Why this matters:** Sync software continuously monitors files and locks them while uploading. This can corrupt your trade database, cause the app to miss incoming CSVs, or prevent the app from starting. This is not a fixable edge case — it will cause silent data problems. Use a plain local folder.
+
+**Recommended location:** Create a folder directly on your C: drive, for example:
+```
+C:\FuturesTradingLog
+```
+
+### Create the folder structure
+
+Inside your chosen folder, create one subfolder called `inbox` and one called `config`. You can do this in File Explorer or by running these commands in a Command Prompt (adjusting the path if you chose a different location):
 
 ```
-/
-├── README.md                       # this file
-├── docs/
-│   └── rebuild-spec/               # the complete specification (13 docs)
-└── ninjascript/
-    └── ExecutionExporter.cs        # preserved verbatim from the prior project
-                                    # (see docs/rebuild-spec/90-preserved-assets.md
-                                    # for the narrow write-path exceptions)
+mkdir C:\FuturesTradingLog\inbox
+mkdir C:\FuturesTradingLog\config
 ```
 
-Everything else — application code, tests, Docker config, migrations — is created during implementation, guided by the spec.
+Your folder should look like this:
+```
+C:\FuturesTradingLog\
+├── config\
+└── inbox\        ← NinjaTrader will write CSV files here
+```
 
-## Architectural ground rules (summary only — the spec is canonical)
+The app will create all other subfolders (archive, logs, database) automatically on first run.
 
-- **One Flask process.** APScheduler + `ThreadPoolExecutor` + `watchdog` all run inside it. No Celery, no Redis, no message broker. `docker compose ps` shows exactly one service.
-- **Positions are a derived view, not a stored table.** Executions are stored (keyed by NinjaTrader `ExecutionId`); positions are computed from them on every read.
-- **Imports are idempotent by construction.** The `executions` table has `UNIQUE(nt_execution_id, account)` and every insert is `ON CONFLICT DO NOTHING`.
-- **OHLC is isolated.** When every OHLC source is down, imports, positions, stats, notes, and monitoring all keep working. The chart area shows a delayed-data banner.
-- **User metadata attaches to execution IDs, never to derived entities.** Notes, reviewed flags, custom fields, and link groups all key off `nt_execution_id` or the position natural key.
-- **Pydantic everywhere at type boundaries. SQLite is the only data store.**
+### Create the configuration file
 
-Full reasoning for each of these is in `docs/rebuild-spec/00-README.md` under "Load-bearing architectural decisions."
+The app requires a configuration file at `config\app.json` inside your data folder. Create a new file called `app.json` inside the `config` folder and paste in the following content exactly as shown:
 
-## Status
+```json
+{
+  "data_dir": "data",
+  "db_path": "data/trading_log.db",
+  "inbox_dir": "data/inbox",
+  "archive_dir": "data/archive",
+  "log_dir": "data/logs",
+  "session": {
+    "exchange_timezone": "America/Chicago",
+    "trade_date_rollover": "16:00",
+    "archive_job_time": "18:00"
+  },
+  "thread_pool": {
+    "max_workers": 4
+  },
+  "scheduler": {
+    "heartbeat_seconds": 60
+  }
+}
+```
 
-Pre-implementation. The spec is complete and internally consistent. Implementation planning begins from this commit.
+To create this file: open Notepad, paste the content above, then go to **File → Save As**, navigate to your `config` folder, set "Save as type" to **All Files**, and save the file as `app.json` (not `app.json.txt`).
+
+Your folder should now look like this:
+```
+C:\FuturesTradingLog\
+├── config\
+│   └── app.json
+└── inbox\
+```
+
+---
+
+## Step 3 — Start the App
+
+### Download the compose file
+
+Download [`docker-compose.yml`](docker-compose.yml) from this repository. You only need this one file — you do not need to clone or download the entire project.
+
+To download it directly: click the file name above, then click the **Raw** button on GitHub, then right-click the page and choose **Save As**. Save it anywhere convenient, such as your Desktop or your data folder.
+
+### Edit the volume path
+
+Open `docker-compose.yml` in Notepad. Find this line:
+
+```
+- C:/FuturesTradingLog:/app/data
+```
+
+Replace `C:/FuturesTradingLog` with the path to your data folder. **Use forward slashes (`/`), not backslashes (`\`), even on Windows.**
+
+Examples:
+- `C:/FuturesTradingLog:/app/data` — if your folder is `C:\FuturesTradingLog`
+- `D:/Trading/Data:/app/data` — if your folder is `D:\Trading\Data`
+
+Save the file.
+
+### Pull and start the container
+
+Open a Command Prompt in the folder where you saved `docker-compose.yml`. The easiest way: hold Shift and right-click the folder in File Explorer, then choose **Open PowerShell window here** (or **Open command window here**).
+
+Run:
+```
+docker compose pull
+docker compose up -d
+```
+
+The first command downloads the app image (a few hundred MB — one time only). The second starts it in the background. After a few seconds, verify it's running:
+
+```
+docker compose ps
+```
+
+You should see one container named `ninjafutureslogger` with status `Up (healthy)`.
+
+Open your browser and go to:
+```
+http://localhost:8000
+```
+
+You should see the NinjaFuturesLogger interface. It will be empty until you start trading with the indicator installed.
+
+---
+
+## Step 4 — Install the NinjaTrader Indicator
+
+The `ExecutionExporter` indicator runs inside NinjaTrader and writes a CSV file every time you execute a trade. It is a NinjaScript indicator — you import the source file once and NinjaTrader compiles it automatically.
+
+### Get the indicator file
+
+Download [`ExecutionExporter.cs`](ninjascript/ExecutionExporter.cs) from this repository. You can right-click the **Raw** button and save it anywhere (your Downloads folder is fine).
+
+### Import into NinjaTrader 8
+
+1. Open NinjaTrader 8.
+2. In the top menu, go to **Tools → Edit NinjaScript → Indicator...**
+3. The NinjaScript Editor window opens. In its menu, go to **File → Open**.
+4. Navigate to where you saved `ExecutionExporter.cs` and open it.
+5. Press **F5** (or click the **Compile** button in the toolbar). The Output tab at the bottom should show `Compile succeeded with 0 error(s), 0 warning(s)`.
+6. Close the NinjaScript Editor.
+
+---
+
+## Step 5 — Connect NinjaTrader to the App
+
+This step is the most important. The indicator needs to know exactly where to write its CSV files, and that location must match the `inbox` folder inside your data folder.
+
+### Add the indicator to a chart
+
+1. Open any chart in NinjaTrader (any instrument, any timeframe).
+2. Right-click anywhere on the chart and choose **Indicators...**
+3. In the Indicators window, find **ExecutionExporter** in the list on the left. Double-click it to add it, or select it and click **Add**.
+4. The indicator's settings panel appears on the right side.
+
+### Set the Export Path
+
+In the indicator settings, find the **Export Path** field. Set it to the full path of your `inbox` folder — the one you created in Step 2.
+
+For example, if your data folder is `C:\FuturesTradingLog`:
+```
+C:\FuturesTradingLog\inbox
+```
+
+If you used a different location, use that path instead. This must be the `inbox` subfolder, not the data folder itself.
+
+Leave all other settings at their defaults.
+
+5. Click **OK**.
+
+### Why this path is the critical link
+
+```
+NinjaTrader → writes CSV → C:\FuturesTradingLog\inbox\
+                                          ↕  (same folder)
+Docker container → reads CSV → /app/data/inbox/
+                                          ↕
+                          App imports trades automatically
+```
+
+NinjaTrader writes files into `inbox`. The Docker container mounts your data folder and sees those same files as `/app/data/inbox`. If the paths don't align — for example, if the indicator writes to a different folder — no trades will ever appear in the app. Double-check this path carefully.
+
+---
+
+## Step 6 — Verify Everything Is Working
+
+1. With the indicator on a chart, execute a trade in NinjaTrader (a real trade, a sim trade, or a replay will all work).
+2. Open your `inbox` folder in File Explorer. You should see a CSV file named something like `NinjaTrader_Executions_20260415.csv` appear within a few seconds of the trade.
+3. Open `http://localhost:8000` in your browser. Your trade should appear in the positions list within a few seconds.
+
+If the CSV file appears in `inbox` but the trade does not appear in the app, the volume path in `docker-compose.yml` is likely pointing at the wrong folder. Re-check Step 3.
+
+If no CSV file appears in `inbox` after trading, the indicator's Export Path is pointing at the wrong folder. Re-check Step 5.
+
+---
+
+## Keeping the App Updated
+
+When a new version is released, update with two commands from the folder containing your `docker-compose.yml`:
+
+```
+docker compose pull
+docker compose up -d
+```
+
+This downloads the new image and restarts the container. Your data folder and database are untouched — they live on your hard drive, outside the container.
+
+---
+
+## Troubleshooting
+
+**The app won't start / container exits immediately**
+
+Check the logs:
+```
+docker compose logs
+```
+The most common cause is a missing or malformed `app.json`. Make sure the file exists at `<your data folder>\config\app.json` and that the content is valid JSON (no trailing commas, correct quotes).
+
+**No trades appear after trading**
+
+Work through the chain:
+1. Check `inbox` — is there a CSV file? If yes, the indicator is working. If no, the indicator's Export Path is wrong (Step 5).
+2. If there is a CSV in `inbox` but no trades in the app, the volume path in `docker-compose.yml` is wrong (Step 3). The path on the left side of the `:` must exactly match your data folder.
+
+**Port 8000 is already in use**
+
+Something else on your machine is using port 8000. In `docker-compose.yml`, change `"8000:8000"` to `"8080:8000"` (or any other open port), then run `docker compose up -d` again. Access the app at `http://localhost:8080`.
+
+**Docker Desktop is not running**
+
+The container only runs while Docker Desktop is running. If you restart your PC, Docker Desktop starts automatically and the container restarts as well (it has `restart: unless-stopped`). If you manually stop Docker Desktop, restart it from the system tray or Start menu.
+
+**I moved my data folder**
+
+Update the volume path in `docker-compose.yml` to the new location, then run:
+```
+docker compose down
+docker compose up -d
+```

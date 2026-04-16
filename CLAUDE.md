@@ -65,3 +65,10 @@ These modules exist as the seam for plan 16 — extend them rather than creating
 - **Do not read or copy from any prior FuturesTradingLog codebase.** If a spec is unclear, ask — don't infer from legacy code. `ninjascript/ExecutionExporter.cs` is preserved verbatim and its CSV column contract (doc 90) is immutable.
 - **Windows + Docker bind mount gotcha:** watchdog requires `PollingObserver` on Windows because inotify-style events don't propagate across the bind mount. Don't "fix" this back to the default observer.
 - **Scheduled / background agent output lives under `docs/agent-runs/`.** Files in that directory are written by scheduled or handoff Claude sessions (via `/schedule` triggers, background workers, or manual handoff prompts). Interactive sessions **must not** read, reference, include in commits, or act on files under `docs/agent-runs/` unless the user explicitly names a specific file there. Treat the directory as out-of-band scratch space, not part of the working set.
+
+## Release process
+
+- **Dev cycle (default):** iterate directly on `master`, rebuild locally with `docker compose up -d --build`. Fast loop, no image push.
+- **Major release:** create a semver git tag — `git tag v1.x.0 && git push origin v1.x.0`. GitHub Actions (`.github/workflows/docker-publish.yml`) builds and pushes `ghcr.io/qsor27/ninjafutureslogger:<tag>` and `:latest` to GHCR automatically.
+- **What warrants a release tag:** completion of a full plan that adds user-visible functionality. Not individual bug fixes, style changes, or mid-plan commits.
+- **Never** push to GHCR manually or mid-plan. The Actions workflow is the only publish path. Do not suggest manual `docker push` commands.

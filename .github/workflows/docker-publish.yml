@@ -1,0 +1,50 @@
+name: Publish Docker Image to GHCR
+
+# Triggers on version tags (e.g. git tag v1.2.0 && git push origin v1.2.0)
+# or manually from the Actions tab for emergency releases.
+# Do NOT trigger on every commit — only on intentional major releases.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag to apply (e.g. v1.2.0) — leave blank to only tag as latest'
+        required: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags and labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/qsor27/ninjafutureslogger
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
