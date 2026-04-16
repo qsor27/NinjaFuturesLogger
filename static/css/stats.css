@@ -26,7 +26,8 @@
 }
 
 body:has(.stats-page),
-body:has(.reports-page) {
+body:has(.reports-page),
+body:has(.calendar-page) {
   background: var(--bg-page);
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -243,7 +244,6 @@ body:has(.reports-page) {
   height: 240px;
 }
 #stats-equity .chart-container { height: 220px; }
-#reports-equity .chart-container { height: 320px; }
 
 .chart-legend {
   display: flex;
@@ -361,3 +361,40 @@ body:has(.reports-page) {
   color: var(--text-secondary);
   white-space: nowrap;
 }
+
+/* Long vs Short side-by-side layout */
+.side-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.side-col {
+  background: rgba(51, 65, 85, 0.25);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.side-col-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.side-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.side-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+  font-size: 12px;
+}
+.side-stat:last-child { border-bottom: none; }
+.side-stat-label { color: var(--text-secondary); font-size: 11px; }
+.side-stat-value { font-weight: 500; }
