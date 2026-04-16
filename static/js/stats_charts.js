@@ -313,3 +313,46 @@ function _formatPnl(pnl) {
   const abs = Math.abs(pnl);
   return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
+
+// LightweightCharts-based histogram for by-week and by-month on the Calendar
+// page. `buckets` are TimeBucket objects ({bucket, position_count, total_pnl}).
+// `toDateFn` converts the bucket key string to a "YYYY-MM-DD" date string.
+export function mountLcHistogram(container, buckets, toDateFn) {
+  container.innerHTML = "";
+  const activeBuckets = (buckets || []).filter((b) => b.position_count > 0);
+  if (!activeBuckets.length) {
+    container.innerHTML = '<div class="empty-state">No data for this filter</div>';
+    return null;
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "chart-container";
+  container.appendChild(wrap);
+
+  const chart = window.LightweightCharts.createChart(wrap, {
+    ...CHART_DEFAULTS,
+    width: wrap.clientWidth,
+    height: wrap.clientHeight,
+  });
+
+  const series = chart.addHistogramSeries({
+    priceFormat: { type: "price", precision: 0, minMove: 1 },
+  });
+
+  const data = activeBuckets
+    .map((b) => ({
+      time: toDateFn(b.bucket),
+      value: b.total_pnl,
+      color: b.total_pnl >= 0 ? "#22c55e" : "#f87171",
+    }))
+    .sort((a, b) => (a.time < b.time ? -1 : 1));
+
+  series.setData(data);
+  chart.timeScale().fitContent();
+
+  new ResizeObserver(() => {
+    chart.applyOptions({ width: wrap.clientWidth, height: wrap.clientHeight });
+  }).observe(wrap);
+
+  return chart;
+}
