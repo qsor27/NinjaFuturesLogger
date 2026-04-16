@@ -1,4 +1,6 @@
-from services.instruments import base_symbol, get_multiplier
+import pytest
+
+from services.instruments import base_symbol, effective_commission, get_multiplier
 
 
 def test_get_multiplier_known_symbols():
@@ -64,6 +66,48 @@ def test_source_symbol_renders_contract_template_for_yfinance(tmp_path):
     assert source_symbol("MNQ", "yfinance") == "MNQ=F"
     assert source_symbol("MNQ JUN26", "stooq") is None
     assert source_symbol("MNQ", "stooq") == "mnq.f"
+
+
+def test_effective_commission_uses_execution_value_when_positive():
+    # NT provides commission > 0 — use it regardless of instrument config
+    assert effective_commission("MNQ", execution_commission=3.24, quantity=3) == 3.24
+
+
+def test_effective_commission_uses_fallback_when_execution_is_zero(tmp_path):
+    import json
+    from services.instruments import set_registry_path
+    instruments_json = tmp_path / "instruments.json"
+    instruments_json.write_text(json.dumps({
+        "MNQ": {
+            "display_name": "Micro E-mini Nasdaq-100",
+            "multiplier": 2.0,
+            "tick_size": 0.25,
+            "commission_per_contract": 1.08,
+            "sources": {
+                "yfinance": {"continuous": "MNQ=F", "contract_template": None},
+                "stooq": {"continuous": "mnq.f", "contract_template": None},
+            },
+            "session": {
+                "timezone": "America/Chicago",
+                "open": "17:00",
+                "close": "16:00",
+                "daily_break_start": "16:00",
+                "daily_break_end": "17:00",
+            },
+        }
+    }))
+    set_registry_path(instruments_json)
+    # NT reports 0 (sim-style), fallback applies: 1.08 × 2 contracts
+    assert effective_commission("MNQ", execution_commission=0.0, quantity=2) == pytest.approx(2.16)
+
+
+def test_effective_commission_zero_when_no_fallback_configured():
+    # NT reports 0, no commission_per_contract set → stays 0 (sim account)
+    assert effective_commission("MNQ", execution_commission=0.0, quantity=5) == 0.0
+
+
+def test_effective_commission_zero_for_unknown_instrument():
+    assert effective_commission("ZZZZ", execution_commission=0.0, quantity=1) == 0.0
 
 
 def test_source_symbol_all_month_codes(tmp_path):

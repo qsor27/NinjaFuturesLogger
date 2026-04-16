@@ -117,3 +117,47 @@ def test_custom_field_definition_field_type_literal():
 def test_custom_field_option_round_trip():
     o = CustomFieldOption(option_id=1, field_id=2, value="Breakout", display_order=0)
     assert o.value == "Breakout"
+
+
+def test_instrument_config_commission_defaults_to_zero():
+    raw = {
+        "display_name": "E-mini Nasdaq-100",
+        "multiplier": 20.0,
+        "tick_size": 0.25,
+        "sources": {
+            "yfinance": {"continuous": "NQ=F", "contract_template": None},
+            "stooq": {"continuous": "nq.f", "contract_template": None},
+        },
+        "session": {
+            "timezone": "America/Chicago",
+            "open": "17:00",
+            "close": "16:00",
+            "daily_break_start": "16:00",
+            "daily_break_end": "17:00",
+        },
+    }
+    cfg = InstrumentConfig(**raw)
+    assert cfg.commission_per_contract == 0.0
+
+
+def test_instrument_config_commission_round_trips():
+    raw = {
+        "display_name": "Micro E-mini Nasdaq-100",
+        "multiplier": 2.0,
+        "tick_size": 0.25,
+        "commission_per_contract": 1.08,
+        "sources": {
+            "yfinance": {"continuous": "MNQ=F", "contract_template": None},
+            "stooq": {"continuous": "mnq.f", "contract_template": None},
+        },
+        "session": {
+            "timezone": "America/Chicago",
+            "open": "17:00",
+            "close": "16:00",
+            "daily_break_start": "16:00",
+            "daily_break_end": "17:00",
+        },
+    }
+    cfg = InstrumentConfig(**raw)
+    assert cfg.commission_per_contract == 1.08
+    assert cfg.model_dump()["commission_per_contract"] == 1.08

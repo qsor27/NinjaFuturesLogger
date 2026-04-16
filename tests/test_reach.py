@@ -6,8 +6,8 @@ def test_provider_reach_table_has_all_intraday_timeframes():
         assert tf in PROVIDER_REACH
 
 
-def test_1m_reach_is_7_days():
-    assert PROVIDER_REACH["1m"] == 7 * 86400
+def test_1m_reach_is_30_days():
+    assert PROVIDER_REACH["1m"] == 30 * 86400
 
 
 def test_5m_and_15m_reach_is_60_days():
@@ -25,7 +25,7 @@ def test_1d_reach_is_effectively_unlimited():
 
 def test_is_out_of_reach_flags_old_1m_slot():
     now = 1_000_000_000
-    old = now - 10 * 86400
+    old = now - 31 * 86400
     assert is_out_of_reach("1m", slot_ts=old, now=now) is True
 
 

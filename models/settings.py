@@ -30,6 +30,7 @@ class InstrumentConfig(StrictModel):
     tick_size: float
     sources: InstrumentSources
     session: InstrumentSession
+    commission_per_contract: float = 0.0
 
 
 class ChartDefaults(StrictModel):
