@@ -70,9 +70,9 @@ class SideStats(StrictModel):
     position_count: int
     total_pnl: float
     win_rate: float | None
-    avg_win: float | None
-    avg_loss: float | None
-    profit_factor: float | None
+    avg_win: float | None = None
+    avg_loss: float | None = None
+    profit_factor: float | None = None
 
 
 class SideBreakdown(StrictModel):
