@@ -34,25 +34,29 @@ function renderHeader(detail) {
   const p = detail.position;
   setText(title, `${p.instrument} ${p.side} × ${p.quantity}`);
   const rows = [
-    ["Account", p.account],
-    ["Instrument", p.instrument],
-    ["Side", p.side],
-    ["Qty", p.quantity],
-    ["Entry time", formatTime(p.entry_time)],
-    ["Exit time", formatTime(p.exit_time)],
-    ["Entry price", p.entry_price.toFixed(2)],
-    ["Exit price", p.exit_price !== null ? p.exit_price.toFixed(2) : "—"],
-    ["Points P&L", p.points_pnl !== null ? p.points_pnl.toFixed(2) : "—"],
-    ["$ P&L", formatDollars(p.dollars_pnl).text],
-    ["Commission", `$${p.commission.toFixed(2)}`],
-    ["Duration", p.duration_minutes !== null ? p.duration_minutes.toFixed(1) + " m" : "—"],
+    ["Account", p.account, null],
+    ["Instrument", p.instrument, null],
+    ["Side", p.side, null],
+    ["Qty", p.quantity, null],
+    ["Entry time", formatTime(p.entry_time), null],
+    ["Exit time", formatTime(p.exit_time), null],
+    ["Entry price", p.entry_price.toFixed(2), null],
+    ["Exit price", p.exit_price !== null ? p.exit_price.toFixed(2) : "—", null],
+    ["Points P&L", p.points_pnl !== null ? p.points_pnl.toFixed(2) : "—", p.points_pnl],
+    ["$ P&L", formatDollars(p.dollars_pnl).text, p.dollars_pnl],
+    ["Commission", `$${p.commission.toFixed(2)}`, null],
+    ["Duration", p.duration_minutes !== null ? p.duration_minutes.toFixed(1) + " m" : "—", null],
   ];
   headerDl.innerHTML = "";
-  for (const [label, value] of rows) {
+  for (const [label, value, pnlValue] of rows) {
     const dt = document.createElement("dt");
     const dd = document.createElement("dd");
     setText(dt, label);
     setText(dd, value);
+    if (pnlValue !== null && pnlValue !== undefined) {
+      if (pnlValue > 0) dd.classList.add("pnl-pos");
+      else if (pnlValue < 0) dd.classList.add("pnl-neg");
+    }
     headerDl.appendChild(dt);
     headerDl.appendChild(dd);
   }
@@ -105,7 +109,7 @@ function renderExecutions(executions, detail) {
   const table = document.createElement("table");
   const thead = document.createElement("thead");
   thead.innerHTML = `
-    <tr><th>ID</th><th>Time</th><th>Side</th><th>Qty</th><th>Price</th><th>Commission</th><th>Action</th><th>Reviewed</th></tr>`;
+    <tr><th>ID</th><th>Time</th><th>Side</th><th>Qty</th><th>Price</th><th>Avg Entry</th><th>Pts P&L</th><th>$ P&L (net)</th><th>Commission</th><th>Action</th></tr>`;
   table.appendChild(thead);
   const tbody = document.createElement("tbody");
   for (const e of executions) {
@@ -119,19 +123,28 @@ function renderExecutions(executions, detail) {
         }),
       );
     });
-    const td = (text) => {
+    const td = (text, cssClass) => {
       const c = document.createElement("td");
       setText(c, text);
+      if (cssClass) c.className = cssClass;
       return c;
+    };
+    const pnlClass = (val) => {
+      if (val === null || val === undefined) return null;
+      if (val > 0) return "pnl-pos";
+      if (val < 0) return "pnl-neg";
+      return null;
     };
     tr.appendChild(td(e.nt_execution_id));
     tr.appendChild(td(formatTime(e.timestamp)));
     tr.appendChild(td(e.side));
     tr.appendChild(td(e.quantity));
     tr.appendChild(td(e.price.toFixed(2)));
+    tr.appendChild(td(e.avg_entry_price !== null ? e.avg_entry_price.toFixed(2) : "—"));
+    tr.appendChild(td(e.pnl_points !== null ? e.pnl_points.toFixed(2) : "—", pnlClass(e.pnl_points)));
+    tr.appendChild(td(e.pnl_dollars_net !== null ? `$${e.pnl_dollars_net.toFixed(2)}` : "—", pnlClass(e.pnl_dollars_net)));
     tr.appendChild(td(`$${e.commission.toFixed(2)}`));
     tr.appendChild(td(e.original_action));
-    tr.appendChild(td(detail.reviewed[e.nt_execution_id] ? "✓" : ""));
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
