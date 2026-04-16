@@ -21,9 +21,9 @@ def build_pages_blueprint() -> Blueprint:
     def statistics_page():
         return render_template("statistics.html")
 
-    @bp.get("/reports")
-    def reports_page():
-        return render_template("reports.html")
+    @bp.get("/calendar")
+    def calendar_page():
+        return render_template("calendar.html")
 
     @bp.get("/imports")
     def imports_list():

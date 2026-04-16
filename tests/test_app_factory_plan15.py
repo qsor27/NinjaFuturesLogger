@@ -35,13 +35,13 @@ def test_statistics_page_renders(tmp_config):
         services.stop()
 
 
-def test_reports_page_renders(tmp_config):
+def test_calendar_page_renders(tmp_config):
     app, services = create_app(tmp_config, start_background=False)
     try:
-        resp = app.test_client().get("/reports")
+        resp = app.test_client().get("/calendar")
         assert resp.status_code == 200
-        assert b"reports-root" in resp.data
-        assert b"reports.js" in resp.data
+        assert b"calendar-root" in resp.data
+        assert b"calendar.js" in resp.data
     finally:
         services.stop()
 
@@ -55,7 +55,7 @@ def test_static_stats_assets_are_served(tmp_config):
             ("/static/js/stats_filter.js", b"parseFilterFromUrl"),
             ("/static/js/stats_charts.js", b"mountCalendarHeatmap"),
             ("/static/js/statistics.js", b"renderSummary"),
-            ("/static/js/reports.js", b"mountCalendarHeatmap"),
+            ("/static/js/calendar.js", b"isoWeekToDate"),
         ]:
             resp = client.get(path)
             assert resp.status_code == 200, f"{path} returned {resp.status_code}"
