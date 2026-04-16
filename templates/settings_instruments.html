@@ -21,7 +21,7 @@
       <thead>
         <tr>
           <th>Symbol</th><th>Display name</th><th>Multiplier</th><th>Tick</th>
-          <th>yfinance</th><th>stooq</th><th>Session</th><th></th>
+          <th>Commission/ct</th><th>yfinance</th><th>stooq</th><th>Session</th><th></th>
         </tr>
       </thead>
       <tbody id="instruments-tbody"></tbody>
@@ -42,6 +42,7 @@
       <label>Display name <input name="display_name" required></label>
       <label>Multiplier <input name="multiplier" type="number" step="any" required></label>
       <label>Tick size <input name="tick_size" type="number" step="any" required></label>
+      <label>Commission per contract ($) <input name="commission_per_contract" type="number" step="any" min="0" placeholder="0.00 = not configured"></label>
       <label>yfinance continuous <input name="yfinance_continuous"></label>
       <label>stooq continuous <input name="stooq_continuous"></label>
       <fieldset>

@@ -183,6 +183,42 @@ def test_coverage_pin(tmp_path: Path):
     assert mnq["pinned"] is True
 
 
+def test_put_instrument_commission_per_contract_round_trips(tmp_path: Path):
+    client = _setup_app(tmp_path)
+    payload = {
+        "display_name": "Micro E-mini Nasdaq-100",
+        "multiplier": 2.0,
+        "tick_size": 0.25,
+        "commission_per_contract": 1.08,
+        "sources": {
+            "yfinance": {"continuous": "MNQ=F", "contract_template": None},
+            "stooq": {"continuous": "mnq.f", "contract_template": None},
+        },
+        "session": {
+            "timezone": "America/Chicago",
+            "open": "17:00",
+            "close": "16:00",
+            "daily_break_start": "16:00",
+            "daily_break_end": "17:00",
+        },
+    }
+    res = client.put("/api/config/instruments/MNQ", json=payload)
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["instrument"]["commission_per_contract"] == 1.08
+
+    res = client.get("/api/config/instruments")
+    assert res.get_json()["instruments"]["MNQ"]["commission_per_contract"] == 1.08
+
+
+def test_existing_instruments_default_commission_to_zero(tmp_path: Path):
+    # Seeded instruments (ES, NQ, etc.) have no commission_per_contract → default 0.0
+    client = _setup_app(tmp_path)
+    res = client.get("/api/config/instruments")
+    body = res.get_json()
+    assert body["instruments"]["ES"]["commission_per_contract"] == 0.0
+
+
 def test_coverage_retire_then_reactivate(tmp_path: Path):
     client = _setup_app(tmp_path)
     db_path = str(tmp_path / "data" / "ftl.db")

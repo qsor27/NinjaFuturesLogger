@@ -15,7 +15,7 @@ async function refresh() {
   for (const [symbol, cfg] of Object.entries(body.instruments).sort()) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+      <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
       <td><button data-act="edit"></button> <button data-act="del"></button></td>
     `;
     const cells = tr.querySelectorAll("td");
@@ -23,12 +23,14 @@ async function refresh() {
     cells[1].textContent = cfg.display_name;
     cells[2].textContent = cfg.multiplier;
     cells[3].textContent = cfg.tick_size;
-    cells[4].textContent = cfg.sources?.yfinance?.continuous ?? "";
-    cells[5].textContent = cfg.sources?.stooq?.continuous ?? "";
+    const commRate = cfg.commission_per_contract;
+    cells[4].textContent = commRate > 0 ? `$${commRate}` : "—";
+    cells[5].textContent = cfg.sources?.yfinance?.continuous ?? "";
+    cells[6].textContent = cfg.sources?.stooq?.continuous ?? "";
     const s = cfg.session;
-    cells[6].textContent = s ? `${s.timezone} · ${s.open}–${s.close}` : "";
-    cells[6].title = s ? `Break ${s.daily_break_start}–${s.daily_break_end}` : "";
-    const [editBtn, delBtn] = cells[7].querySelectorAll("button");
+    cells[7].textContent = s ? `${s.timezone} · ${s.open}–${s.close}` : "";
+    cells[7].title = s ? `Break ${s.daily_break_start}–${s.daily_break_end}` : "";
+    const [editBtn, delBtn] = cells[8].querySelectorAll("button");
     editBtn.textContent = "Edit";
     delBtn.textContent = "Delete";
     editBtn.addEventListener("click", () => openDialog(symbol, cfg));
@@ -46,6 +48,7 @@ function openDialog(symbol, cfg) {
   elements.display_name.value = cfg?.display_name || "";
   elements.multiplier.value = cfg?.multiplier ?? "";
   elements.tick_size.value = cfg?.tick_size ?? "";
+  elements.commission_per_contract.value = cfg?.commission_per_contract ?? 0;
   elements.yfinance_continuous.value = cfg?.sources?.yfinance?.continuous || "";
   elements.stooq_continuous.value = cfg?.sources?.stooq?.continuous || "";
   elements.session_timezone.value = cfg?.session?.timezone || "America/Chicago";
@@ -64,6 +67,7 @@ async function saveDialog(event) {
     display_name: f.display_name.value,
     multiplier: parseFloat(f.multiplier.value),
     tick_size: parseFloat(f.tick_size.value),
+    commission_per_contract: parseFloat(f.commission_per_contract.value) || 0.0,
     sources: {
       yfinance: { continuous: f.yfinance_continuous.value || null, contract_template: null },
       stooq: { continuous: f.stooq_continuous.value || null, contract_template: null },
