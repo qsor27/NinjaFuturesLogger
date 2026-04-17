@@ -16,6 +16,13 @@ class PositionFilter:
     entry_time_min: int | None = None
     entry_time_max: int | None = None
     session_date: date | None = None  # plan 15: calendar-cell click target
+    # New drill-down fields (2026-04-16):
+    session_date_from: date | None = None
+    session_date_to: date | None = None
+    day_of_week: int | None = None       # 0=Mon … 4=Fri
+    hour_of_day: int | None = None       # 0..23
+    hour_tz: str | None = None           # IANA tz, required when hour_of_day is set
+    trades_per_day: int | None = None    # positive int; post-filter aggregation
 
 
 def apply_filters(
