@@ -1,7 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Positions — FuturesTradingLog{% endblock %}
+{% block extra_styles %}
+<style>
+  #list-root table.positions-table { width: auto; table-layout: auto; }
+  #list-root table.positions-table th,
+  #list-root table.positions-table td { white-space: nowrap; }
+  #list-root table.positions-table th { cursor: grab; user-select: none; }
+  #list-root table.positions-table th:active { cursor: grabbing; }
+  #list-root table.positions-table th.col-dragging { opacity: 0.4; }
+  #list-root table.positions-table th.col-drop-target { background: var(--accent-soft, rgba(139,92,246,0.25)); }
+</style>
+{% endblock %}
 {% block content %}
   <h1>Positions</h1>
+  <div id="back-to-stats" class="back-link" hidden></div>
   <form class="filters" id="filter-form">
     <label>Account
       <select name="account"><option value="">All</option></select>
@@ -25,15 +37,34 @@
         <option value="open">Open</option>
       </select>
     </label>
-    <label>Preset
-      <select name="date_preset" id="filter-date-preset"></select>
-    </label>
-    <label>From
+    <label>From (session)
       <input type="date" name="session_date_from">
     </label>
-    <label>To
+    <label>To (session)
       <input type="date" name="session_date_to">
     </label>
+    <label>Day of week
+      <select name="day_of_week">
+        <option value="">Any</option>
+        <option value="0">Mon</option>
+        <option value="1">Tue</option>
+        <option value="2">Wed</option>
+        <option value="3">Thu</option>
+        <option value="4">Fri</option>
+      </select>
+    </label>
+    <label>Hour
+      <select name="hour_of_day">
+        <option value="">Any</option>
+        {% for h in range(24) %}
+        <option value="{{ h }}">{{ '%02d:00' % h }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Trades/day
+      <input type="number" name="trades_per_day" min="1" step="1">
+    </label>
+    <input type="hidden" name="hour_tz">
     <button type="submit">Apply</button>
   </form>
   <div id="list-root"></div>
