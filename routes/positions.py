@@ -51,9 +51,14 @@ def _parse_filter_from_query(args) -> PositionFilter:
         except ValueError as e:
             raise ValueError(f"{key} must be ISO YYYY-MM-DD") from e
 
-    session_date = _date_or_none("session_date")
     session_date_from = _date_or_none("session_date_from")
     session_date_to = _date_or_none("session_date_to")
+    if (
+        session_date_from is not None
+        and session_date_to is not None
+        and session_date_from > session_date_to
+    ):
+        raise ValueError("session_date_from must be <= session_date_to")
 
     day_of_week = _int_or_none("day_of_week")
     if day_of_week is not None and not (0 <= day_of_week <= 4):
@@ -83,7 +88,6 @@ def _parse_filter_from_query(args) -> PositionFilter:
         outcome=outcome,
         entry_time_min=_int_or_none("entry_time_min"),
         entry_time_max=_int_or_none("entry_time_max"),
-        session_date=session_date,
         session_date_from=session_date_from,
         session_date_to=session_date_to,
         day_of_week=day_of_week,

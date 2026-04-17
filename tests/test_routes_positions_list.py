@@ -140,3 +140,57 @@ def test_filters_endpoint(tmp_config):
         assert set(body["instruments"]) == {"MNQ", "ES"}
     finally:
         services.stop()
+
+
+def test_list_session_date_range_filter(tmp_config):
+    app, services = create_app(tmp_config, start_background=False)
+    try:
+        # 2026-04-13 09:00 UTC (ts 1776070800) -> session 2026-04-13
+        # 2026-04-14 09:00 UTC (ts 1776157200) -> session 2026-04-14
+        _seed(
+            tmp_config.db_path,
+            [
+                _ex("a", "Sim", "MNQ", 1776070800, "Buy", "Buy", "Entry", "1 L"),
+                _ex("b", "Sim", "MNQ", 1776070860, "Sell", "Sell", "Exit", "-"),
+                _ex("c", "Sim", "MNQ", 1776157200, "Buy", "Buy", "Entry", "1 L"),
+                _ex("d", "Sim", "MNQ", 1776157260, "Sell", "Sell", "Exit", "-"),
+            ],
+        )
+        client = app.test_client()
+
+        resp = client.get(
+            "/api/positions?session_date_from=2026-04-13&session_date_to=2026-04-13"
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["page"]["total"] == 1
+
+        resp = client.get(
+            "/api/positions?session_date_from=2026-04-13&session_date_to=2026-04-14"
+        )
+        assert resp.get_json()["page"]["total"] == 2
+
+        resp = client.get("/api/positions?session_date_from=2026-04-14")
+        assert resp.get_json()["page"]["total"] == 1
+    finally:
+        services.stop()
+
+
+def test_list_session_date_range_bad_ordering_returns_400(tmp_config):
+    app, services = create_app(tmp_config, start_background=False)
+    try:
+        resp = app.test_client().get(
+            "/api/positions?session_date_from=2026-04-16&session_date_to=2026-04-01"
+        )
+        assert resp.status_code == 400
+        assert "session_date_from" in resp.get_json()["error"]
+    finally:
+        services.stop()
+
+
+def test_list_session_date_range_bad_format_returns_400(tmp_config):
+    app, services = create_app(tmp_config, start_background=False)
+    try:
+        resp = app.test_client().get("/api/positions?session_date_from=not-a-date")
+        assert resp.status_code == 400
+    finally:
+        services.stop()
