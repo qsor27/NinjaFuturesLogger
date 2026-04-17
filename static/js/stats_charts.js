@@ -2,12 +2,23 @@
 // Lightweight Charts global (loaded via <script src> in the page templates).
 // The third (mountCalendarHeatmap) is hand-rolled CSS Grid.
 
-const CHART_DEFAULTS = {
-  layout: { background: { color: "#1e293b" }, textColor: "#94a3b8" },
-  grid: { vertLines: { color: "#334155" }, horzLines: { color: "#334155" } },
-  rightPriceScale: { borderColor: "#334155" },
-  timeScale: { borderColor: "#334155", timeVisible: true, secondsVisible: false },
-};
+function _cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// Read chart colors from CSS custom properties so they follow the active
+// theme (dark tokens in :root, light tokens under html[data-theme="light"]).
+function _chartDefaults() {
+  const bg = _cssVar("--bg-card");
+  const text = _cssVar("--text-secondary");
+  const border = _cssVar("--border-card");
+  return {
+    layout: { background: { color: bg }, textColor: text },
+    grid: { vertLines: { color: border }, horzLines: { color: border } },
+    rightPriceScale: { borderColor: border },
+    timeScale: { borderColor: border, timeVisible: true, secondsVisible: false },
+  };
+}
 
 const LINE_COLOR_CYCLE = [
   "#8b5cf6", // purple (accent)
@@ -51,7 +62,7 @@ export function mountLineChart(container, seriesList, opts = {}) {
   wrap.className = "chart-container";
   container.appendChild(wrap);
   const chart = window.LightweightCharts.createChart(wrap, {
-    ...CHART_DEFAULTS,
+    ..._chartDefaults(),
     width: wrap.clientWidth,
     height: wrap.clientHeight,
   });
@@ -292,7 +303,7 @@ export function mountLcHistogram(container, buckets, toDateFn) {
   container.appendChild(wrap);
 
   const chart = window.LightweightCharts.createChart(wrap, {
-    ...CHART_DEFAULTS,
+    ..._chartDefaults(),
     width: wrap.clientWidth,
     height: wrap.clientHeight,
   });
@@ -301,11 +312,13 @@ export function mountLcHistogram(container, buckets, toDateFn) {
     priceFormat: { type: "price", precision: 0, minMove: 1 },
   });
 
+  const posColor = _cssVar("--pos");
+  const negColor = _cssVar("--neg");
   const data = activeBuckets
     .map((b) => ({
       time: toDateFn(b.bucket),
       value: b.total_pnl,
-      color: b.total_pnl >= 0 ? "#22c55e" : "#f87171",
+      color: b.total_pnl >= 0 ? posColor : negColor,
     }))
     .sort((a, b) => (a.time < b.time ? -1 : 1));
 
