@@ -39,6 +39,37 @@ async function fetchAll(filter) {
   return Object.fromEntries(ENDPOINTS.map((n, i) => [n, responses[i]]));
 }
 
+function positionsUrl(filter, extras) {
+  const params = new URLSearchParams();
+  if (filter.account) params.set("account", filter.account);
+  if (filter.side) params.set("side", filter.side);
+  if (filter.from) params.set("session_date_from", filter.from);
+  if (filter.to) params.set("session_date_to", filter.to);
+  for (const [k, v] of Object.entries(extras || {})) {
+    if (v !== null && v !== undefined && v !== "") {
+      params.set(k, String(v));
+    }
+  }
+  const qs = params.toString();
+  return `/positions${qs ? "?" + qs : ""}`;
+}
+
+function wireDrilldownClicks(container) {
+  container.querySelectorAll("tr[data-drilldown]").forEach((tr) => {
+    tr.addEventListener("click", (e) => {
+      // Let actual anchor clicks (plain, middle, cmd/ctrl) behave natively.
+      if (e.target.tagName === "A") return;
+      const href = tr.dataset.href;
+      if (!href) return;
+      if (e.ctrlKey || e.metaKey || e.button === 1) {
+        window.open(href, "_blank");
+      } else {
+        window.location.href = href;
+      }
+    });
+  });
+}
+
 function fmtMoney(v) {
   if (v === null || v === undefined) return "—";
   const sign = v >= 0 ? "+" : "-";
@@ -186,24 +217,34 @@ function renderInstrumentTable(container, breakdown) {
   `;
 }
 
-function renderDayOfWeek(container, dowData) {
+function renderDayOfWeek(container, dowData, filter) {
   if (!dowData.buckets || dowData.buckets.every((b) => b.trades === 0)) {
     container.innerHTML =
       '<p class="section-label">By Day of Week</p><div class="empty-state">No data for this filter</div>';
     return;
   }
   const rowsHtml = dowData.buckets
-    .map(
-      (b) => `
-    <tr>
-      <td>${b.day_name}</td>
-      <td>${b.trades}</td>
-      <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
-      <td>${fmtPercent(b.win_rate)}</td>
-      <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
-    </tr>
-  `,
-    )
+    .map((b) => {
+      if (b.trades === 0) {
+        return `
+        <tr>
+          <td>${b.day_name}</td>
+          <td>${b.trades}</td>
+          <td>${fmtMoney(b.avg_pnl)}</td>
+          <td>${fmtPercent(b.win_rate)}</td>
+          <td>${fmtMoney(b.total_pnl)}</td>
+        </tr>`;
+      }
+      const href = positionsUrl(filter, { day_of_week: b.dow });
+      return `
+      <tr data-drilldown data-href="${href}">
+        <td><a href="${href}">${b.day_name}</a></td>
+        <td>${b.trades}</td>
+        <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
+        <td>${fmtPercent(b.win_rate)}</td>
+        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+      </tr>`;
+    })
     .join("");
   container.innerHTML = `
     <p class="section-label">By Day of Week</p>
@@ -212,9 +253,10 @@ function renderDayOfWeek(container, dowData) {
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
+  wireDrilldownClicks(container);
 }
 
-function renderByHour(container, hourData) {
+function renderByHour(container, hourData, filter) {
   const active = (hourData.buckets || []).filter((b) => b.position_count > 0);
   const header = `<p class="section-label">By Hour (${hourData.timezone})</p>`;
   if (!active.length) {
@@ -224,15 +266,18 @@ function renderByHour(container, hourData) {
   const rowsHtml = active
     .map((b) => {
       const avgPnl = b.position_count > 0 ? b.total_pnl / b.position_count : 0;
+      const href = positionsUrl(filter, {
+        hour_of_day: b.hour,
+        hour_tz: hourData.timezone,
+      });
       return `
-    <tr>
-      <td>${String(b.hour).padStart(2, "0")}:00</td>
-      <td>${b.position_count}</td>
-      <td class="${avgPnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(avgPnl)}</td>
-      <td>${fmtPercent(b.win_rate)}</td>
-      <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
-    </tr>
-  `;
+      <tr data-drilldown data-href="${href}">
+        <td><a href="${href}">${String(b.hour).padStart(2, "0")}:00</a></td>
+        <td>${b.position_count}</td>
+        <td class="${avgPnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(avgPnl)}</td>
+        <td>${fmtPercent(b.win_rate)}</td>
+        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+      </tr>`;
     })
     .join("");
   container.innerHTML = `
@@ -242,26 +287,27 @@ function renderByHour(container, hourData) {
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
+  wireDrilldownClicks(container);
 }
 
-function renderTradesPerDay(container, tpdData) {
+function renderTradesPerDay(container, tpdData, filter) {
   if (!tpdData.buckets || !tpdData.buckets.length) {
     container.innerHTML =
       '<p class="section-label">Trades per Day</p><div class="empty-state">No data for this filter</div>';
     return;
   }
   const rowsHtml = tpdData.buckets
-    .map(
-      (b) => `
-    <tr>
-      <td>${b.trades_per_day}</td>
-      <td>${b.days}</td>
-      <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
-      <td>${fmtPercent(b.win_rate)}</td>
-      <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
-    </tr>
-  `,
-    )
+    .map((b) => {
+      const href = positionsUrl(filter, { trades_per_day: b.trades_per_day });
+      return `
+      <tr data-drilldown data-href="${href}">
+        <td><a href="${href}">${b.trades_per_day}</a></td>
+        <td>${b.days}</td>
+        <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
+        <td>${fmtPercent(b.win_rate)}</td>
+        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+      </tr>`;
+    })
     .join("");
   container.innerHTML = `
     <p class="section-label">Trades per Day</p>
@@ -270,6 +316,7 @@ function renderTradesPerDay(container, tpdData) {
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
+  wireDrilldownClicks(container);
 }
 
 async function refresh(filter) {
@@ -283,11 +330,12 @@ async function refresh(filter) {
   );
   renderBySide(document.getElementById("stats-by-side"), data["by-side"]);
   renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);
-  renderDayOfWeek(document.getElementById("stats-by-dow"), data["by-day-of-week"]);
-  renderByHour(document.getElementById("stats-by-hour"), data["by-hour"]);
+  renderDayOfWeek(document.getElementById("stats-by-dow"), data["by-day-of-week"], filter);
+  renderByHour(document.getElementById("stats-by-hour"), data["by-hour"], filter);
   renderTradesPerDay(
     document.getElementById("stats-trades-per-day"),
     data["by-trades-per-day"],
+    filter,
   );
 
   const equityCard = document.getElementById("stats-equity");
