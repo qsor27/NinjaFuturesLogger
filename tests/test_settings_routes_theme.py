@@ -78,3 +78,28 @@ def test_settings_index_renders_data_theme_default_dark(tmp_path: Path):
     res = client.get("/settings")
     assert res.status_code == 200
     assert b'data-theme="dark"' in res.data
+
+
+def test_settings_index_page_has_appearance_card(tmp_path: Path):
+    client, _ = _setup_app(tmp_path)
+    res = client.get("/settings")
+    assert res.status_code == 200
+    body = res.data
+    assert b"Appearance" in body
+    assert b'name="theme"' in body
+    assert b'value="dark"' in body
+    assert b'value="light"' in body
+    # Default should be pre-selected
+    assert b'value="dark"' in body and b"checked" in body
+
+
+def test_settings_index_appearance_reflects_current_choice(tmp_path: Path):
+    client, _ = _setup_app(tmp_path)
+    client.put("/api/config/theme", json={"theme": "light"})
+    res = client.get("/settings")
+    body = res.data.decode("utf-8")
+    # The light radio button should carry `checked`
+    assert 'value="light"' in body
+    # Cheap proximity check: 'checked' must appear within 80 chars after value="light"
+    idx = body.index('value="light"')
+    assert "checked" in body[idx : idx + 80]

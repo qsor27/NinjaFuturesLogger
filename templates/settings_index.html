@@ -12,5 +12,43 @@
       <li><a href="/settings/custom-fields">Custom fields</a> — user-defined tags on trades.</li>
     </ul>
   </div>
+  <section class="card" style="margin-top: 20px;">
+    <header class="card-header"><span class="card-title">Appearance</span></header>
+    <div class="card-body" style="padding: 16px;">
+      <form id="theme-form">
+        <label style="display: block; margin-bottom: 8px;">
+          <input type="radio" name="theme" value="dark" {% if theme == "dark" %}checked{% endif %}>
+          Dark (default)
+        </label>
+        <label style="display: block; margin-bottom: 12px;">
+          <input type="radio" name="theme" value="light" {% if theme == "light" %}checked{% endif %}>
+          Light
+        </label>
+        <div class="card-footer" style="display: flex; gap: 12px; align-items: center;">
+          <button type="submit" class="btn-accent">Save</button>
+          <span id="theme-status" aria-live="polite" style="color: var(--text-secondary); font-size: 13px;"></span>
+        </div>
+      </form>
+    </div>
+  </section>
 </div>
+<script>
+  document.getElementById('theme-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const value = new FormData(e.target).get('theme');
+    const status = document.getElementById('theme-status');
+    status.textContent = 'Saving…';
+    const resp = await fetch('/api/config/theme', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({theme: value}),
+    });
+    if (resp.ok) {
+      status.textContent = 'Saved. Reloading…';
+      location.reload();
+    } else {
+      status.textContent = 'Save failed.';
+    }
+  });
+</script>
 {% endblock %}
