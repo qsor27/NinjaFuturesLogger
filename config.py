@@ -2,6 +2,7 @@ import json
 import os
 import threading
 from pathlib import Path
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from models.base import StrictModel
@@ -37,6 +38,7 @@ class Config(StrictModel):
     thread_pool: ThreadPoolConfig
     scheduler: SchedulerConfig
     display_timezone: str | None = None
+    theme: Literal["dark", "light"] = "dark"
 
 
 def load_config(path: Path | str) -> Config:
