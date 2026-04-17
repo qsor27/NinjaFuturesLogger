@@ -114,10 +114,13 @@ def create_app(
     app.config["FTL_OHLC_TOKEN_BUCKET"] = token_bucket
 
     @app.context_processor
-    def _inject_display_tz() -> dict[str, str]:
+    def _inject_template_globals() -> dict[str, str]:
         cfg: Config = app.config["FTL_CONFIG"]
         # Empty string = use the browser's local tz. A non-empty value overrides.
-        return {"display_tz": cfg.display_timezone or ""}
+        return {
+            "display_tz": cfg.display_timezone or "",
+            "theme": cfg.theme,
+        }
 
     app.register_blueprint(health_routes.bp)
     app.register_blueprint(build_imports_blueprint())
