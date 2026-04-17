@@ -36,6 +36,7 @@ def test_context_processor_exposes_theme_default_dark(tmp_path: Path):
     app = _setup_app(tmp_path)
     with app.test_request_context("/"):
         from flask import render_template_string
+
         out = render_template_string("{{ theme }}")
     assert out == "dark"
 
@@ -44,5 +45,6 @@ def test_context_processor_exposes_theme_light(tmp_path: Path):
     app = _setup_app(tmp_path, theme="light")
     with app.test_request_context("/"):
         from flask import render_template_string
+
         out = render_template_string("{{ theme }}")
     assert out == "light"
