@@ -369,3 +369,29 @@ body:has(.calendar-page) {
 .side-stat:last-child { border-bottom: none; }
 .side-stat-label { color: var(--text-secondary); font-size: 11px; }
 .side-stat-value { font-weight: 500; }
+
+/* Drill-down: clickable stat rows navigate to /positions with facets. */
+.instrument-table tbody tr[data-drilldown] {
+  cursor: pointer;
+}
+.instrument-table tbody tr[data-drilldown]:hover {
+  background: var(--row-hover-bg, rgba(255, 255, 255, 0.04));
+}
+.instrument-table tbody tr[data-drilldown] a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* "← Back to statistics" link shown on the positions page when a
+   drill-down facet is present in the URL. */
+.back-link {
+  margin: 0.5rem 0;
+  font-size: 0.9em;
+}
+.back-link a {
+  color: var(--link-color, #6cf);
+  text-decoration: none;
+}
+.back-link a:hover {
+  text-decoration: underline;
+}
