@@ -16,10 +16,9 @@ class PositionFilter:
     outcome: Outcome | None = None  # "winner" | "loser" | "scratch" | "open"
     entry_time_min: int | None = None
     entry_time_max: int | None = None
-    session_date: date | None = None  # plan 15: calendar-cell click target
-    # New drill-down fields (2026-04-16):
     session_date_from: date | None = None
     session_date_to: date | None = None
+    # Drill-down fields (2026-04-16):
     day_of_week: int | None = None       # 0=Mon … 4=Fri
     hour_of_day: int | None = None       # 0..23
     hour_tz: str | None = None           # IANA tz, required when hour_of_day is set
@@ -45,10 +44,6 @@ def apply_filters(
             return False
         if filter_.entry_time_max is not None and p.entry_time > filter_.entry_time_max:
             return False
-        if filter_.session_date is not None:
-            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
-            if sd != filter_.session_date:
-                return False
         if filter_.session_date_from is not None or filter_.session_date_to is not None:
             sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
             if filter_.session_date_from is not None and sd < filter_.session_date_from:
