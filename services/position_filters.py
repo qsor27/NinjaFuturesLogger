@@ -48,6 +48,12 @@ def apply_filters(
             sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
             if sd != filter_.session_date:
                 return False
+        if filter_.session_date_from is not None or filter_.session_date_to is not None:
+            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
+            if filter_.session_date_from is not None and sd < filter_.session_date_from:
+                return False
+            if filter_.session_date_to is not None and sd > filter_.session_date_to:
+                return False
         return True
 
     return [p for p in positions if _keep(p)]
