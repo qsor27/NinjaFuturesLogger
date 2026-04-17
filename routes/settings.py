@@ -177,6 +177,20 @@ def build_settings_blueprint() -> Blueprint:
             }
         )
 
+    @bp.put("/api/config/theme")
+    def put_theme():
+        from config import save_theme
+
+        body = request.get_json(silent=True) or {}
+        value = body.get("theme")
+        if value not in ("dark", "light"):
+            return jsonify({"error": "theme must be 'dark' or 'light'"}), 400
+
+        cfg_path = current_app.config["FTL_CONFIG_PATH"]
+        save_theme(cfg_path, value)
+        current_app.config["FTL_CONFIG"] = load_config(cfg_path)
+        return jsonify({"theme": value})
+
     # ---- custom field definitions ----
 
     def _svc():
