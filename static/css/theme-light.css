@@ -1,0 +1,46 @@
+/* Light theme opt-in. Dark is the default (declared in stats.css/settings.css :root).
+   This file redeclares every token inside html[data-theme="light"], which outranks
+   :root on specificity, so tokens flip cleanly when the attribute is present. */
+
+html[data-theme="light"] {
+  --bg-page:         #f8fafc;
+  --bg-card:         #ffffff;
+  --bg-card-hover:   #f1f5f9;
+  --border-card:     #e2e8f0;
+
+  --text-primary:    #0f172a;
+  --text-secondary:  #475569;
+  --text-muted:      #64748b;
+
+  --accent:          #7c3aed;
+  --accent-soft:     rgba(124, 58, 237, 0.12);
+  --accent-border:   rgba(124, 58, 237, 0.35);
+
+  --pos:             #059669;
+  --pos-text:        #047857;
+  --pos-bg-1:        rgba(5, 150, 105, 0.08);
+  --pos-bg-2:        rgba(5, 150, 105, 0.18);
+  --pos-bg-3:        rgba(5, 150, 105, 0.32);
+  --pos-bg-4:        rgba(5, 150, 105, 0.50);
+
+  --neg:             #dc2626;
+  --neg-text:        #b91c1c;
+  --neg-bg-1:        rgba(220, 38, 38, 0.08);
+  --neg-bg-2:        rgba(220, 38, 38, 0.20);
+  --neg-bg-3:        rgba(220, 38, 38, 0.40);
+}
+
+/* Overrides for selectors in base.html's inline <style> that use hardcoded hex. */
+html[data-theme="light"] header {
+  background: #ffffff;
+  color: #0f172a;
+  border-bottom-color: #e2e8f0;
+}
+html[data-theme="light"] header a { color: #0f172a; }
+html[data-theme="light"] .pnl-pos { color: #047857; }
+html[data-theme="light"] .pnl-neg { color: #b91c1c; }
+html[data-theme="light"] .danger {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.35);
+}
