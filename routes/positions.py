@@ -20,6 +20,7 @@ log = get_logger("http.positions")
 
 def _parse_filter_from_query(args) -> PositionFilter:
     from datetime import date
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
     account = args.get("account") or None
     instrument = args.get("instrument") or None
@@ -41,13 +42,39 @@ def _parse_filter_from_query(args) -> PositionFilter:
         except ValueError as e:
             raise ValueError(f"{key} must be an integer") from e
 
-    session_date_raw = args.get("session_date") or None
-    session_date = None
-    if session_date_raw is not None:
+    def _date_or_none(key: str) -> date | None:
+        v = args.get(key)
+        if v is None or v == "":
+            return None
         try:
-            session_date = date.fromisoformat(session_date_raw)
+            return date.fromisoformat(v)
         except ValueError as e:
-            raise ValueError("session_date must be ISO YYYY-MM-DD") from e
+            raise ValueError(f"{key} must be ISO YYYY-MM-DD") from e
+
+    session_date = _date_or_none("session_date")
+    session_date_from = _date_or_none("session_date_from")
+    session_date_to = _date_or_none("session_date_to")
+
+    day_of_week = _int_or_none("day_of_week")
+    if day_of_week is not None and not (0 <= day_of_week <= 4):
+        raise ValueError("day_of_week must be 0..4 (Mon..Fri)")
+
+    hour_of_day = _int_or_none("hour_of_day")
+    if hour_of_day is not None and not (0 <= hour_of_day <= 23):
+        raise ValueError("hour_of_day must be 0..23")
+
+    hour_tz = args.get("hour_tz") or None
+    if hour_tz is not None:
+        try:
+            ZoneInfo(hour_tz)
+        except ZoneInfoNotFoundError as e:
+            raise ValueError(f"hour_tz is not a valid IANA timezone: {hour_tz!r}") from e
+    if hour_of_day is not None and hour_tz is None:
+        raise ValueError("hour_of_day requires hour_tz")
+
+    trades_per_day = _int_or_none("trades_per_day")
+    if trades_per_day is not None and trades_per_day < 1:
+        raise ValueError("trades_per_day must be >= 1")
 
     return PositionFilter(
         account=account,
@@ -57,6 +84,12 @@ def _parse_filter_from_query(args) -> PositionFilter:
         entry_time_min=_int_or_none("entry_time_min"),
         entry_time_max=_int_or_none("entry_time_max"),
         session_date=session_date,
+        session_date_from=session_date_from,
+        session_date_to=session_date_to,
+        day_of_week=day_of_week,
+        hour_of_day=hour_of_day,
+        hour_tz=hour_tz,
+        trades_per_day=trades_per_day,
     )
 
 
