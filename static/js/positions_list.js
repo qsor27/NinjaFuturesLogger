@@ -11,7 +11,7 @@ const backToStats = document.getElementById("back-to-stats");
 
 const FILTER_NAMES = [
   "account", "instrument", "side", "outcome",
-  "session_date", "session_date_from", "session_date_to",
+  "session_date_from", "session_date_to",
   "day_of_week", "hour_of_day", "hour_tz", "trades_per_day",
 ];
 

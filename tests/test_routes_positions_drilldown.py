@@ -88,15 +88,11 @@ def test_hour_of_day_happy_path(tmp_config):
     try:
         _seed(tmp_config.db_path, _mon_tue_executions())
         # Entries are 12:00 UTC == 08:00 America/New_York, not 14:00.
-        resp_14 = app.test_client().get(
-            "/api/positions?hour_of_day=14&hour_tz=America/New_York"
-        )
+        resp_14 = app.test_client().get("/api/positions?hour_of_day=14&hour_tz=America/New_York")
         assert resp_14.status_code == 200
         assert resp_14.get_json()["page"]["total"] == 0
 
-        resp_8 = app.test_client().get(
-            "/api/positions?hour_of_day=8&hour_tz=America/New_York"
-        )
+        resp_8 = app.test_client().get("/api/positions?hour_of_day=8&hour_tz=America/New_York")
         assert resp_8.status_code == 200
         assert resp_8.get_json()["page"]["total"] == 2
     finally:
@@ -106,9 +102,7 @@ def test_hour_of_day_happy_path(tmp_config):
 def test_hour_of_day_out_of_range_returns_400(tmp_config):
     app, services = create_app(tmp_config, start_background=False)
     try:
-        resp = app.test_client().get(
-            "/api/positions?hour_of_day=24&hour_tz=America/New_York"
-        )
+        resp = app.test_client().get("/api/positions?hour_of_day=24&hour_tz=America/New_York")
         assert resp.status_code == 400
         assert "hour_of_day" in resp.get_json()["error"]
     finally:
@@ -118,9 +112,7 @@ def test_hour_of_day_out_of_range_returns_400(tmp_config):
 def test_hour_tz_bad_value_returns_400(tmp_config):
     app, services = create_app(tmp_config, start_background=False)
     try:
-        resp = app.test_client().get(
-            "/api/positions?hour_of_day=14&hour_tz=Not/A_Zone"
-        )
+        resp = app.test_client().get("/api/positions?hour_of_day=14&hour_tz=Not/A_Zone")
         assert resp.status_code == 400
         assert "hour_tz" in resp.get_json()["error"]
     finally:

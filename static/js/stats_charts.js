@@ -247,7 +247,7 @@ function _renderMonth(monthKey, days) {
         <span class="count">${bucket.position_count} trade${bucket.position_count === 1 ? "" : "s"}</span>
       `;
       cell.addEventListener("click", () => {
-        window.location.href = `/positions?session_date=${dateStr}`;
+        window.location.href = `/positions?session_date_from=${dateStr}&session_date_to=${dateStr}`;
       });
     }
     grid.appendChild(cell);

@@ -1,7 +1,7 @@
-import pytest
-
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
+
+import pytest
 
 from models.position import Position
 from services.position_filters import PositionFilter, apply_filters
@@ -133,7 +133,12 @@ def test_trades_per_day_keeps_only_days_with_matching_count():
     ]
     out_3 = apply_filters(positions, PositionFilter(trades_per_day=3))
     assert sorted(p.entry_execution_id for p in out_3) == [
-        "tue-1", "tue-2", "tue-3", "wed-1", "wed-2", "wed-3",
+        "tue-1",
+        "tue-2",
+        "tue-3",
+        "wed-1",
+        "wed-2",
+        "wed-3",
     ]
     out_1 = apply_filters(positions, PositionFilter(trades_per_day=1))
     assert [p.entry_execution_id for p in out_1] == ["mon-1"]
