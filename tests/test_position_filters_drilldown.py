@@ -1,3 +1,5 @@
+import pytest
+
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
@@ -89,3 +91,30 @@ def test_day_of_week_filter_uses_session_date_not_utc_date():
     out = apply_filters([sun_evening, tue_midday], PositionFilter(day_of_week=0))
     # Only the Sunday-evening entry should survive (rolls to Monday session).
     assert [p.entry_execution_id for p in out] == ["sun-evening"]
+
+
+def test_hour_of_day_filter_matches_in_specified_tz():
+    # 2026-04-14 18:00 UTC == 14:00 America/New_York (EDT, UTC-4).
+    ny_14 = _pos("ny14", _ts(2026, 4, 14, 18))
+    # 2026-04-14 12:00 UTC == 08:00 America/New_York.
+    ny_08 = _pos("ny08", _ts(2026, 4, 14, 12))
+    out = apply_filters(
+        [ny_14, ny_08],
+        PositionFilter(hour_of_day=14, hour_tz="America/New_York"),
+    )
+    assert [p.entry_execution_id for p in out] == ["ny14"]
+
+
+def test_hour_of_day_filter_changes_with_tz():
+    # 2026-04-14 18:00 UTC == 14:00 NY == 11:00 LA.
+    p = _pos("p", _ts(2026, 4, 14, 18))
+    out_ny = apply_filters([p], PositionFilter(hour_of_day=14, hour_tz="America/New_York"))
+    out_la = apply_filters([p], PositionFilter(hour_of_day=14, hour_tz="America/Los_Angeles"))
+    assert [x.entry_execution_id for x in out_ny] == ["p"]
+    assert out_la == []
+
+
+def test_hour_of_day_without_tz_raises():
+    p = _pos("p", _ts(2026, 4, 14, 18))
+    with pytest.raises(ValueError, match="hour_tz"):
+        apply_filters([p], PositionFilter(hour_of_day=14))

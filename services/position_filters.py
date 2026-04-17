@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
 from models.browsing import Outcome
 from models.position import Position
@@ -57,6 +58,12 @@ def apply_filters(
         if filter_.day_of_week is not None:
             sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
             if sd.weekday() != filter_.day_of_week:
+                return False
+        if filter_.hour_of_day is not None:
+            if filter_.hour_tz is None:
+                raise ValueError("hour_of_day requires hour_tz")
+            local = datetime.fromtimestamp(p.entry_time, tz=ZoneInfo(filter_.hour_tz))
+            if local.hour != filter_.hour_of_day:
                 return False
         return True
 
