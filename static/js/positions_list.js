@@ -1,4 +1,5 @@
 import { buildQuery, fetchJSON, formatDollars, formatTime, setText } from "./api.js";
+import { renderPresetSelect } from "./date_presets.js";
 
 const form = document.getElementById("filter-form");
 const listRoot = document.getElementById("list-root");
@@ -370,9 +371,31 @@ form.addEventListener("submit", (e) => {
   load();
 });
 
+function wirePresetDropdown() {
+  const presetSelect = form.querySelector("#filter-date-preset");
+  if (!presetSelect) return;
+  const fromInput = form.querySelector('input[name="session_date_from"]');
+  const toInput = form.querySelector('input[name="session_date_to"]');
+
+  renderPresetSelect(presetSelect, "", (_preset, range) => {
+    if (!range) return;
+    fromInput.value = range.fromISO;
+    toInput.value = range.toISO;
+    currentPage = 1;
+    load();
+  });
+
+  const resetPreset = () => {
+    presetSelect.value = "";
+  };
+  fromInput.addEventListener("input", resetPreset);
+  toInput.addEventListener("input", resetPreset);
+}
+
 (async () => {
   await populateFilterOptions();
   restoreFiltersFromUrl();
   renderBackToStats();
+  wirePresetDropdown();
   await load();
 })();

@@ -1,6 +1,8 @@
 // Plan 15 — shared filter bar module. URL query params are the source of truth.
 // Both /statistics and /calendar import this and pass onApply.
 
+import { renderPresetSelect } from "./date_presets.js";
+
 export function parseFilterFromUrl() {
   const url = new URL(window.location.href);
   const account = url.searchParams.get("account") || null;
@@ -57,6 +59,9 @@ export function renderFilterBar(container, filter, onApply) {
         <option value="Short">Short</option>
       </select>
     </label>
+    <label>Preset
+      <select id="filter-date-preset"></select>
+    </label>
     <label>From
       <input type="date" id="filter-from">
     </label>
@@ -69,6 +74,7 @@ export function renderFilterBar(container, filter, onApply) {
 
   const accountSelect = container.querySelector("#filter-account");
   const sideSelect = container.querySelector("#filter-side");
+  const presetSelect = container.querySelector("#filter-date-preset");
   const fromInput = container.querySelector("#filter-from");
   const toInput = container.querySelector("#filter-to");
   const applyBtn = container.querySelector("#filter-apply");
@@ -90,7 +96,7 @@ export function renderFilterBar(container, filter, onApply) {
 
   if (isAnyFilterActive(filter)) applyBtn.classList.add("active");
 
-  applyBtn.addEventListener("click", () => {
+  const doApply = () => {
     const next = {
       account: accountSelect.value || null,
       side: sideSelect.value || null,
@@ -104,13 +110,29 @@ export function renderFilterBar(container, filter, onApply) {
       applyBtn.classList.remove("active");
     }
     onApply(next);
+  };
+
+  renderPresetSelect(presetSelect, "", (_preset, range) => {
+    if (!range) return;
+    fromInput.value = range.fromISO;
+    toInput.value = range.toISO;
+    doApply();
   });
+
+  const resetPreset = () => {
+    presetSelect.value = "";
+  };
+  fromInput.addEventListener("input", resetPreset);
+  toInput.addEventListener("input", resetPreset);
+
+  applyBtn.addEventListener("click", doApply);
 
   clearBtn.addEventListener("click", () => {
     accountSelect.value = "";
     sideSelect.value = "";
     fromInput.value = "";
     toInput.value = "";
+    presetSelect.value = "";
     const cleared = { account: null, side: null, from: null, to: null };
     writeFilterToUrl(cleared);
     applyBtn.classList.remove("active");
@@ -123,6 +145,7 @@ export function renderFilterBar(container, filter, onApply) {
     sideSelect.value = reread.side || "";
     fromInput.value = reread.from || "";
     toInput.value = reread.to || "";
+    presetSelect.value = "";
     onApply(reread);
   });
 }
