@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="{{ theme }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=1280">
@@ -42,6 +42,7 @@
       .notice { padding: 10px 14px; background: rgba(14,165,233,0.1); border-left: 4px solid #0ea5e9; border-radius: 0 6px 6px 0; margin-bottom: 16px; font-size: 13px; color: var(--text-secondary); }
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-light.css') }}">
     {% block extra_styles %}{% endblock %}
   </head>
   <body data-display-tz="{{ display_tz }}">
