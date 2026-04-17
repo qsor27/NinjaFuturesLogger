@@ -7,6 +7,14 @@ const paginationRoot = document.getElementById("pagination-root");
 let currentPage = 1;
 const PAGE_SIZE = 50;
 
+const backToStats = document.getElementById("back-to-stats");
+
+const FILTER_NAMES = [
+  "account", "instrument", "side", "outcome",
+  "session_date", "session_date_from", "session_date_to",
+  "day_of_week", "hour_of_day", "hour_tz", "trades_per_day",
+];
+
 // Column registry. Each entry builds the header label and the cell node.
 const COLUMNS = {
   entry: {
@@ -160,13 +168,20 @@ async function populateFilterOptions() {
 
 function readFilters() {
   const data = new FormData(form);
-  return {
-    account: data.get("account") || "",
-    instrument: data.get("instrument") || "",
-    side: data.get("side") || "",
-    outcome: data.get("outcome") || "",
-    session_date: data.get("session_date") || "",
-  };
+  const out = {};
+  for (const name of FILTER_NAMES) {
+    out[name] = data.get(name) || "";
+  }
+  if (out.hour_of_day && !out.hour_tz) {
+    try {
+      out.hour_tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch {
+      out.hour_tz = "";
+    }
+    const hidden = form.querySelector('input[name="hour_tz"]');
+    if (hidden) hidden.value = out.hour_tz;
+  }
+  return out;
 }
 
 function filtersToUrl(filters, page) {
@@ -309,7 +324,7 @@ async function load() {
 
 function restoreFiltersFromUrl() {
   const params = new URL(window.location.href).searchParams;
-  for (const name of ["account", "instrument", "side", "outcome", "session_date"]) {
+  for (const name of FILTER_NAMES) {
     const value = params.get(name);
     if (value !== null) {
       const el = form.querySelector(`[name="${name}"]`);
@@ -318,6 +333,35 @@ function restoreFiltersFromUrl() {
   }
   const page = parseInt(params.get("page") || "1", 10);
   currentPage = isNaN(page) ? 1 : Math.max(1, page);
+}
+
+function renderBackToStats() {
+  const params = new URL(window.location.href).searchParams;
+  const hasDrilldown =
+    params.has("day_of_week") ||
+    params.has("hour_of_day") ||
+    params.has("trades_per_day");
+  if (!hasDrilldown) {
+    backToStats.hidden = true;
+    backToStats.textContent = "";
+    return;
+  }
+  const statsParams = new URLSearchParams();
+  const account = params.get("account");
+  const side = params.get("side");
+  const from = params.get("session_date_from");
+  const to = params.get("session_date_to");
+  if (account) statsParams.set("account", account);
+  if (side) statsParams.set("side", side);
+  if (from) statsParams.set("from", from);
+  if (to) statsParams.set("to", to);
+  const href = `/statistics${statsParams.toString() ? "?" + statsParams.toString() : ""}`;
+  backToStats.hidden = false;
+  backToStats.innerHTML = "";
+  const a = document.createElement("a");
+  a.href = href;
+  a.textContent = "\u2190 Back to statistics";
+  backToStats.appendChild(a);
 }
 
 form.addEventListener("submit", (e) => {
@@ -329,5 +373,6 @@ form.addEventListener("submit", (e) => {
 (async () => {
   await populateFilterOptions();
   restoreFiltersFromUrl();
+  renderBackToStats();
   await load();
 })();
