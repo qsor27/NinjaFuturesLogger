@@ -24,9 +24,9 @@ def _pos(eid: str, entry_time: int, dollars_pnl: float = 10.0, side: str = "Long
     )
 
 
-def _ts(y: int, m: int, d: int, hour: int = 12, tz: str = "UTC") -> int:
+def _ts(y: int, m: int, d: int, hour: int = 12, minute: int = 0, tz: str = "UTC") -> int:
     """Unix seconds for a wall-clock time in the given TZ."""
-    return int(datetime(y, m, d, hour, tzinfo=ZoneInfo(tz)).timestamp())
+    return int(datetime(y, m, d, hour, minute, tzinfo=ZoneInfo(tz)).timestamp())
 
 
 def test_session_date_from_inclusive_lower_bound():
@@ -70,3 +70,22 @@ def test_session_date_from_greater_than_to_returns_empty():
         PositionFilter(session_date_from=date(2026, 4, 15), session_date_to=date(2026, 4, 14)),
     )
     assert out == []
+
+
+def test_day_of_week_filter_matches_session_date_weekday():
+    # 2026-04-13 is a Monday (weekday 0).
+    mon = _pos("mon", _ts(2026, 4, 13, 12))
+    tue = _pos("tue", _ts(2026, 4, 14, 12))
+    out = apply_filters([mon, tue], PositionFilter(day_of_week=0))
+    assert [p.entry_execution_id for p in out] == ["mon"]
+
+
+def test_day_of_week_filter_uses_session_date_not_utc_date():
+    # 2026-04-12 (Sun) at 22:30 UTC == 17:30 CDT (post-17:00 rollover) →
+    # session date 2026-04-13 (Mon).
+    sun_evening = _pos("sun-evening", _ts(2026, 4, 12, 22, minute=30))
+    # 2026-04-14 (Tue) at 12:00 UTC → session 2026-04-14 (Tue).
+    tue_midday = _pos("tue-midday", _ts(2026, 4, 14, 12))
+    out = apply_filters([sun_evening, tue_midday], PositionFilter(day_of_week=0))
+    # Only the Sunday-evening entry should survive (rolls to Monday session).
+    assert [p.entry_execution_id for p in out] == ["sun-evening"]

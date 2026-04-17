@@ -54,6 +54,10 @@ def apply_filters(
                 return False
             if filter_.session_date_to is not None and sd > filter_.session_date_to:
                 return False
+        if filter_.day_of_week is not None:
+            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
+            if sd.weekday() != filter_.day_of_week:
+                return False
         return True
 
     return [p for p in positions if _keep(p)]
