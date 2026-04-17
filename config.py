@@ -86,3 +86,22 @@ def save_display_timezone(path: Path | str, value: str | None) -> None:
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
         os.replace(str(tmp), str(path))
+
+
+def save_theme(path: Path | str, value: str) -> None:
+    """Update the top-level `theme` field in app.json via atomic tmp+rename.
+
+    Validates that value is either "dark" or "light". All other Config
+    fields are preserved by a read-modify-write under a module-level lock.
+    """
+    if value not in ("dark", "light"):
+        raise ValueError(f"invalid theme: {value!r}")
+
+    path = Path(path)
+    with _SAVE_LOCK:
+        raw_text = path.read_text(encoding="utf-8")
+        raw = json.loads(raw_text)
+        raw["theme"] = value
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+        os.replace(str(tmp), str(path))
