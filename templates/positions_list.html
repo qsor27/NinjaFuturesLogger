@@ -1,5 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Positions — FuturesTradingLog{% endblock %}
+{% block extra_styles %}
+<style>
+  #list-root table.positions-table { width: auto; table-layout: auto; }
+  #list-root table.positions-table th,
+  #list-root table.positions-table td { white-space: nowrap; }
+  #list-root table.positions-table th { cursor: grab; user-select: none; }
+  #list-root table.positions-table th:active { cursor: grabbing; }
+  #list-root table.positions-table th.col-dragging { opacity: 0.4; }
+  #list-root table.positions-table th.col-drop-target { background: var(--accent-soft, rgba(139,92,246,0.25)); }
+</style>
+{% endblock %}
 {% block content %}
   <h1>Positions</h1>
   <div id="back-to-stats" class="back-link" hidden></div>

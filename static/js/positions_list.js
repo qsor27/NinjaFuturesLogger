@@ -7,6 +7,139 @@ const paginationRoot = document.getElementById("pagination-root");
 let currentPage = 1;
 const PAGE_SIZE = 50;
 
+// Column registry. Each entry builds the header label and the cell node.
+const COLUMNS = {
+  entry: {
+    label: "Entry",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, formatTime(p.entry_time));
+      return td;
+    },
+  },
+  account: {
+    label: "Account",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, p.account);
+      return td;
+    },
+  },
+  instrument: {
+    label: "Instrument",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, p.instrument);
+      return td;
+    },
+  },
+  side: {
+    label: "Side",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, p.side);
+      return td;
+    },
+  },
+  quantity: {
+    label: "Qty",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, p.quantity);
+      return td;
+    },
+  },
+  entry_price: {
+    label: "Entry price",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, p.entry_price.toFixed(2));
+      return td;
+    },
+  },
+  exit_price: {
+    label: "Exit price",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, p.exit_price !== null ? p.exit_price.toFixed(2) : "—");
+      return td;
+    },
+  },
+  points_pnl: {
+    label: "Pts P&L",
+    cell: (p) => {
+      const td = document.createElement("td");
+      if (p.points_pnl === null || p.points_pnl === undefined) {
+        setText(td, "—");
+      } else {
+        setText(td, p.points_pnl.toFixed(2));
+        td.className = p.points_pnl > 0 ? "pnl-pos" : p.points_pnl < 0 ? "pnl-neg" : "";
+      }
+      return td;
+    },
+  },
+  dollars_pnl: {
+    label: "$ P&L",
+    cell: (p) => {
+      const td = document.createElement("td");
+      const d = formatDollars(p.dollars_pnl);
+      setText(td, d.text);
+      if (d.cls) td.className = d.cls;
+      return td;
+    },
+  },
+  duration: {
+    label: "Duration",
+    cell: (p) => {
+      const td = document.createElement("td");
+      setText(td, p.duration_minutes !== null ? p.duration_minutes.toFixed(1) + " m" : "—");
+      return td;
+    },
+  },
+};
+
+const DEFAULT_ORDER = [
+  "entry",
+  "account",
+  "instrument",
+  "side",
+  "quantity",
+  "entry_price",
+  "exit_price",
+  "points_pnl",
+  "dollars_pnl",
+  "duration",
+];
+const ORDER_KEY = "positions:columnOrder:v2";
+
+function loadColumnOrder() {
+  try {
+    const raw = localStorage.getItem(ORDER_KEY);
+    if (!raw) return [...DEFAULT_ORDER];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DEFAULT_ORDER];
+    const kept = parsed.filter((k) => typeof k === "string" && k in COLUMNS);
+    for (const k of DEFAULT_ORDER) {
+      if (!kept.includes(k)) kept.push(k);
+    }
+    return kept;
+  } catch {
+    return [...DEFAULT_ORDER];
+  }
+}
+
+function saveColumnOrder(order) {
+  try {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  } catch {
+    // Ignore quota / private-mode errors; ordering just won't persist.
+  }
+}
+
+let columnOrder = loadColumnOrder();
+let lastPositions = [];
+let dragSourceKey = null;
+
 async function populateFilterOptions() {
   const opts = await fetchJSON("/api/positions/filters");
   const accountSelect = form.querySelector('select[name="account"]');
@@ -53,26 +186,77 @@ function pushState(filters, page) {
   history.replaceState(null, "", url);
 }
 
+function onDragStart(e) {
+  dragSourceKey = e.currentTarget.dataset.colKey;
+  e.dataTransfer.effectAllowed = "move";
+  try {
+    e.dataTransfer.setData("text/plain", dragSourceKey);
+  } catch {
+    // Safari/Firefox sometimes reject this silently; the drag still works.
+  }
+  e.currentTarget.classList.add("col-dragging");
+}
+
+function onDragOver(e) {
+  if (!dragSourceKey) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  e.currentTarget.classList.add("col-drop-target");
+}
+
+function onDragLeave(e) {
+  e.currentTarget.classList.remove("col-drop-target");
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("col-drop-target");
+  const targetKey = e.currentTarget.dataset.colKey;
+  if (!dragSourceKey || dragSourceKey === targetKey) return;
+  const fromIdx = columnOrder.indexOf(dragSourceKey);
+  const toIdx = columnOrder.indexOf(targetKey);
+  if (fromIdx < 0 || toIdx < 0) return;
+  columnOrder.splice(fromIdx, 1);
+  columnOrder.splice(toIdx, 0, dragSourceKey);
+  saveColumnOrder(columnOrder);
+  renderRows(lastPositions);
+}
+
+function onDragEnd(e) {
+  e.currentTarget.classList.remove("col-dragging");
+  document
+    .querySelectorAll(".col-drop-target")
+    .forEach((el) => el.classList.remove("col-drop-target"));
+  dragSourceKey = null;
+}
+
 function renderRows(positions) {
+  lastPositions = positions;
   if (positions.length === 0) {
     listRoot.innerHTML = "<p>No positions match the current filters.</p>";
     return;
   }
   const table = document.createElement("table");
+  table.className = "positions-table";
+
   const thead = document.createElement("thead");
-  thead.innerHTML = `
-    <tr>
-      <th>Entry</th>
-      <th>Account</th>
-      <th>Instrument</th>
-      <th>Side</th>
-      <th>Qty</th>
-      <th>Entry price</th>
-      <th>Exit price</th>
-      <th>$ P&L</th>
-      <th>Duration</th>
-    </tr>`;
+  const headRow = document.createElement("tr");
+  for (const key of columnOrder) {
+    const th = document.createElement("th");
+    setText(th, COLUMNS[key].label);
+    th.draggable = true;
+    th.dataset.colKey = key;
+    th.title = "Drag to reorder";
+    th.addEventListener("dragstart", onDragStart);
+    th.addEventListener("dragover", onDragOver);
+    th.addEventListener("dragleave", onDragLeave);
+    th.addEventListener("drop", onDrop);
+    th.addEventListener("dragend", onDragEnd);
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
   table.appendChild(thead);
+
   const tbody = document.createElement("tbody");
   for (const p of positions) {
     const tr = document.createElement("tr");
@@ -80,22 +264,9 @@ function renderRows(positions) {
       const url = `/positions/${encodeURIComponent(p.account)}/${encodeURIComponent(p.instrument)}/${encodeURIComponent(p.entry_execution_id)}`;
       window.location.href = url;
     });
-    const td = (text, cls) => {
-      const c = document.createElement("td");
-      setText(c, text);
-      if (cls) c.className = cls;
-      return c;
-    };
-    tr.appendChild(td(formatTime(p.entry_time)));
-    tr.appendChild(td(p.account));
-    tr.appendChild(td(p.instrument));
-    tr.appendChild(td(p.side));
-    tr.appendChild(td(p.quantity));
-    tr.appendChild(td(p.entry_price.toFixed(2)));
-    tr.appendChild(td(p.exit_price !== null ? p.exit_price.toFixed(2) : "—"));
-    const dollars = formatDollars(p.dollars_pnl);
-    tr.appendChild(td(dollars.text, dollars.cls));
-    tr.appendChild(td(p.duration_minutes !== null ? p.duration_minutes.toFixed(1) + " m" : "—"));
+    for (const key of columnOrder) {
+      tr.appendChild(COLUMNS[key].cell(p));
+    }
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
