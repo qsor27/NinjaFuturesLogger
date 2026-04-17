@@ -67,7 +67,20 @@ def apply_filters(
                 return False
         return True
 
-    return [p for p in positions if _keep(p)]
+    survivors = [p for p in positions if _keep(p)]
+
+    if filter_.trades_per_day is not None:
+        counts: dict[date, int] = {}
+        for p in survivors:
+            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
+            counts[sd] = counts.get(sd, 0) + 1
+        target = filter_.trades_per_day
+        survivors = [
+            p for p in survivors
+            if counts[compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))] == target
+        ]
+
+    return survivors
 
 
 def paginate(

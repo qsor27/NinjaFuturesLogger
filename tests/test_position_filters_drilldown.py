@@ -118,3 +118,42 @@ def test_hour_of_day_without_tz_raises():
     p = _pos("p", _ts(2026, 4, 14, 18))
     with pytest.raises(ValueError, match="hour_tz"):
         apply_filters([p], PositionFilter(hour_of_day=14))
+
+
+def test_trades_per_day_keeps_only_days_with_matching_count():
+    # Day 2026-04-13: 1 trade. Day 2026-04-14: 3 trades. Day 2026-04-15: 3 trades.
+    positions = [
+        _pos("mon-1", _ts(2026, 4, 13, 12)),
+        _pos("tue-1", _ts(2026, 4, 14, 10)),
+        _pos("tue-2", _ts(2026, 4, 14, 12)),
+        _pos("tue-3", _ts(2026, 4, 14, 14)),
+        _pos("wed-1", _ts(2026, 4, 15, 10)),
+        _pos("wed-2", _ts(2026, 4, 15, 12)),
+        _pos("wed-3", _ts(2026, 4, 15, 14)),
+    ]
+    out_3 = apply_filters(positions, PositionFilter(trades_per_day=3))
+    assert sorted(p.entry_execution_id for p in out_3) == [
+        "tue-1", "tue-2", "tue-3", "wed-1", "wed-2", "wed-3",
+    ]
+    out_1 = apply_filters(positions, PositionFilter(trades_per_day=1))
+    assert [p.entry_execution_id for p in out_1] == ["mon-1"]
+
+
+def test_trades_per_day_counts_after_other_filters():
+    # Tue has 5 trades: 3 Long + 2 Short. With side=Long, the Tue count is 3.
+    positions = [
+        _pos("tue-L1", _ts(2026, 4, 14, 9), side="Long"),
+        _pos("tue-L2", _ts(2026, 4, 14, 10), side="Long"),
+        _pos("tue-L3", _ts(2026, 4, 14, 11), side="Long"),
+        _pos("tue-S1", _ts(2026, 4, 14, 12), side="Short"),
+        _pos("tue-S2", _ts(2026, 4, 14, 13), side="Short"),
+        _pos("wed-L1", _ts(2026, 4, 15, 10), side="Long"),
+    ]
+    out = apply_filters(positions, PositionFilter(side="Long", trades_per_day=3))
+    assert sorted(p.entry_execution_id for p in out) == ["tue-L1", "tue-L2", "tue-L3"]
+
+
+def test_trades_per_day_none_passes_everything():
+    positions = [_pos("a", _ts(2026, 4, 13, 12))]
+    out = apply_filters(positions, PositionFilter(trades_per_day=None))
+    assert out == positions
