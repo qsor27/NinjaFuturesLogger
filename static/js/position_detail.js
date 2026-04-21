@@ -162,7 +162,15 @@ function formatSignedDollars(v) {
 }
 
 function formatTimeOfDay(unixSec) {
-  return new Date(unixSec * 1000).toISOString().slice(11, 19);
+  const d = new Date(unixSec * 1000);
+  const tz = document.body?.dataset?.displayTz || undefined;
+  return d.toLocaleTimeString(undefined, {
+    timeZone: tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
 }
 
 const excursionCardEl = document.getElementById("excursion-card");
@@ -272,9 +280,13 @@ async function triggerFetchBars(btn, position) {
   btn.disabled = true;
   setText(btn, "Queuing...");
   try {
+    // The fetch endpoint needs the exact window; use the position's
+    // entry/exit seconds (pad by 60s on each side for safety).
+    const start = Math.max(0, position.entry_time - 60);
+    const end = (position.exit_time ?? position.entry_time) + 60;
     const resp = await postJSON(
       `/api/chart/${encodeURIComponent(position.instrument)}/fetch`,
-      { timeframe: "1m" },
+      { timeframe: "1m", start, end },
     );
     setText(btn, "Fetching...");
     const jobId = resp.job_id;
