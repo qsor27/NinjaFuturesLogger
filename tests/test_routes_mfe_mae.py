@@ -80,3 +80,17 @@ def test_mfe_mae_endpoint_never_imports_fetch_range():
     assert (
         "fetch_range" not in mod.__dict__
     ), "routes/positions.py must not import fetch_range at module level — Rule 6"
+
+
+def test_efficiency_distribution_route_empty_dataset(tmp_config):
+    app, _services = create_app(tmp_config, start_background=False)
+    client = app.test_client()
+    resp = client.get("/api/stats/efficiency-distribution")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert len(body["capture_buckets"]) == 10
+    assert len(body["risk_buckets"]) == 10
+    assert all(b["count"] == 0 for b in body["capture_buckets"])
+    assert body["n_winners"] == 0
+    assert body["n_losers"] == 0
+    assert body["n_below_coverage"] == 0

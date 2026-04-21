@@ -94,4 +94,8 @@ def build_stats_blueprint() -> Blueprint:
     def by_trades_per_day():
         return _dispatch("by_trades_per_day")
 
+    @bp.get("/api/stats/efficiency-distribution")
+    def efficiency_distribution():
+        return _dispatch("efficiency_distribution")
+
     return bp

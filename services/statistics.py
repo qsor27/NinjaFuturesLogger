@@ -17,6 +17,8 @@ from models.position import Position
 from models.statistics import (
     DayOfWeekResponse,
     DistributionResponse,
+    EfficiencyDistributionResponse,
+    EfficiencyHistogramBucket,
     EquityCurveResponse,
     EquitySeries,
     HourBucketResponse,
@@ -206,9 +208,7 @@ class StatisticsService:
 
     def by_trades_per_day(self, filter: StatsFilter) -> TradesPerDayResponse:
         loaded = self._load_closed_positions(filter)
-        return TradesPerDayResponse(
-            buckets=bucket_by_trades_per_day(loaded.closed_with_pnl)
-        )
+        return TradesPerDayResponse(buckets=bucket_by_trades_per_day(loaded.closed_with_pnl))
 
     def by_side(self, filter: StatsFilter) -> SideBreakdown:
         loaded = self._load_closed_positions(filter)
@@ -233,6 +233,57 @@ class StatisticsService:
         loaded = self._load_closed_positions(filter)
         buckets = pnl_histogram(loaded.closed_with_pnl, n_buckets=10)
         return DistributionResponse(buckets=buckets, bucket_count=10)
+
+    def efficiency_distribution(self, filter: StatsFilter) -> EfficiencyDistributionResponse:
+        """Per-position MFE/MAE computed against 1m bars, bucketed into two
+        10-bin histograms (capture for winners, risk-exit for losers).
+        Positions with bar coverage < 0.8 are counted but not bucketed.
+        """
+        from services.mfe_mae import load_and_compute
+
+        load = self._load_closed_positions(filter)
+        db_path = self._config.db_path
+
+        capture_counts = [0] * 10
+        risk_counts = [0] * 10
+        n_winners = 0
+        n_losers = 0
+        n_below_coverage = 0
+
+        for p in load.closed_with_pnl:
+            r = load_and_compute(db_path, p)
+            if r is None:
+                continue
+            if r.coverage < 0.8:
+                n_below_coverage += 1
+                continue
+            if r.capture_efficiency is not None:
+                n_winners += 1
+                idx = min(9, int(r.capture_efficiency * 10))
+                capture_counts[idx] += 1
+            elif r.risk_efficiency is not None:
+                n_losers += 1
+                idx = min(9, int(r.risk_efficiency * 10))
+                risk_counts[idx] += 1
+            # scratches: both efficiencies None → neither bucketed nor excluded.
+
+        def _mk_buckets(counts: list[int]) -> list[EfficiencyHistogramBucket]:
+            return [
+                EfficiencyHistogramBucket(
+                    range_lo=i / 10.0,
+                    range_hi=(i + 1) / 10.0,
+                    count=counts[i],
+                )
+                for i in range(10)
+            ]
+
+        return EfficiencyDistributionResponse(
+            capture_buckets=_mk_buckets(capture_counts),
+            risk_buckets=_mk_buckets(risk_counts),
+            n_winners=n_winners,
+            n_losers=n_losers,
+            n_below_coverage=n_below_coverage,
+        )
 
     def by_day_of_week(self, filter: StatsFilter) -> DayOfWeekResponse:
         loaded = self._load_closed_positions(filter)

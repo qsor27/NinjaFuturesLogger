@@ -107,11 +107,11 @@ class DistributionResponse(StrictModel):
 
 
 class DayOfWeekBucket(StrictModel):
-    dow: int           # 0=Mon … 4=Fri
-    day_name: str      # "Mon" … "Fri"
+    dow: int  # 0=Mon … 4=Fri
+    day_name: str  # "Mon" … "Fri"
     trading_days: int  # unique session dates for this weekday
     trades: int
-    avg_pnl: float     # total_pnl / trading_days, 0.0 when trading_days == 0
+    avg_pnl: float  # total_pnl / trading_days, 0.0 when trading_days == 0
     win_rate: float | None
     total_pnl: float
 
@@ -121,15 +121,29 @@ class DayOfWeekResponse(StrictModel):
 
 
 class TradesPerDayBucket(StrictModel):
-    trades_per_day: int       # bucket key
-    days: int                 # unique session dates with this trade count
-    total_trades: int         # trades_per_day * days
+    trades_per_day: int  # bucket key
+    days: int  # unique session dates with this trade count
+    total_trades: int  # trades_per_day * days
     wins: int
     losses: int
-    total_pnl: float          # sum across those days
-    avg_pnl: float            # total_pnl / days
-    win_rate: float | None    # per-trade win rate on those days
+    total_pnl: float  # sum across those days
+    avg_pnl: float  # total_pnl / days
+    win_rate: float | None  # per-trade win rate on those days
 
 
 class TradesPerDayResponse(StrictModel):
     buckets: list[TradesPerDayBucket]
+
+
+class EfficiencyHistogramBucket(StrictModel):
+    range_lo: float  # inclusive
+    range_hi: float  # exclusive (last bucket is inclusive at 1.0)
+    count: int
+
+
+class EfficiencyDistributionResponse(StrictModel):
+    capture_buckets: list[EfficiencyHistogramBucket]
+    risk_buckets: list[EfficiencyHistogramBucket]
+    n_winners: int
+    n_losers: int
+    n_below_coverage: int

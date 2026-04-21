@@ -242,3 +242,140 @@ def test_load_and_compute_open_position_returns_none(tmp_path: Path):
         execution_ids=["E1"],
     )
     assert load_and_compute(db_path, p) is None
+
+
+def test_efficiency_distribution_buckets_winners_and_losers(tmp_config):
+    """End-to-end through StatisticsService.efficiency_distribution."""
+    from models.statistics import StatsFilter
+    from services.statistics import StatisticsService
+
+    # Seed two closed positions: one winner (~67% capture), one loser
+    # (~67% risk). Enough 1m bars in each window to clear the 0.8 coverage
+    # threshold (default CME session ≈ 17 slots per 1000-second window).
+    conn = connect(tmp_config.db_path)
+    try:
+        run_migrations(conn, Path("migrations"))
+        conn.executemany(
+            "INSERT INTO executions (nt_execution_id, account, instrument, timestamp,"
+            " side, original_action, quantity, price, commission, entry_exit,"
+            " position_after, source_order_id, source_filename, imported_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [
+                (
+                    "W1",
+                    "A",
+                    "TEST",
+                    1000,
+                    "Buy",
+                    "Buy",
+                    1,
+                    100.0,
+                    0.0,
+                    "Entry",
+                    1,
+                    "O1",
+                    "f.csv",
+                    0,
+                ),
+                (
+                    "W2",
+                    "A",
+                    "TEST",
+                    2000,
+                    "Sell",
+                    "Sell",
+                    1,
+                    102.0,
+                    0.0,
+                    "Exit",
+                    0,
+                    "O2",
+                    "f.csv",
+                    0,
+                ),
+                (
+                    "L1",
+                    "A",
+                    "TEST",
+                    3000,
+                    "Buy",
+                    "Buy",
+                    1,
+                    100.0,
+                    0.0,
+                    "Entry",
+                    1,
+                    "O3",
+                    "f.csv",
+                    0,
+                ),
+                (
+                    "L2",
+                    "A",
+                    "TEST",
+                    4000,
+                    "Sell",
+                    "Sell",
+                    1,
+                    99.0,
+                    0.0,
+                    "Exit",
+                    0,
+                    "O4",
+                    "f.csv",
+                    0,
+                ),
+            ],
+        )
+        # Winner window [1000, 2000]: bars with one high=103 (MFE=+$3),
+        # and one low=99 (MAE=-$1). realized=+$2. capture=2/3≈0.667 → bucket 6.
+        # Loser window [3000, 4000]: bars with one low=97 (MAE=-$3),
+        # and one high=100.5 (MFE=+$0.5). realized=-$1. risk=1-1/3≈0.667 → bucket 6.
+        bars = []
+        for t in range(1020, 2000, 60):
+            high = 103.0 if t == 1080 else 100.5
+            low = 99.0 if t == 1140 else 100.0
+            bars.append(
+                Bar(
+                    instrument="TEST",
+                    timeframe="1m",
+                    time=t,
+                    open=100.5,
+                    high=high,
+                    low=low,
+                    close=101.0,
+                    volume=0,
+                    source="test",
+                )
+            )
+        for t in range(3020, 4000, 60):
+            high = 100.5 if t == 3080 else 100.0
+            low = 97.0 if t == 3140 else 98.0
+            bars.append(
+                Bar(
+                    instrument="TEST",
+                    timeframe="1m",
+                    time=t,
+                    open=99.5,
+                    high=high,
+                    low=low,
+                    close=98.5,
+                    volume=0,
+                    source="test",
+                )
+            )
+        insert_many(conn, bars)
+        conn.commit()
+    finally:
+        conn.close()
+
+    svc = StatisticsService(tmp_config)
+    result = svc.efficiency_distribution(StatsFilter())
+    assert result.n_winners == 1
+    assert result.n_losers == 1
+    assert result.n_below_coverage == 0
+    assert sum(b.count for b in result.capture_buckets) == 1
+    assert sum(b.count for b in result.risk_buckets) == 1
+    # Capture efficiency of ~0.667 → bucket index 6 (0.6..0.7).
+    assert result.capture_buckets[6].count == 1
+    assert result.risk_buckets[6].count == 1

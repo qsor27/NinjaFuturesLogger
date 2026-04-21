@@ -23,6 +23,8 @@ from models.settings import (
 )
 from models.statistics import (
     DistributionResponse,
+    EfficiencyDistributionResponse,
+    EfficiencyHistogramBucket,
     EquityCurveResponse,
     EquityPoint,
     EquitySeries,
@@ -68,6 +70,8 @@ __all__ = [
     "EquityPoint",
     "EquitySeries",
     "EquityCurveResponse",
+    "EfficiencyDistributionResponse",
+    "EfficiencyHistogramBucket",
     "HistogramBucket",
     "DistributionResponse",
     "Timeframe",
