@@ -250,6 +250,7 @@ export class PriceChart {
     this.candleSeries = null;
     this.volumeSeries = null;
     this.priceLines = [];
+    this.excursionLines = []; // price lines created by setExcursionLines
     this.lwMarkers = null;
     this.resizeObserver = null;
 
@@ -763,6 +764,33 @@ export class PriceChart {
     }
   }
 
+  /**
+   * Replace the excursion (MFE/MAE) horizontal price lines. Call with an empty
+   * array to remove them. Each entry must be:
+   *   { price: number, color: string, title: string, lineStyle: number, lineWidth: number }
+   */
+  setExcursionLines(lines) {
+    if (!this.candleSeries) return;
+    // Remove previous excursion lines (must not touch this.priceLines — those
+    // are the per-execution + avg-entry lines managed by buildPriceLines).
+    for (const line of this.excursionLines) {
+      this.candleSeries.removePriceLine(line);
+    }
+    this.excursionLines = [];
+    for (const def of lines || []) {
+      this.excursionLines.push(
+        this.candleSeries.createPriceLine({
+          price: def.price,
+          color: def.color,
+          lineStyle: def.lineStyle !== undefined ? def.lineStyle : 0,
+          lineWidth: def.lineWidth !== undefined ? def.lineWidth : 2,
+          axisLabelVisible: true,
+          title: def.title,
+        }),
+      );
+    }
+  }
+
   _teardownChart() {
     if (this.resizeObserver) {
       this.resizeObserver.disconnect();
@@ -774,6 +802,7 @@ export class PriceChart {
       this.candleSeries = null;
       this.volumeSeries = null;
       this.priceLines = [];
+      this.excursionLines = [];
     }
   }
 }
