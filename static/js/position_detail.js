@@ -240,19 +240,22 @@ function renderExcursionCard(result, position) {
   excursionCardEl.appendChild(cov);
 
   if (priceChartPromise) {
+    const cs = getComputedStyle(document.documentElement);
+    const posColor = cs.getPropertyValue("--pos").trim() || "#22c55e";
+    const negColor = cs.getPropertyValue("--neg").trim() || "#ef4444";
     priceChartPromise
       .then((chart) => {
         chart.setExcursionLines([
           {
             price: result.mfe_price,
-            color: "#22c55e",
+            color: posColor,
             title: `MFE ${formatSignedDollars(result.mfe_dollars)}`,
             lineStyle: 2,
             lineWidth: 1,
           },
           {
             price: result.mae_price,
-            color: "#ef4444",
+            color: negColor,
             title: `MAE ${formatSignedDollars(result.mae_dollars)}`,
             lineStyle: 2,
             lineWidth: 1,
