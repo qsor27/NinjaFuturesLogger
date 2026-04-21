@@ -7,6 +7,7 @@ from models.browsing import (
 )
 from models.execution import Execution, RejectRecord, TickResult
 from models.markers import Marker
+from models.mfe_mae import MfeMaeResult
 from models.position import Fill, IntegrityIssue, Position
 from models.settings import (
     ChartDefaults,
@@ -50,6 +51,7 @@ __all__ = [
     "AttemptRecord",
     "FetchResult",
     "Marker",
+    "MfeMaeResult",
     "Outcome",
     "PageMeta",
     "PositionListPage",
