@@ -255,6 +255,21 @@ def build_positions_blueprint() -> Blueprint:
         markers = build_markers(executions)
         return jsonify({"markers": [m.model_dump() for m in markers]})
 
+    @bp.get("/api/positions/<account>/<instrument>/<entry_execution_id>/mfe-mae")
+    def get_mfe_mae(account: str, instrument: str, entry_execution_id: str):
+        p = get_position(
+            _db_path(),
+            account=account,
+            instrument=instrument,
+            entry_execution_id=entry_execution_id,
+        )
+        if p is None:
+            return jsonify({"error": "not found"}), 404
+        from services.mfe_mae import load_and_compute
+
+        result = load_and_compute(_db_path(), p)
+        return jsonify({"result": result.model_dump() if result is not None else None})
+
     @bp.get("/api/integrity-issues")
     def list_integrity():
         status = request.args.get("status", "open")  # open|resolved|ignored|all
