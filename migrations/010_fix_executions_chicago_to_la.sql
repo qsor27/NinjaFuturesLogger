@@ -1,0 +1,11 @@
+-- One-shot correction for executions imported before source_timezone was
+-- set in app.json. Those rows were parsed with trader_tz falling back to
+-- exchange_timezone = America/Chicago, but the NinjaTrader CSVs are actually
+-- in America/Los_Angeles local time (the PC's clock). The two zones share
+-- DST rules and differ by a constant 2 hours, so a flat +7200s shift
+-- converts "parsed as Chicago" epochs into the correct UTC epochs.
+--
+-- Safe to run exactly once. Future imports use the current LA config and
+-- do not need further correction. The schema_migrations row prevents
+-- re-application on subsequent startups.
+UPDATE executions SET timestamp = timestamp + 7200;
