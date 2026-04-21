@@ -22,6 +22,9 @@ const deleteBtn = document.getElementById("delete-button");
 const ENTRY_KEY = `${account}/${instrument}/${entryExecutionId}`;
 const DETAIL_URL = `/api/positions/${encodeURIComponent(account)}/${encodeURIComponent(instrument)}/${encodeURIComponent(entryExecutionId)}`;
 const EXECUTIONS_URL = `${DETAIL_URL}/executions`;
+const MFE_MAE_URL = `${DETAIL_URL}/mfe-mae`;
+
+const COVERAGE_DISPLAY_THRESHOLD = 0.8;
 
 function stripSuffix(eid) {
   for (const suf of ["#close", "#open"]) {
@@ -151,6 +154,109 @@ function renderExecutions(executions, detail) {
   executionsRoot.appendChild(table);
 }
 
+function formatSignedDollars(v) {
+  const sign = v >= 0 ? "+" : "−";
+  return `${sign}$${Math.abs(v).toFixed(2)}`;
+}
+
+function formatTimeOfDay(unixSec) {
+  return new Date(unixSec * 1000).toISOString().slice(11, 19);
+}
+
+const excursionCardEl = document.getElementById("excursion-card");
+
+function renderExcursionCard(result, position) {
+  excursionCardEl.innerHTML = "";
+  const title = document.createElement("h2");
+  setText(title, "Excursion");
+  excursionCardEl.appendChild(title);
+
+  if (result === null) {
+    // Position still open.
+    const p = document.createElement("p");
+    setText(p, "Position still open — excursion data available after close.");
+    excursionCardEl.appendChild(p);
+    return;
+  }
+  if (result.coverage < COVERAGE_DISPLAY_THRESHOLD) {
+    const status = document.createElement("p");
+    setText(status, `Incomplete bar data (${Math.round(result.coverage * 100)}% coverage).`);
+    excursionCardEl.appendChild(status);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "coverage-cta";
+    setText(btn, "Fetch bars");
+    btn.addEventListener("click", () => triggerFetchBars(btn, position));
+    excursionCardEl.appendChild(btn);
+    return;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "excursion-grid";
+  let effLabel = "—";
+  let effValue = "—";
+  if (result.capture_efficiency !== null) {
+    effLabel = "Capture";
+    effValue = `${Math.round(result.capture_efficiency * 100)}%`;
+  } else if (result.risk_efficiency !== null) {
+    effLabel = "Risk exit";
+    effValue = `${Math.round(result.risk_efficiency * 100)}%`;
+  }
+  const entries = [
+    ["MFE", formatSignedDollars(result.mfe_dollars), formatTimeOfDay(result.mfe_time)],
+    ["MAE", formatSignedDollars(result.mae_dollars), formatTimeOfDay(result.mae_time)],
+    ["Efficiency", effValue, effLabel],
+  ];
+  for (const [label, value, sub] of entries) {
+    const col = document.createElement("div");
+    col.className = "excursion-col";
+    const lab = document.createElement("div");
+    lab.className = "excursion-label";
+    setText(lab, label);
+    const val = document.createElement("div");
+    val.className = "excursion-value";
+    setText(val, value);
+    const subEl = document.createElement("div");
+    subEl.className = "excursion-sub";
+    setText(subEl, sub);
+    col.appendChild(lab);
+    col.appendChild(val);
+    col.appendChild(subEl);
+    grid.appendChild(col);
+  }
+  excursionCardEl.appendChild(grid);
+
+  const cov = document.createElement("div");
+  cov.className = "excursion-coverage";
+  setText(cov, `Coverage: ${Math.round(result.coverage * 100)}%`);
+  excursionCardEl.appendChild(cov);
+}
+
+async function triggerFetchBars(btn, position) {
+  btn.disabled = true;
+  setText(btn, "Queuing...");
+  try {
+    const resp = await postJSON(
+      `/api/chart/${encodeURIComponent(position.instrument)}/fetch`,
+      { timeframe: "1m" },
+    );
+    setText(btn, "Fetching...");
+    const jobId = resp.job_id;
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      await new Promise((res) => setTimeout(res, 2000));
+      const poll = await fetchJSON(`/api/ohlc/jobs/${jobId}`);
+      if (poll.status === "done" || poll.status === "failed") break;
+    }
+    const refreshed = await fetchJSON(MFE_MAE_URL);
+    renderExcursionCard(refreshed.result, position);
+  } catch (e) {
+    btn.disabled = false;
+    setText(btn, "Fetch bars");
+    console.error("fetch bars failed", e);
+  }
+}
+
 function flashRow(executionId) {
   const tr = executionsRoot.querySelector(`tr[data-execution-id="${CSS.escape(executionId)}"]`);
   if (!tr) return;
@@ -177,9 +283,10 @@ deleteBtn.addEventListener("click", async () => {
 
 (async () => {
   try {
-    const [detail, execs] = await Promise.all([
+    const [detail, execs, mfeMae] = await Promise.all([
       fetchJSON(DETAIL_URL),
       fetchJSON(EXECUTIONS_URL),
+      fetchJSON(MFE_MAE_URL),
     ]);
     renderHeader(detail);
     renderReviewedToggle(detail);
@@ -189,6 +296,7 @@ deleteBtn.addEventListener("click", async () => {
       mountCustomFields(cfContainer, detail, detail.position.entry_execution_id);
     }
     renderExecutions(execs.executions, detail);
+    renderExcursionCard(mfeMae.result, detail.position);
 
     // Mount the chart. PriceChart.init does its own fetches for markers,
     // bars, available timeframes, and source snapshots. It is fire-and-forget
