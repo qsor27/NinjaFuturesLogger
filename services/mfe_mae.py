@@ -7,11 +7,15 @@ Rule 6 of CLAUDE.md: OHLC read-only in services like this one.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from db import connect
 from models.bar import Bar
 from models.mfe_mae import MfeMaeResult
 from models.position import Position
 from services.instruments import get_multiplier
 from services.ohlc.gap_detection import expected_slot_count
+from services.ohlc.store import read_range
 from services.outcomes import classify_outcome
 
 
@@ -89,3 +93,26 @@ def compute_mfe_mae(position: Position, bars: list[Bar]) -> MfeMaeResult | None:
         capture_efficiency=capture_eff,
         risk_efficiency=risk_eff,
     )
+
+
+def load_and_compute(db_path: Path | str, position: Position) -> MfeMaeResult | None:
+    """Load 1m bars from the bars table for position's window and compute.
+
+    Closes the DB connection on return. Returns None if the position is
+    still open; otherwise returns a best-effort MfeMaeResult (coverage may
+    be < 1.0 if bars haven't been fetched yet).
+    """
+    if position.exit_time is None:
+        return None
+    conn = connect(db_path)
+    try:
+        bars = read_range(
+            conn,
+            instrument=position.instrument,
+            timeframe="1m",
+            start=position.entry_time,
+            end=position.exit_time + 1,  # read_range is [start, end); +1 to include exit bar
+        )
+    finally:
+        conn.close()
+    return compute_mfe_mae(position, bars)

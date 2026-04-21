@@ -1,6 +1,11 @@
+from pathlib import Path
+
+from db import connect
+from migrations import run_migrations
 from models.bar import Bar
 from models.position import Position
-from services.mfe_mae import compute_mfe_mae
+from services.mfe_mae import compute_mfe_mae, load_and_compute
+from services.ohlc.store import insert_many
 
 
 def _pos(
@@ -186,3 +191,54 @@ def test_multiplier_applied(monkeypatch):
     # favorable = (102-100)*1*5 = 10; adverse = (99-100)*1*5 = -5
     assert r.mfe_dollars == 10.0
     assert r.mae_dollars == -5.0
+
+
+def test_load_and_compute_uses_bars_table(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+    conn = connect(db_path)
+    try:
+        run_migrations(conn, Path("migrations"))
+        # Seed bars that straddle the position window.
+        insert_many(
+            conn,
+            [
+                _bar(1060, high=103.0, low=99.0, instrument="TEST"),
+                _bar(1120, high=102.0, low=100.0, instrument="TEST"),
+            ],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    p = _pos()
+    r = load_and_compute(db_path, p)
+    assert r is not None
+    assert r.mfe_dollars == 3.0
+    assert r.mae_dollars == -1.0
+
+
+def test_load_and_compute_open_position_returns_none(tmp_path: Path):
+    db_path = tmp_path / "test.db"
+    conn = connect(db_path)
+    try:
+        run_migrations(conn, Path("migrations"))
+    finally:
+        conn.close()
+
+    p = Position(
+        account="A",
+        instrument="TEST",
+        entry_execution_id="E1",
+        side="Long",
+        entry_time=1000,
+        exit_time=None,
+        quantity=1,
+        entry_price=100.0,
+        exit_price=None,
+        points_pnl=None,
+        dollars_pnl=None,
+        commission=0.0,
+        duration_minutes=None,
+        execution_ids=["E1"],
+    )
+    assert load_and_compute(db_path, p) is None
