@@ -225,7 +225,7 @@ CME_EQUITY_FULL_CLOSURE_DATES: frozenset[str] = frozenset(
 def is_full_closure(instrument: str, ts: int) -> bool:
     """Return True if the given UTC-midnight daily slot falls on a CME
     equity-index full closure day. `ts` is expected to be a UTC-aligned
-    daily slot emitted by gap_detection._expected_slots — it represents
+    daily slot emitted by gap_detection.expected_session_slots — it represents
     the trade date in UTC calendar terms (e.g. 2026-02-16 00:00 UTC =
     Monday 2026-02-16 trade date), which is what yfinance stamps too.
     Do NOT convert to session-local time here: a midnight UTC slot maps

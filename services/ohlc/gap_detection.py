@@ -39,14 +39,15 @@ def _is_in_break(ts: int, tz: ZoneInfo, break_start: time, break_end: time) -> b
     return local >= break_start or local < break_end
 
 
-def _expected_slots(
+def expected_session_slots(
     instrument: str,
     timeframe: str,
     start: int,
     end: int,
 ) -> list[int]:
     """Generate the timeframe-aligned slots in [start, end) that fall inside
-    the instrument's trading session (i.e. NOT during the daily break)."""
+    the instrument's trading session (i.e. NOT during the daily break).
+    Public since 2026-04-21 so services/mfe_mae.py can compute coverage."""
     stride = timeframe_seconds(timeframe)
     aligned_start = start - (start % stride)
     if aligned_start < start:
@@ -81,6 +82,17 @@ def _expected_slots(
     return slots
 
 
+def expected_slot_count(
+    instrument: str,
+    timeframe: str,
+    start: int,
+    end: int,
+) -> int:
+    """Number of session-aware slots in [start, end). Wrapper around
+    expected_session_slots for callers that only need the count."""
+    return len(expected_session_slots(instrument, timeframe, start, end))
+
+
 def find_gaps(
     conn: sqlite3.Connection,
     *,
@@ -97,7 +109,7 @@ def find_gaps(
     """
     if start >= end:
         return []
-    expected = _expected_slots(instrument, timeframe, start, end)
+    expected = expected_session_slots(instrument, timeframe, start, end)
     if not expected:
         return []
     present_times = list_times(
@@ -107,7 +119,7 @@ def find_gaps(
     stride = timeframe_seconds(timeframe)
     if stride >= 86400:
         # Daily and above: yfinance stamps daily futures bars at local
-        # midnight (04:00/05:00 UTC), but _expected_slots walks epoch-
+        # midnight (04:00/05:00 UTC), but expected_session_slots walks epoch-
         # aligned 00:00 UTC slots. Exact equality never matches, so bucket
         # both sides to the UTC calendar day — "did we get a bar for this
         # day?" is all that matters at these timeframes.
@@ -152,7 +164,7 @@ def classify_window(
     """
     if start >= end:
         return {"expected": 0, "present": 0, "missing": 0, "out_of_reach": 0}
-    slots = _expected_slots(instrument, timeframe, start, end)
+    slots = expected_session_slots(instrument, timeframe, start, end)
     reach = PROVIDER_REACH.get(timeframe, PROVIDER_REACH["1d"])
     reach_cutoff = now - reach
     reachable = [s for s in slots if s >= reach_cutoff]

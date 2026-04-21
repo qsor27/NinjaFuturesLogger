@@ -5,8 +5,8 @@ from flask import Blueprint, current_app, jsonify, request
 from db import connect
 from logging_config import get_logger
 from services.ohlc.gap_detection import (
-    _expected_slots,
     classify_window,
+    expected_session_slots,
     find_gaps,
     timeframe_seconds,
 )
@@ -111,7 +111,7 @@ def build_monitoring_blueprint() -> Blueprint:
                 gaps = find_gaps(
                     conn, instrument=instrument, timeframe=timeframe, start=scan_start, end=end
                 )
-                expected = _expected_slots(instrument, timeframe, scan_start, end)
+                expected = expected_session_slots(instrument, timeframe, scan_start, end)
                 present = list_times(
                     conn, instrument=instrument, timeframe=timeframe, start=scan_start, end=end
                 )
