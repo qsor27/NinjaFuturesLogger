@@ -287,6 +287,56 @@ function _formatPnl(pnl) {
   return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
+/**
+ * Render a 10-bucket count histogram for pre-bucketed efficiency data.
+ * `buckets` is a list of `{range_lo, range_hi, count}` entries. `title`
+ * is rendered above the chart. Purely CSS-grid; no Lightweight Charts.
+ */
+export function mountSimpleCountHistogram(container, buckets, title) {
+  container.innerHTML = "";
+  if (title) {
+    const h = document.createElement("div");
+    h.className = "mini-chart-title";
+    h.textContent = title;
+    container.appendChild(h);
+  }
+  if (!buckets || !buckets.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No data for this filter";
+    container.appendChild(empty);
+    return;
+  }
+  const maxCount = Math.max(1, ...buckets.map((b) => b.count));
+  const wrap = document.createElement("div");
+  wrap.className = "bar-chart kind-efficiency";
+  container.appendChild(wrap);
+  buckets.forEach((b) => {
+    const col = document.createElement("div");
+    col.className = "bar-col";
+    if (b.count === 0) {
+      col.classList.add("bar-empty");
+    } else {
+      const fill = document.createElement("div");
+      fill.className = "bar-fill bar-pos";
+      const heightPct = (b.count / maxCount) * 100;
+      fill.style.height = `${heightPct}%`;
+      col.appendChild(fill);
+      const topVal = document.createElement("div");
+      topVal.className = "bar-top-value";
+      topVal.textContent = String(b.count);
+      topVal.style.bottom = `calc(${heightPct}% + 4px)`;
+      col.appendChild(topVal);
+    }
+    const labelEl = document.createElement("div");
+    labelEl.className = "bar-label";
+    labelEl.textContent = b.range_lo.toFixed(1);
+    col.appendChild(labelEl);
+    col.title = `${b.range_lo.toFixed(1)}..${b.range_hi.toFixed(1)}: ${b.count}`;
+    wrap.appendChild(col);
+  });
+}
+
 // LightweightCharts-based histogram for by-week and by-month on the Calendar
 // page. `buckets` are TimeBucket objects ({bucket, position_count, total_pnl}).
 // `toDateFn` converts the bucket key string to a "YYYY-MM-DD" date string.

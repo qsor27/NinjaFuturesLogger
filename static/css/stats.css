@@ -457,3 +457,34 @@ button.coverage-cta[disabled] {
   opacity: 0.6;
   cursor: default;
 }
+
+.efficiency-histograms {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.efficiency-panel {
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+}
+
+.efficiency-footer {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.mini-chart-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.bar-chart.kind-efficiency .bar-col {
+  min-width: 18px;
+}
