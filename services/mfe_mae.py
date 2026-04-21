@@ -50,22 +50,30 @@ def compute_mfe_mae(position: Position, bars: list[Bar]) -> MfeMaeResult | None:
     mae = 0.0
     mfe_time = entry
     mae_time = entry
+    mfe_price = entry_price  # price that produced the MFE peak
+    mae_price = entry_price  # price that produced the MAE trough
 
     for b in in_window:
         # For a Long: favorable move uses bar.high, adverse uses bar.low.
         # For a Short: favorable move uses bar.low, adverse uses bar.high.
         if sign == 1:
-            favorable = (b.high - entry_price) * qty * mult
-            adverse = (b.low - entry_price) * qty * mult
+            favorable_edge = b.high
+            adverse_edge = b.low
+            favorable = (favorable_edge - entry_price) * qty * mult
+            adverse = (adverse_edge - entry_price) * qty * mult
         else:
-            favorable = (entry_price - b.low) * qty * mult
-            adverse = (entry_price - b.high) * qty * mult
+            favorable_edge = b.low
+            adverse_edge = b.high
+            favorable = (entry_price - favorable_edge) * qty * mult
+            adverse = (entry_price - adverse_edge) * qty * mult
         if favorable > mfe:
             mfe = favorable
             mfe_time = b.time
+            mfe_price = favorable_edge
         if adverse < mae:
             mae = adverse
             mae_time = b.time
+            mae_price = adverse_edge
 
     # Coverage: bars present / expected session slots in the window.
     expected = expected_slot_count(position.instrument, "1m", entry, exit_)
@@ -89,6 +97,8 @@ def compute_mfe_mae(position: Position, bars: list[Bar]) -> MfeMaeResult | None:
         mae_dollars=mae,
         mfe_time=mfe_time,
         mae_time=mae_time,
+        mfe_price=mfe_price,
+        mae_price=mae_price,
         coverage=coverage,
         capture_efficiency=capture_eff,
         risk_efficiency=risk_eff,

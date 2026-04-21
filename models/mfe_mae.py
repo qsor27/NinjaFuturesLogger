@@ -12,6 +12,8 @@ class MfeMaeResult(StrictModel):
     mae_dollars: float = Field(le=0.0)
     mfe_time: int
     mae_time: int
+    mfe_price: float
+    mae_price: float
     coverage: float = Field(ge=0.0, le=1.0)
     capture_efficiency: float | None = Field(default=None, ge=0.0, le=1.0)
     risk_efficiency: float | None = Field(default=None, ge=0.0, le=1.0)

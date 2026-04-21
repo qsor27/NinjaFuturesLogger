@@ -19,6 +19,8 @@ const reviewedToggle = document.getElementById("reviewed-toggle");
 const executionsRoot = document.getElementById("executions-root");
 const deleteBtn = document.getElementById("delete-button");
 
+let priceChartPromise = null;
+
 const ENTRY_KEY = `${account}/${instrument}/${entryExecutionId}`;
 const DETAIL_URL = `/api/positions/${encodeURIComponent(account)}/${encodeURIComponent(instrument)}/${encodeURIComponent(entryExecutionId)}`;
 const EXECUTIONS_URL = `${DETAIL_URL}/executions`;
@@ -176,6 +178,9 @@ function renderExcursionCard(result, position) {
     const p = document.createElement("p");
     setText(p, "Position still open — excursion data available after close.");
     excursionCardEl.appendChild(p);
+    if (priceChartPromise) {
+      priceChartPromise.then((chart) => chart.setExcursionLines([])).catch(() => {});
+    }
     return;
   }
   if (result.coverage < COVERAGE_DISPLAY_THRESHOLD) {
@@ -188,6 +193,9 @@ function renderExcursionCard(result, position) {
     setText(btn, "Fetch bars");
     btn.addEventListener("click", () => triggerFetchBars(btn, position));
     excursionCardEl.appendChild(btn);
+    if (priceChartPromise) {
+      priceChartPromise.then((chart) => chart.setExcursionLines([])).catch(() => {});
+    }
     return;
   }
 
@@ -230,6 +238,31 @@ function renderExcursionCard(result, position) {
   cov.className = "excursion-coverage";
   setText(cov, `Coverage: ${Math.round(result.coverage * 100)}%`);
   excursionCardEl.appendChild(cov);
+
+  if (priceChartPromise) {
+    priceChartPromise
+      .then((chart) => {
+        chart.setExcursionLines([
+          {
+            price: result.mfe_price,
+            color: "#22c55e",
+            title: `MFE ${formatSignedDollars(result.mfe_dollars)}`,
+            lineStyle: 2,
+            lineWidth: 1,
+          },
+          {
+            price: result.mae_price,
+            color: "#ef4444",
+            title: `MAE ${formatSignedDollars(result.mae_dollars)}`,
+            lineStyle: 2,
+            lineWidth: 1,
+          },
+        ]);
+      })
+      .catch(() => {
+        // chart didn't init; line drawing is a best-effort side effect
+      });
+  }
 }
 
 async function triggerFetchBars(btn, position) {
@@ -302,12 +335,13 @@ deleteBtn.addEventListener("click", async () => {
     // bars, available timeframes, and source snapshots. It is fire-and-forget
     // from this script's perspective — the page renders fully even if the
     // chart errors out.
-    PriceChart.init({
+    priceChartPromise = PriceChart.init({
       container: chartRoot,
       account,
       instrument,
       entryExecutionId,
-    }).catch((e) => {
+    });
+    priceChartPromise.catch((e) => {
       console.error("PriceChart failed to init", e);
     });
   } catch (e) {

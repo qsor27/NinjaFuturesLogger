@@ -95,6 +95,8 @@ def test_winner_long_full_coverage():
     assert r.capture_efficiency is not None
     assert abs(r.capture_efficiency - 2.0 / 3.0) < 1e-9
     assert r.risk_efficiency is None
+    assert r.mfe_price == 103.0
+    assert r.mae_price == 99.0
 
 
 def test_loser_long_full_coverage():
@@ -113,6 +115,8 @@ def test_loser_long_full_coverage():
     assert r.mae_dollars == -3.0
     assert r.capture_efficiency is None
     assert abs(r.risk_efficiency - (1.0 - 1.0 / 3.0)) < 1e-9
+    assert r.mfe_price == 100.5
+    assert r.mae_price == 97.0
 
 
 def test_short_direction():
@@ -128,6 +132,8 @@ def test_short_direction():
     assert r is not None
     assert r.mfe_dollars == 3.0
     assert r.mae_dollars == -1.0
+    assert r.mfe_price == 97.0
+    assert r.mae_price == 101.0
 
 
 def test_scratch_both_efficiencies_none():
@@ -162,6 +168,8 @@ def test_empty_bars_yields_zero_and_coverage_zero():
     # Classification: winner (realized=+2, commission=0) but mfe_dollars==0
     # → capture_efficiency must be None (undefined), not 1.0.
     assert r.capture_efficiency is None
+    assert r.mfe_price == 100.0
+    assert r.mae_price == 100.0
 
 
 def test_bars_outside_window_ignored():
