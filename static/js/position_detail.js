@@ -294,7 +294,7 @@ async function triggerFetchBars(btn, position) {
     while (Date.now() < deadline) {
       await new Promise((res) => setTimeout(res, 2000));
       const poll = await fetchJSON(`/api/ohlc/jobs/${jobId}`);
-      if (poll.status === "done" || poll.status === "failed") break;
+      if (poll.state === "done" || poll.state === "failed") break;
     }
     const refreshed = await fetchJSON(MFE_MAE_URL);
     renderExcursionCard(refreshed.result, position);
