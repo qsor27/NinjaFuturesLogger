@@ -387,3 +387,102 @@ def test_efficiency_distribution_buckets_winners_and_losers(tmp_config):
     # Capture efficiency of ~0.667 → bucket index 6 (0.6..0.7).
     assert result.capture_buckets[6].count == 1
     assert result.risk_buckets[6].count == 1
+
+
+def test_sub_minute_scalp_uses_overlapping_bar():
+    # 25-second Long trade inside one 1m bar. The containing bar opens at
+    # time=960 (before entry) and has high=103, low=98. The old filter
+    # `entry <= b.time <= exit` would exclude this bar because its open-time
+    # is before entry. The new overlap filter must include it.
+    p = _pos(
+        side="Long",
+        entry_price=100.0,
+        exit_price=101.0,
+        entry_time=983,
+        exit_time=1008,
+        qty=1,
+        dollars_pnl=1.0,
+        points_pnl=1.0,
+    )
+    bars = [_bar(time=960, high=103.0, low=98.0)]
+    result = compute_mfe_mae(p, bars)
+    assert result is not None
+    assert result.coverage == 1.0
+    # Long MFE uses bar.high, MAE uses bar.low
+    assert result.mfe_dollars == 3.0  # (103 - 100) * 1 * mult(1.0 for TEST)
+    assert result.mae_dollars == -2.0  # (98 - 100) * 1 * mult
+    assert result.mfe_time == 960
+    assert result.mae_time == 960
+
+
+def test_zero_duration_trade_uses_containing_bar():
+    # Entry and exit at the same unix second. One bar opens at time=960,
+    # covering [960, 1020); the instant trade at t=1000 must pick it up.
+    p = _pos(
+        side="Long",
+        entry_price=100.0,
+        exit_price=100.0,
+        entry_time=1000,
+        exit_time=1000,
+        qty=2,
+        dollars_pnl=0.0,
+        points_pnl=0.0,
+    )
+    bars = [_bar(time=960, high=105.0, low=95.0)]
+    result = compute_mfe_mae(p, bars)
+    assert result is not None
+    assert result.coverage == 1.0
+    assert result.mfe_dollars == 10.0  # (105 - 100) * 2
+    assert result.mae_dollars == -10.0  # (95 - 100) * 2
+
+
+def test_mid_minute_entry_includes_partial_first_bar():
+    # 2.5-minute Long trade starting 30s into a minute. The first bar
+    # (time=0) overlaps the last 30s of the trade's first minute and must
+    # appear in `in_window`; that bar carries the session high.
+    p = _pos(
+        side="Long",
+        entry_price=100.0,
+        exit_price=101.0,
+        entry_time=30,
+        exit_time=180,
+        qty=1,
+        dollars_pnl=1.0,
+        points_pnl=1.0,
+    )
+    bars = [
+        _bar(time=0, high=110.0, low=99.0),    # partial-overlap bar with the peak
+        _bar(time=60, high=102.0, low=99.5),
+        _bar(time=120, high=101.5, low=99.0),
+    ]
+    result = compute_mfe_mae(p, bars)
+    assert result is not None
+    # The first bar's high=110 wins MFE only if it's included.
+    assert result.mfe_dollars == 10.0  # (110 - 100) * 1
+    assert result.mfe_time == 0
+
+
+def test_exit_on_minute_boundary_excludes_next_bar():
+    # Exit at exactly t=120. The bar opening at time=120 starts AT exit, so
+    # no trade-active time overlaps it — it must be excluded. Bars at 0 and
+    # 60 are both included (0 partially, 60 fully).
+    p = _pos(
+        side="Long",
+        entry_price=100.0,
+        exit_price=100.5,
+        entry_time=30,
+        exit_time=120,
+        qty=1,
+        dollars_pnl=0.5,
+        points_pnl=0.5,
+    )
+    bars = [
+        _bar(time=0, high=101.0, low=99.5),
+        _bar(time=60, high=101.5, low=99.0),
+        _bar(time=120, high=999.0, low=0.01),  # must NOT influence MFE/MAE
+    ]
+    result = compute_mfe_mae(p, bars)
+    assert result is not None
+    # If the t=120 bar leaked in, MFE would become 899.0 and MAE -99.99.
+    assert result.mfe_dollars == 1.5  # (101.5 - 100) * 1 from the t=60 bar
+    assert result.mae_dollars == -1.0  # (99.0 - 100) * 1 from the t=60 bar

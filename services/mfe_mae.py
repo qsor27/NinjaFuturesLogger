@@ -14,7 +14,7 @@ from models.bar import Bar
 from models.mfe_mae import MfeMaeResult
 from models.position import Position
 from services.instruments import get_multiplier
-from services.ohlc.gap_detection import expected_slot_count
+from services.ohlc.gap_detection import expected_slot_count, timeframe_seconds
 from services.ohlc.store import read_range
 from services.outcomes import classify_outcome
 
@@ -44,7 +44,8 @@ def compute_mfe_mae(position: Position, bars: list[Bar]) -> MfeMaeResult | None:
     mult = get_multiplier(position.instrument)
     sign = 1 if position.side == "Long" else -1
 
-    in_window = [b for b in bars if entry <= b.time <= exit_]
+    stride = timeframe_seconds("1m")
+    in_window = [b for b in bars if b.time < exit_ and b.time + stride > entry]
 
     mfe = 0.0
     mae = 0.0
