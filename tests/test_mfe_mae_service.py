@@ -225,6 +225,40 @@ def test_load_and_compute_uses_bars_table(tmp_path: Path):
     assert r.mae_dollars == -1.0
 
 
+def test_load_and_compute_widens_query_for_sub_minute_scalp(tmp_path: Path):
+    # Regression: read_range is [start, end). A scalp entirely inside one
+    # bar must still fetch the containing bar, whose open-time is BEFORE
+    # entry. If load_and_compute queried with start=entry_time, the bar
+    # would never reach compute_mfe_mae and coverage would be 0%.
+    db_path = tmp_path / "test.db"
+    conn = connect(db_path)
+    try:
+        run_migrations(conn, Path("migrations"))
+        insert_many(
+            conn,
+            [_bar(960, high=103.0, low=98.0, instrument="TEST")],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    p = _pos(
+        side="Long",
+        entry_price=100.0,
+        exit_price=101.0,
+        entry_time=983,
+        exit_time=1008,
+        qty=1,
+        dollars_pnl=1.0,
+        points_pnl=1.0,
+    )
+    r = load_and_compute(db_path, p)
+    assert r is not None
+    assert r.coverage == 1.0
+    assert r.mfe_dollars == 3.0
+    assert r.mae_dollars == -2.0
+
+
 def test_load_and_compute_open_position_returns_none(tmp_path: Path):
     db_path = tmp_path / "test.db"
     conn = connect(db_path)

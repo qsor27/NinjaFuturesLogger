@@ -115,14 +115,19 @@ def load_and_compute(db_path: Path | str, position: Position) -> MfeMaeResult | 
     """
     if position.exit_time is None:
         return None
+    # Widen the DB query so bars opening just before entry (and whose 1m span
+    # still overlaps the trade window) are fetched — compute_mfe_mae filters
+    # them precisely. Without the widening a sub-minute trade entirely inside
+    # one bar would see zero bars and report 0% coverage.
+    stride = timeframe_seconds("1m")
     conn = connect(db_path)
     try:
         bars = read_range(
             conn,
             instrument=position.instrument,
             timeframe="1m",
-            start=position.entry_time,
-            end=position.exit_time + 1,  # read_range is [start, end); +1 to include exit bar
+            start=max(0, position.entry_time - stride + 1),
+            end=position.exit_time,
         )
     finally:
         conn.close()
