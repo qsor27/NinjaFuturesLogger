@@ -3,6 +3,12 @@
 
 import { renderPresetSelect } from "./date_presets.js";
 import { createMultiSelect } from "./MultiSelect.js";
+import {
+  clearDefault,
+  fetchDefaults,
+  isUrlEmpty,
+  saveDefault,
+} from "./filter_defaults.js";
 
 export function parseFilterFromUrl() {
   const url = new URL(window.location.href);
@@ -51,6 +57,8 @@ export async function fetchAccountOptions() {
   return body.accounts || [];
 }
 
+const STATS_URL_KEYS = ["account", "side", "from", "to"];
+
 export function renderFilterBar(container, filter, onApply) {
   container.classList.add("filter-bar");
   container.innerHTML = `
@@ -75,6 +83,8 @@ export function renderFilterBar(container, filter, onApply) {
     </label>
     <button id="filter-apply">Apply</button>
     <button id="filter-clear">Clear</button>
+    <button id="filter-save-default" type="button">Save as default</button>
+    <button id="filter-clear-default" type="button" hidden>Clear default</button>
   `;
 
   const accountHost = container.querySelector("#filter-account-host");
@@ -84,12 +94,13 @@ export function renderFilterBar(container, filter, onApply) {
   const toInput = container.querySelector("#filter-to");
   const applyBtn = container.querySelector("#filter-apply");
   const clearBtn = container.querySelector("#filter-clear");
+  const saveDefaultBtn = container.querySelector("#filter-save-default");
+  const clearDefaultBtn = container.querySelector("#filter-clear-default");
 
   if (filter.from) fromInput.value = filter.from;
   if (filter.to) toInput.value = filter.to;
   if (filter.side) sideSelect.value = filter.side;
 
-  // Widget created empty; populated once /api/positions/filters resolves.
   let currentAccounts = [...(filter.accounts || [])];
   let totalAccountCount = null;
   const multi = createMultiSelect(accountHost, {
@@ -111,12 +122,40 @@ export function renderFilterBar(container, filter, onApply) {
     else applyBtn.classList.remove("active");
   };
 
-  fetchAccountOptions().then((accounts) => {
+  let hasDefault = false;
+  const setClearDefaultVisible = (visible) => {
+    clearDefaultBtn.hidden = !visible;
+  };
+
+  Promise.all([fetchAccountOptions(), fetchDefaults()]).then(([accounts, defaults]) => {
     totalAccountCount = accounts.length;
     multi.setOptions(accounts);
-    multi.setSelected(currentAccounts);
-    currentAccounts = multi.getSelected();
-    updateApplyHighlight();
+
+    const stats = defaults ? defaults.stats : null;
+    hasDefault = stats !== null && stats !== undefined;
+    setClearDefaultVisible(hasDefault);
+
+    const urlIsEmpty = isUrlEmpty(window.location.href, STATS_URL_KEYS);
+
+    if (hasDefault && urlIsEmpty) {
+      const savedAccounts = Array.isArray(stats.accounts) ? stats.accounts : [];
+      multi.setSelected(savedAccounts);
+      currentAccounts = multi.getSelected();
+      if (stats.side) sideSelect.value = stats.side;
+      const next = {
+        accounts: [...currentAccounts],
+        side: sideSelect.value || null,
+        from: null,
+        to: null,
+      };
+      writeFilterToUrl(next);
+      updateApplyHighlight();
+      onApply(next);
+    } else {
+      multi.setSelected(currentAccounts);
+      currentAccounts = multi.getSelected();
+      updateApplyHighlight();
+    }
   });
 
   updateApplyHighlight();
@@ -157,6 +196,25 @@ export function renderFilterBar(container, filter, onApply) {
     writeFilterToUrl(cleared);
     updateApplyHighlight();
     onApply(cleared);
+  });
+
+  saveDefaultBtn.addEventListener("click", async () => {
+    const ok = await saveDefault("stats", {
+      accounts: [...currentAccounts],
+      side: sideSelect.value || "",
+    });
+    if (ok) {
+      hasDefault = true;
+      setClearDefaultVisible(true);
+    }
+  });
+
+  clearDefaultBtn.addEventListener("click", async () => {
+    const ok = await clearDefault("stats");
+    if (ok) {
+      hasDefault = false;
+      setClearDefaultVisible(false);
+    }
   });
 
   window.addEventListener("popstate", () => {
