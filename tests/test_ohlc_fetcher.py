@@ -88,6 +88,7 @@ def test_fully_cached_returns_cached_status(migrated_db):
         timeframe="1d",
         start=86400,
         end=86400 * 3,
+        trigger="on_demand",
     )
     # Even if find_gaps returns extra "missing" bars from session-aware
     # expansion, the primary returns nothing for those, so bars_added stays 0.
@@ -106,6 +107,7 @@ def test_primary_returns_bars(migrated_db):
         timeframe="1d",
         start=86400,
         end=86400 * 4,
+        trigger="on_demand",
     )
     assert result.bars_added >= 1
     assert any(a.outcome == "ok" for a in result.attempts)
@@ -124,6 +126,7 @@ def test_primary_fails_falls_back_to_secondary(migrated_db):
         timeframe="1d",
         start=86400,
         end=86400 * 4,
+        trigger="on_demand",
     )
     sources_attempted = {a.source for a in result.attempts}
     assert "primary" in sources_attempted
@@ -143,6 +146,7 @@ def test_all_sources_open_returns_all_unavailable(migrated_db):
         timeframe="1d",
         start=86400,
         end=86400 * 4,
+        trigger="on_demand",
     )
     # Second call: both breakers open, no fetches happen
     primary.calls.clear()
@@ -154,6 +158,7 @@ def test_all_sources_open_returns_all_unavailable(migrated_db):
         timeframe="1d",
         start=86400,
         end=86400 * 4,
+        trigger="on_demand",
     )
     assert result.bars_added == 0
     assert result.status == "all_sources_unavailable"
@@ -171,6 +176,7 @@ def test_no_source_supports_timeframe_returns_no_source_status(migrated_db):
         timeframe="1m",
         start=60,
         end=300,
+        trigger="on_demand",
     )
     assert result.status == "no_source_for_timeframe"
     assert result.bars_added == 0
@@ -241,6 +247,7 @@ def test_fetcher_acquires_token_before_source_call(tmp_path):
         start=start_ts,
         end=end_ts,
         token_bucket=bucket,
+        trigger="on_demand",
     )
     assert src.calls == 1
     assert bucket.stats()["acquired_total"] == 1

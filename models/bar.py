@@ -32,3 +32,4 @@ class FetchResult(StrictModel):
     status: FetchStatus
     bars_added: int
     attempts: list[AttemptRecord]
+    attempt_id: str = ""

@@ -1,14 +1,48 @@
+import time
 from pathlib import Path
 
 from db import connect
 from logging_config import get_logger
 from models.bar import AttemptRecord, Bar, FetchResult
+from services.ohlc.attempts import (
+    begin_attempt,
+    complete_attempt,
+    new_attempt_id,
+    record_source_attempt,
+)
+from services.ohlc.circuit_breaker import FailureClassification
 from services.ohlc.gap_detection import find_gaps
+from services.ohlc.gap_reports import update_gap_reports
 from services.ohlc.rate_limiter import TokenBucket
 from services.ohlc.registry import SourceRegistry
 from services.ohlc.store import insert_many
 
 log = get_logger("ohlc.fetcher")
+
+
+# Indirection so tests can monkeypatch the "now" clock the gap-report writer
+# reads. Production code uses wall-clock seconds.
+def _now() -> int:
+    return int(time.time())
+
+
+def _error_class(err: BaseException) -> str | None:
+    attached = getattr(err, "ftl_failure", None)
+    if isinstance(attached, FailureClassification):
+        return attached.failure_class
+    response = getattr(err, "response", None)
+    code = getattr(response, "status_code", None)
+    if code == 429:
+        return "rate_limit"
+    if code is not None and 500 <= code < 600:
+        return "server_error"
+    return None
+
+
+def _http_status(err: BaseException) -> int | None:
+    response = getattr(err, "response", None)
+    code = getattr(response, "status_code", None)
+    return int(code) if code is not None else None
 
 
 def fetch_range(
@@ -19,33 +53,65 @@ def fetch_range(
     timeframe: str,
     start: int,
     end: int,
+    trigger: str,
     token_bucket: TokenBucket | None = None,
 ) -> FetchResult:
-    """The single OHLC orchestration entry point.
+    """Orchestrate a fetch and persist a full forensic trail.
 
-    Steps:
-      1. Find the missing sub-ranges in [start, end) the store doesn't have.
-      2. For each missing sub-range, try each registry source in order.
-         A source is skipped if its breaker is open OR if it doesn't
-         declare the requested timeframe as supported.
-      3. The first source that returns bars (even an empty list, treated as
-         "this source had nothing for the range") fills the gap; we move on.
-         A raised exception is recorded as a failure and we try the next
-         source for the same gap.
-      4. All collected bars are UPSERTed via the store in a single tick.
-      5. Return a FetchResult with per-attempt forensics.
-
-    The fetcher is the ONLY caller of source.fetch() in the entire app.
-    Routes do not call it. Plan 14's post-tick hook submits it to the
-    background pool; the scheduled refresh jobs call it on the scheduler
-    thread.
+    `trigger` is required. Accepted values include 'maintainer', 'sweep',
+    'on_demand', 'self_heal', 'post_import'. Any string is stored verbatim;
+    the dashboard filters and groups by it.
     """
-    if start >= end:
-        return FetchResult(status="cached", bars_added=0, attempts=[])
+    attempt_id = new_attempt_id()
+    now = _now()
 
-    # Short-circuit if nothing in the registry supports this timeframe.
+    conn = connect(db_path)
+    try:
+        conn.execute("BEGIN")
+        begin_attempt(
+            conn,
+            attempt_id=attempt_id,
+            trigger=trigger,
+            instrument=instrument,
+            timeframe=timeframe,
+            range_start=start,
+            range_end=end,
+            now=now,
+        )
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+
+    # Short-circuit: empty range.
+    if start >= end:
+        _finalize(db_path, attempt_id, 0, 0, "cached", None, instrument, timeframe, start, end)
+        return FetchResult(
+            status="cached",
+            bars_added=0,
+            attempts=[],
+            attempt_id=attempt_id,
+        )
+
+    # Short-circuit: no source supports this timeframe.
     if not any(timeframe in s.supported_timeframes for s, _b in registry.entries):
-        return FetchResult(status="no_source_for_timeframe", bars_added=0, attempts=[])
+        _finalize(
+            db_path,
+            attempt_id,
+            0,
+            0,
+            "no_source_for_timeframe",
+            None,
+            instrument,
+            timeframe,
+            start,
+            end,
+        )
+        return FetchResult(
+            status="no_source_for_timeframe",
+            bars_added=0,
+            attempts=[],
+            attempt_id=attempt_id,
+        )
 
     conn = connect(db_path)
     try:
@@ -56,10 +122,17 @@ def fetch_range(
             start=start,
             end=end,
         )
-        if not gaps:
-            return FetchResult(status="cached", bars_added=0, attempts=[])
     finally:
         conn.close()
+
+    if not gaps:
+        _finalize(db_path, attempt_id, 0, 0, "cached", None, instrument, timeframe, start, end)
+        return FetchResult(
+            status="cached",
+            bars_added=0,
+            attempts=[],
+            attempt_id=attempt_id,
+        )
 
     bars_collected: list[Bar] = []
     attempts: list[AttemptRecord] = []
@@ -69,8 +142,34 @@ def fetch_range(
         gap_filled = False
         for source, breaker in list(registry.entries):
             if timeframe not in source.supported_timeframes:
+                _record_source(
+                    db_path,
+                    attempt_id,
+                    gap_start,
+                    gap_end,
+                    source.name,
+                    "skipped_no_timeframe",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 continue
             if not breaker.allows():
+                _record_source(
+                    db_path,
+                    attempt_id,
+                    gap_start,
+                    gap_end,
+                    source.name,
+                    "skipped_breaker",
+                    0,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 attempts.append(
                     AttemptRecord(
                         source=source.name,
@@ -80,25 +179,29 @@ def fetch_range(
                     )
                 )
                 continue
+
+            t0 = time.monotonic()
             try:
                 if token_bucket is not None:
                     with token_bucket.acquire(timeout=60):
                         bars = source.fetch(instrument, timeframe, gap_start, gap_end)
                 else:
                     bars = source.fetch(instrument, timeframe, gap_start, gap_end)
-                breaker.record_success()
-                bars_collected.extend(bars)
-                attempts.append(
-                    AttemptRecord(
-                        source=source.name,
-                        outcome="ok",
-                        count=len(bars),
-                        error=None,
-                    )
-                )
-                gap_filled = True
-                break
             except TimeoutError as te:
+                dur_ms = int((time.monotonic() - t0) * 1000)
+                _record_source(
+                    db_path,
+                    attempt_id,
+                    gap_start,
+                    gap_end,
+                    source.name,
+                    "skipped_rate_limit",
+                    0,
+                    dur_ms,
+                    None,
+                    "rate_limit_token_bucket",
+                    repr(te),
+                )
                 attempts.append(
                     AttemptRecord(
                         source=source.name,
@@ -109,7 +212,21 @@ def fetch_range(
                 )
                 continue
             except Exception as e:
+                dur_ms = int((time.monotonic() - t0) * 1000)
                 breaker.record_failure(e)
+                _record_source(
+                    db_path,
+                    attempt_id,
+                    gap_start,
+                    gap_end,
+                    source.name,
+                    "failed",
+                    0,
+                    dur_ms,
+                    _http_status(e),
+                    _error_class(e),
+                    repr(e),
+                )
                 attempts.append(
                     AttemptRecord(
                         source=source.name,
@@ -119,6 +236,34 @@ def fetch_range(
                     )
                 )
                 continue
+
+            dur_ms = int((time.monotonic() - t0) * 1000)
+            breaker.record_success()
+            bars_collected.extend(bars)
+            outcome = "ok" if bars else "empty"
+            _record_source(
+                db_path,
+                attempt_id,
+                gap_start,
+                gap_end,
+                source.name,
+                outcome,
+                len(bars),
+                dur_ms,
+                None,
+                None,
+                None,
+            )
+            attempts.append(
+                AttemptRecord(
+                    source=source.name,
+                    outcome="ok",
+                    count=len(bars),
+                    error=None,
+                )
+            )
+            gap_filled = True
+            break
         if gap_filled:
             any_gap_filled = True
 
@@ -126,12 +271,11 @@ def fetch_range(
         conn = connect(db_path)
         try:
             conn.execute("BEGIN")
-            try:
-                insert_many(conn, bars_collected)
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
+            insert_many(conn, bars_collected)
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
         finally:
             conn.close()
 
@@ -142,9 +286,24 @@ def fetch_range(
     else:
         status = "all_sources_unavailable"
 
+    _finalize(
+        db_path,
+        attempt_id,
+        len(gaps),
+        len(bars_collected),
+        status,
+        None,
+        instrument,
+        timeframe,
+        start,
+        end,
+    )
+
     log.info(
         "fetch_range done",
         extra={
+            "attempt_id": attempt_id,
+            "trigger": trigger,
             "instrument": instrument,
             "tf": timeframe,
             "bars_added": len(bars_collected),
@@ -155,4 +314,81 @@ def fetch_range(
         status=status,
         bars_added=len(bars_collected),
         attempts=attempts,
+        attempt_id=attempt_id,
     )
+
+
+def _record_source(
+    db_path,
+    attempt_id,
+    gap_start,
+    gap_end,
+    source,
+    outcome,
+    bars_returned,
+    duration_ms,
+    http_status,
+    error_class,
+    error,
+):
+    conn = connect(db_path)
+    try:
+        conn.execute("BEGIN")
+        record_source_attempt(
+            conn,
+            attempt_id=attempt_id,
+            gap_start=gap_start,
+            gap_end=gap_end,
+            source=source,
+            outcome=outcome,
+            bars_returned=bars_returned,
+            duration_ms=duration_ms,
+            http_status=http_status,
+            error_class=error_class,
+            error=error,
+        )
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+
+
+def _finalize(
+    db_path,
+    attempt_id,
+    gaps_found,
+    bars_written,
+    final_status,
+    error,
+    instrument,
+    timeframe,
+    start,
+    end,
+):
+    now = _now()
+    conn = connect(db_path)
+    try:
+        conn.execute("BEGIN")
+        complete_attempt(
+            conn,
+            attempt_id=attempt_id,
+            now=now,
+            gaps_found=gaps_found,
+            bars_written=bars_written,
+            final_status=final_status,
+            error=error,
+        )
+        update_gap_reports(
+            conn,
+            instrument=instrument,
+            timeframe=timeframe,
+            range_start=start,
+            range_end=end,
+            attempt_id=attempt_id,
+            now=now,
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.close()
