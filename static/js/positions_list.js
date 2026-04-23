@@ -1,6 +1,12 @@
 import { buildQuery, fetchJSON, formatDollars, formatTime, setText } from "./api.js";
 import { renderPresetSelect } from "./date_presets.js";
 import { createMultiSelect } from "./MultiSelect.js";
+import {
+  clearDefault,
+  fetchDefaults,
+  isUrlEmpty,
+  saveDefault,
+} from "./filter_defaults.js";
 
 const form = document.getElementById("filter-form");
 const listRoot = document.getElementById("list-root");
@@ -150,6 +156,34 @@ let columnOrder = loadColumnOrder();
 let lastPositions = [];
 let dragSourceKey = null;
 let accountMulti = null;
+
+const POSITIONS_URL_KEYS = [
+  "account",
+  "instrument",
+  "side",
+  "outcome",
+  "session_date_from",
+  "session_date_to",
+  "day_of_week",
+  "hour_of_day",
+  "trades_per_day",
+  "page",
+];
+
+function applyPositionsDefault(def) {
+  if (accountMulti) {
+    accountMulti.setSelected(
+      Array.isArray(def.accounts) ? def.accounts : []
+    );
+  }
+  const setField = (name, value) => {
+    const el = form.querySelector(`[name="${name}"]`);
+    if (el) el.value = value || "";
+  };
+  setField("instrument", def.instrument);
+  setField("side", def.side);
+  setField("outcome", def.outcome);
+}
 
 async function populateFilterOptions() {
   const opts = await fetchJSON("/api/positions/filters");
@@ -408,5 +442,40 @@ function wirePresetDropdown() {
   restoreFiltersFromUrl();
   renderBackToStats();
   wirePresetDropdown();
+
+  const defaults = await fetchDefaults();
+  const saveBtn = document.getElementById("filter-save-default");
+  const clearBtn = document.getElementById("filter-clear-default");
+
+  let hasDefault = defaults.positions !== null && defaults.positions !== undefined;
+  clearBtn.hidden = !hasDefault;
+
+  if (hasDefault && isUrlEmpty(window.location.href, POSITIONS_URL_KEYS)) {
+    applyPositionsDefault(defaults.positions);
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    const selected = accountMulti ? accountMulti.getSelected() : [];
+    const body = {
+      accounts: selected,
+      instrument: form.querySelector('[name="instrument"]').value || "",
+      side: form.querySelector('[name="side"]').value || "",
+      outcome: form.querySelector('[name="outcome"]').value || "",
+    };
+    const ok = await saveDefault("positions", body);
+    if (ok) {
+      hasDefault = true;
+      clearBtn.hidden = false;
+    }
+  });
+
+  clearBtn.addEventListener("click", async () => {
+    const ok = await clearDefault("positions");
+    if (ok) {
+      hasDefault = false;
+      clearBtn.hidden = true;
+    }
+  });
+
   await load();
 })();
