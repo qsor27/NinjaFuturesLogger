@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,9 @@ def tmp_config(tmp_path: Path) -> Config:
     (tmp_path / "inbox").mkdir()
     (tmp_path / "archive").mkdir()
     (tmp_path / "logs").mkdir()
-    return Config(
+    (tmp_path / "config").mkdir()
+
+    cfg = Config(
         data_dir=str(tmp_path),
         db_path=str(tmp_path / "t.db"),
         inbox_dir=str(tmp_path / "inbox"),
@@ -35,6 +38,12 @@ def tmp_config(tmp_path: Path) -> Config:
         thread_pool=ThreadPoolConfig(max_workers=2),
         scheduler=SchedulerConfig(heartbeat_seconds=60),
     )
+
+    # Write the app.json file so save_filter_default can update it
+    app_json = tmp_path / "config" / "app.json"
+    app_json.write_text(json.dumps(cfg.model_dump()), encoding="utf-8")
+
+    return cfg
 
 
 @pytest.fixture
