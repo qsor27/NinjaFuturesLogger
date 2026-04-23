@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from pydantic import field_validator
 from models.base import StrictModel
 
 _SAVE_LOCK = threading.Lock()
@@ -28,6 +29,37 @@ class SchedulerConfig(StrictModel):
     heartbeat_seconds: int
 
 
+class PositionsFilterDefault(StrictModel):
+    accounts: tuple[str, ...] = ()
+    instrument: str = ""
+    side: str = ""  # "" | "Long" | "Short"
+    outcome: str = ""  # "" | "winner" | "loser" | "scratch" | "open"
+
+    @field_validator("accounts", mode="before")
+    @classmethod
+    def coerce_accounts_to_tuple(cls, v):
+        if isinstance(v, list):
+            return tuple(v)
+        return v
+
+
+class StatsFilterDefault(StrictModel):
+    accounts: tuple[str, ...] = ()
+    side: str = ""  # "" | "Long" | "Short"
+
+    @field_validator("accounts", mode="before")
+    @classmethod
+    def coerce_accounts_to_tuple(cls, v):
+        if isinstance(v, list):
+            return tuple(v)
+        return v
+
+
+class FilterDefaults(StrictModel):
+    positions: PositionsFilterDefault | None = None
+    stats: StatsFilterDefault | None = None
+
+
 class Config(StrictModel):
     data_dir: str
     db_path: str
@@ -39,6 +71,7 @@ class Config(StrictModel):
     scheduler: SchedulerConfig
     display_timezone: str | None = None
     theme: Literal["dark", "light"] = "dark"
+    filter_defaults: FilterDefaults = FilterDefaults()
 
 
 def load_config(path: Path | str) -> Config:
