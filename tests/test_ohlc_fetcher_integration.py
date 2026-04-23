@@ -160,6 +160,30 @@ def test_fetch_range_creates_gap_report_when_unfilled(tmp_path):
     assert rows[0]["gap_end"] == end
 
 
+def test_fetch_range_emits_per_source_log_line(tmp_path, caplog):
+    import logging
+
+    db = _fresh_db(tmp_path)
+    bars = [i * 60 for i in range(5)]
+    reg = _make_registry(_GoodSource(bars), clock=lambda: 10_000)
+    with caplog.at_level(logging.INFO, logger="ohlc.fetcher"):
+        result = fetch_range(
+            db_path=db,
+            registry=reg,
+            instrument="MNQ",
+            timeframe="1m",
+            start=0,
+            end=300,
+            trigger="maintainer",
+        )
+    per_source = [r for r in caplog.records if r.getMessage() == "ohlc source attempt"]
+    assert per_source, "expected per-source log line"
+    line = per_source[0]
+    assert getattr(line, "attempt_id", None) == result.attempt_id
+    assert getattr(line, "source", None) == "good"
+    assert getattr(line, "outcome", None) == "ok"
+
+
 def test_fetch_range_writes_attempt_even_when_cached(tmp_path):
     db = _fresh_db(tmp_path)
     conn = connect(db)

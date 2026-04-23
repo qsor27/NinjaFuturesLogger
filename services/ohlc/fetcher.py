@@ -139,37 +139,76 @@ def fetch_range(
     attempts: list[AttemptRecord] = []
     any_gap_filled = False
 
+    def _record_and_log(
+        *,
+        source_name: str,
+        g_start: int,
+        g_end: int,
+        outcome: str,
+        bars_returned: int,
+        duration_ms: int | None,
+        http_status: int | None,
+        error_class: str | None,
+        error: str | None,
+    ) -> None:
+        _record_source(
+            db_path,
+            attempt_id,
+            g_start,
+            g_end,
+            source_name,
+            outcome,
+            bars_returned,
+            duration_ms,
+            http_status,
+            error_class,
+            error,
+        )
+        log.info(
+            "ohlc source attempt",
+            extra={
+                "attempt_id": attempt_id,
+                "trigger": trigger,
+                "instrument": instrument,
+                "tf": timeframe,
+                "gap_start": g_start,
+                "gap_end": g_end,
+                "source": source_name,
+                "outcome": outcome,
+                "bars_returned": bars_returned,
+                "duration_ms": duration_ms,
+                "error_class": error_class,
+                "error": error,
+            },
+        )
+
     for gap_start, gap_end in gaps:
         gap_filled = False
         for source, breaker in list(registry.entries):
             if timeframe not in source.supported_timeframes:
-                _record_source(
-                    db_path,
-                    attempt_id,
-                    gap_start,
-                    gap_end,
-                    source.name,
-                    "skipped_no_timeframe",
-                    0,
-                    None,
-                    None,
-                    None,
-                    None,
+                _record_and_log(
+                    source_name=source.name,
+                    g_start=gap_start,
+                    g_end=gap_end,
+                    outcome="skipped_no_timeframe",
+                    bars_returned=0,
+                    duration_ms=None,
+                    http_status=None,
+                    error_class=None,
+                    error=None,
                 )
                 continue
             if not breaker.allows():
-                _record_source(
-                    db_path,
-                    attempt_id,
-                    gap_start,
-                    gap_end,
-                    source.name,
-                    "skipped_breaker",
-                    0,
-                    None,
-                    None,
-                    None,
-                    None,
+                _record_and_log(
+                    source_name=source.name,
+                    g_start=gap_start,
+                    g_end=gap_end,
+                    outcome="skipped_breaker",
+                    bars_returned=0,
+                    duration_ms=None,
+                    http_status=None,
+                    error_class=None,
+                    error=None,
                 )
                 attempts.append(
                     AttemptRecord(
@@ -190,18 +229,16 @@ def fetch_range(
                     bars = source.fetch(instrument, timeframe, gap_start, gap_end)
             except TimeoutError as te:
                 dur_ms = int((time.monotonic() - t0) * 1000)
-                _record_source(
-                    db_path,
-                    attempt_id,
-                    gap_start,
-                    gap_end,
-                    source.name,
-                    "skipped_rate_limit",
-                    0,
-                    dur_ms,
-                    None,
-                    "rate_limit_token_bucket",
-                    repr(te),
+                _record_and_log(
+                    source_name=source.name,
+                    g_start=gap_start,
+                    g_end=gap_end,
+                    outcome="skipped_rate_limit",
+                    bars_returned=0,
+                    duration_ms=dur_ms,
+                    http_status=None,
+                    error_class="rate_limit_token_bucket",
+                    error=repr(te),
                 )
                 attempts.append(
                     AttemptRecord(
@@ -216,18 +253,16 @@ def fetch_range(
                 dur_ms = int((time.monotonic() - t0) * 1000)
                 breaker.record_failure(e)
                 _persist_breaker(db_path, breaker)
-                _record_source(
-                    db_path,
-                    attempt_id,
-                    gap_start,
-                    gap_end,
-                    source.name,
-                    "failed",
-                    0,
-                    dur_ms,
-                    _http_status(e),
-                    _error_class(e),
-                    repr(e),
+                _record_and_log(
+                    source_name=source.name,
+                    g_start=gap_start,
+                    g_end=gap_end,
+                    outcome="failed",
+                    bars_returned=0,
+                    duration_ms=dur_ms,
+                    http_status=_http_status(e),
+                    error_class=_error_class(e),
+                    error=repr(e),
                 )
                 attempts.append(
                     AttemptRecord(
@@ -244,18 +279,16 @@ def fetch_range(
             _persist_breaker(db_path, breaker)
             bars_collected.extend(bars)
             outcome = "ok" if bars else "empty"
-            _record_source(
-                db_path,
-                attempt_id,
-                gap_start,
-                gap_end,
-                source.name,
-                outcome,
-                len(bars),
-                dur_ms,
-                None,
-                None,
-                None,
+            _record_and_log(
+                source_name=source.name,
+                g_start=gap_start,
+                g_end=gap_end,
+                outcome=outcome,
+                bars_returned=len(bars),
+                duration_ms=dur_ms,
+                http_status=None,
+                error_class=None,
+                error=None,
             )
             attempts.append(
                 AttemptRecord(
