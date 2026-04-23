@@ -4,6 +4,8 @@ async function initDataHealth() {
   await renderSourcesBand();
   await renderMaintainerPanel();
   await renderMatrix();
+  await renderAttemptsPanel();
+  await renderGapsPanel();
 }
 
 async function renderMaintainerPanel() {
@@ -229,4 +231,115 @@ function escHtml(s) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+// --- Recent fetch attempts ------------------------------------------------
+
+async function renderAttemptsPanel() {
+  const el = document.getElementById("attempts-panel");
+  if (!el) return;
+  const resp = await fetch("/api/ohlc/attempts?limit=40");
+  const { attempts } = await resp.json();
+  if (!attempts.length) {
+    el.innerHTML = `<h3>Recent fetch attempts</h3><div class="notice">No attempts recorded yet.</div>`;
+    return;
+  }
+  const rows = attempts.map((a) => {
+    const started = a.started_at ? new Date(a.started_at * 1000).toLocaleString() : "—";
+    const dur = a.completed_at && a.started_at
+      ? `${a.completed_at - a.started_at}s` : "—";
+    const status = a.final_status ?? "running";
+    const color =
+      status === "ok" ? "#0a7f0a"
+      : status === "cached" ? "#6c757d"
+      : status === "partial" ? "#c07000"
+      : status === "interrupted" ? "#b00020"
+      : status === "all_sources_unavailable" ? "#b00020" : "#333";
+    const sources = (a.sources || []).map((s) => {
+      const sc = s.outcome === "ok" ? "#0a7f0a"
+        : s.outcome === "empty" ? "#6c757d"
+        : s.outcome.startsWith("skipped") ? "#c07000" : "#b00020";
+      const errTxt = s.error ? ` — ${escHtml(s.error)}` : "";
+      return `<div style="padding-left:1em">
+        <span style="color:${sc}">${escHtml(s.source)}</span>
+        ${escHtml(s.outcome)} · ${s.bars_returned} bars · ${s.duration_ms ?? "—"}ms${errTxt}
+      </div>`;
+    }).join("");
+    return `<tr>
+      <td>${started}</td>
+      <td>${escHtml(a.trigger)}</td>
+      <td>${escHtml(a.instrument)} ${escHtml(a.timeframe)}</td>
+      <td style="color:${color}">${escHtml(status)}</td>
+      <td>${a.bars_written}</td>
+      <td>${dur}</td>
+    </tr>
+    <tr class="source-detail"><td colspan="6">${sources}</td></tr>`;
+  }).join("");
+  el.innerHTML = `
+    <h3>Recent fetch attempts</h3>
+    <table>
+      <thead><tr>
+        <th>Time</th><th>Trigger</th><th>Target</th>
+        <th>Status</th><th>Bars</th><th>Duration</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// --- Open gaps ------------------------------------------------------------
+
+async function renderGapsPanel() {
+  const el = document.getElementById("gaps-panel");
+  if (!el) return;
+  const [openResp, abandonedResp] = await Promise.all([
+    fetch("/api/ohlc/gaps?state=open").then((r) => r.json()),
+    fetch("/api/ohlc/gaps?state=abandoned").then((r) => r.json()),
+  ]);
+  const open = openResp.gaps || [];
+  const abandoned = abandonedResp.gaps || [];
+  el.innerHTML = `<h3>Open gaps (${open.length})</h3>` + renderGapTable(open, "open")
+    + (abandoned.length
+        ? `<h4 style="margin-top:1em">Abandoned gaps (${abandoned.length})</h4>`
+          + renderGapTable(abandoned, "abandoned")
+        : "");
+
+  el.querySelectorAll("button[data-retry-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-retry-id");
+      btn.disabled = true;
+      btn.textContent = "Retrying…";
+      try {
+        await fetch(`/api/ohlc/gaps/${id}/retry`, { method: "POST" });
+        setTimeout(() => renderGapsPanel(), 2000);
+      } catch (_e) {
+        btn.textContent = "Retry (failed)";
+      }
+    });
+  });
+}
+
+function renderGapTable(rows, variant) {
+  if (!rows.length) {
+    return `<div class="notice">No ${variant} gaps.</div>`;
+  }
+  const body = rows.map((g) => {
+    const range = `${new Date(g.gap_start * 1000).toLocaleString()} – ${new Date(g.gap_end * 1000).toLocaleString()}`;
+    const nextRetry = g.next_retry_at
+      ? new Date(g.next_retry_at * 1000).toLocaleString() : "—";
+    return `<tr>
+      <td>${escHtml(g.instrument)}</td>
+      <td>${escHtml(g.timeframe)}</td>
+      <td>${range}</td>
+      <td>${g.attempt_count}</td>
+      <td>${nextRetry}</td>
+      <td><button data-retry-id="${g.id}">${variant === "abandoned" ? "Try again" : "Retry now"}</button></td>
+    </tr>`;
+  }).join("");
+  return `<table>
+    <thead><tr>
+      <th>Instrument</th><th>TF</th><th>Range</th>
+      <th>Attempts</th><th>Next retry</th><th></th>
+    </tr></thead>
+    <tbody>${body}</tbody>
+  </table>`;
 }
