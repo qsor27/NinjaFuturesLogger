@@ -169,6 +169,7 @@ def build_ohlc_blueprint() -> Blueprint:
                 timeframe=timeframe,
                 start=start,
                 end=end,
+                trigger="on_demand",
             )
 
         job_id = jobs.submit(

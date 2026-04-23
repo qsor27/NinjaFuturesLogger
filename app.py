@@ -87,7 +87,7 @@ def create_app(
 
     token_bucket = TokenBucket(capacity=30, refill_per_sec=0.5, clock=_time.monotonic)
 
-    def _fetch(*, db_path, instrument, timeframe, start, end):
+    def _fetch(*, db_path, instrument, timeframe, start, end, trigger):
         from services.ohlc.fetcher import fetch_range  # deferred to allow tests to monkeypatch
 
         fetch_range(
@@ -97,6 +97,7 @@ def create_app(
             timeframe=timeframe,
             start=start,
             end=end,
+            trigger=trigger,
             token_bucket=token_bucket,
         )
 
@@ -184,6 +185,7 @@ def create_app(
                     timeframe=tf,
                     start=start,
                     end=end,
+                    trigger="sweep",
                 )
             except Exception:
                 log.exception(

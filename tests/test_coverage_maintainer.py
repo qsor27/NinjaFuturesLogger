@@ -40,7 +40,7 @@ def test_maintainer_submits_active_contracts_only(tmp_path):
 
     seen = []
 
-    def fake_fetch(*, db_path, instrument, timeframe, start, end):
+    def fake_fetch(*, db_path, instrument, timeframe, start, end, trigger):
         seen.append((instrument, timeframe, start, end))
 
     coverage_maintainer_tick(db_path=db, fetch_fn=fake_fetch, now=now)
@@ -61,7 +61,7 @@ def test_sweep_uses_wider_windows(tmp_path):
 
     seen = []
 
-    def fake_fetch(*, db_path, instrument, timeframe, start, end):
+    def fake_fetch(*, db_path, instrument, timeframe, start, end, trigger):
         seen.append((timeframe, end - start))
 
     historical_sweep_tick(db_path=db, fetch_fn=fake_fetch, now=now)
@@ -115,7 +115,7 @@ def test_maintainer_skips_instruments_with_no_contract_template(tmp_path):
 
     seen = []
 
-    def fake_fetch(*, db_path, instrument, timeframe, start, end):
+    def fake_fetch(*, db_path, instrument, timeframe, start, end, trigger):
         seen.append(instrument)
 
     coverage_maintainer_tick(db_path=db, fetch_fn=fake_fetch, now=now)

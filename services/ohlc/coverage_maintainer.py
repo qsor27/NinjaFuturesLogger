@@ -51,6 +51,7 @@ class FetchFn(Protocol):
         timeframe: str,
         start: int,
         end: int,
+        trigger: str,
     ) -> None: ...
 
 
@@ -66,6 +67,7 @@ def coverage_maintainer_tick(
         now=now,
         windows=MAINTAINER_WINDOWS,
         states=("active",),
+        trigger="maintainer",
     )
 
 
@@ -81,6 +83,7 @@ def historical_sweep_tick(
         now=now,
         windows=SWEEP_WINDOWS,
         states=("active", "winding_down"),
+        trigger="sweep",
     )
 
 
@@ -91,6 +94,7 @@ def _run(
     now: int,
     windows: dict[str, int],
     states: tuple[str, ...],
+    trigger: str,
 ) -> None:
     conn = connect(db_path)
     try:
@@ -123,6 +127,7 @@ def _run(
                     timeframe=tf,
                     start=start,
                     end=end,
+                    trigger=trigger,
                 )
             except Exception:
                 log.exception(
