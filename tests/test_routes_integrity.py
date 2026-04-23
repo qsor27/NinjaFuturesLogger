@@ -89,3 +89,41 @@ def test_ignore_requires_note(app):
         conn.close()
     resp = app_.test_client().post("/api/integrity-issues/1/ignore", json={})
     assert resp.status_code == 400
+
+
+def _issue_for(account, instrument, eid):
+    return IntegrityIssue(
+        account=account,
+        instrument=instrument,
+        execution_id=eid,
+        severity="high",
+        type="position_column_mismatch",
+        description="x",
+    )
+
+
+def test_list_integrity_filters_by_multiple_accounts(app):
+    app_, db_path = app
+    conn = connect(db_path)
+    try:
+        upsert_issue(conn, _issue_for("A", "MNQ", "a1"), now=100)
+        upsert_issue(conn, _issue_for("B", "MNQ", "b1"), now=100)
+        upsert_issue(conn, _issue_for("C", "MNQ", "c1"), now=100)
+    finally:
+        conn.close()
+
+    # Single account still works.
+    resp = app_.test_client().get("/api/integrity-issues?account=A")
+    body = resp.get_json()
+    assert [i["account"] for i in body["issues"]] == ["A"]
+
+    # Multiple accounts return the union.
+    resp = app_.test_client().get("/api/integrity-issues?account=A&account=C")
+    body = resp.get_json()
+    returned = sorted(i["account"] for i in body["issues"])
+    assert returned == ["A", "C"]
+
+    # No account param returns everything.
+    resp = app_.test_client().get("/api/integrity-issues")
+    body = resp.get_json()
+    assert len(body["issues"]) == 3

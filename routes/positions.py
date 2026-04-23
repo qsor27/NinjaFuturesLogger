@@ -274,7 +274,7 @@ def build_positions_blueprint() -> Blueprint:
     def list_integrity():
         status = request.args.get("status", "open")  # open|resolved|ignored|all
         severity = request.args.get("severity")
-        account = request.args.get("account")
+        accounts = [a for a in request.args.getlist("account") if a]
         instrument = request.args.get("instrument")
 
         clauses: list[str] = []
@@ -291,9 +291,10 @@ def build_positions_blueprint() -> Blueprint:
         if severity:
             clauses.append("severity = ?")
             params.append(severity)
-        if account:
-            clauses.append("account = ?")
-            params.append(account)
+        if accounts:
+            placeholders = ",".join("?" * len(accounts))
+            clauses.append(f"account IN ({placeholders})")
+            params.extend(accounts)
         if instrument:
             clauses.append("instrument = ?")
             params.append(instrument)
