@@ -2,39 +2,46 @@
 // Both /statistics and /calendar import this and pass onApply.
 
 import { renderPresetSelect } from "./date_presets.js";
+import { createMultiSelect } from "./MultiSelect.js";
 
 export function parseFilterFromUrl() {
   const url = new URL(window.location.href);
-  const account = url.searchParams.get("account") || null;
+  const accounts = url.searchParams.getAll("account").filter((s) => s !== "");
   const from = url.searchParams.get("from") || null;
   const to = url.searchParams.get("to") || null;
   const side = url.searchParams.get("side") || null;
-  return { account, from, to, side };
+  return { accounts, from, to, side };
 }
 
 export function writeFilterToUrl(filter) {
   const url = new URL(window.location.href);
-  ["account", "from", "to", "side"].forEach((k) => {
-    if (filter[k]) {
-      url.searchParams.set(k, filter[k]);
-    } else {
-      url.searchParams.delete(k);
-    }
-  });
+  url.searchParams.delete("account");
+  for (const a of filter.accounts || []) {
+    url.searchParams.append("account", a);
+  }
+  for (const k of ["from", "to", "side"]) {
+    if (filter[k]) url.searchParams.set(k, filter[k]);
+    else url.searchParams.delete(k);
+  }
   window.history.pushState({}, "", url.toString());
 }
 
 export function filterToQueryString(filter) {
   const parts = [];
-  if (filter.account) parts.push(`account=${encodeURIComponent(filter.account)}`);
+  for (const a of filter.accounts || []) {
+    parts.push(`account=${encodeURIComponent(a)}`);
+  }
   if (filter.from) parts.push(`from=${encodeURIComponent(filter.from)}`);
   if (filter.to) parts.push(`to=${encodeURIComponent(filter.to)}`);
   if (filter.side) parts.push(`side=${encodeURIComponent(filter.side)}`);
   return parts.length ? `?${parts.join("&")}` : "";
 }
 
-export function isAnyFilterActive(filter) {
-  return Boolean(filter.account || filter.from || filter.to || filter.side);
+export function isAnyFilterActive(filter, totalAccountCount) {
+  const n = (filter.accounts || []).length;
+  const accountsActive =
+    n > 0 && (totalAccountCount == null || n < totalAccountCount);
+  return Boolean(accountsActive || filter.from || filter.to || filter.side);
 }
 
 export async function fetchAccountOptions() {
@@ -48,9 +55,7 @@ export function renderFilterBar(container, filter, onApply) {
   container.classList.add("filter-bar");
   container.innerHTML = `
     <label>Account
-      <select id="filter-account">
-        <option value="">All accounts</option>
-      </select>
+      <div id="filter-account-host"></div>
     </label>
     <label>Side
       <select id="filter-side">
@@ -72,7 +77,7 @@ export function renderFilterBar(container, filter, onApply) {
     <button id="filter-clear">Clear</button>
   `;
 
-  const accountSelect = container.querySelector("#filter-account");
+  const accountHost = container.querySelector("#filter-account-host");
   const sideSelect = container.querySelector("#filter-side");
   const presetSelect = container.querySelector("#filter-date-preset");
   const fromInput = container.querySelector("#filter-from");
@@ -84,31 +89,47 @@ export function renderFilterBar(container, filter, onApply) {
   if (filter.to) toInput.value = filter.to;
   if (filter.side) sideSelect.value = filter.side;
 
-  fetchAccountOptions().then((accounts) => {
-    accounts.forEach((a) => {
-      const opt = document.createElement("option");
-      opt.value = a;
-      opt.textContent = a;
-      if (filter.account === a) opt.selected = true;
-      accountSelect.appendChild(opt);
-    });
+  // Widget created empty; populated once /api/positions/filters resolves.
+  let currentAccounts = [...(filter.accounts || [])];
+  let totalAccountCount = null;
+  const multi = createMultiSelect(accountHost, {
+    options: [],
+    selected: currentAccounts,
+    label: "Account",
+    allLabel: "All accounts",
+    onChange: (sel) => { currentAccounts = sel; updateApplyHighlight(); },
   });
 
-  if (isAnyFilterActive(filter)) applyBtn.classList.add("active");
+  const updateApplyHighlight = () => {
+    const snapshot = {
+      accounts: currentAccounts,
+      side: sideSelect.value || null,
+      from: fromInput.value || null,
+      to: toInput.value || null,
+    };
+    if (isAnyFilterActive(snapshot, totalAccountCount)) applyBtn.classList.add("active");
+    else applyBtn.classList.remove("active");
+  };
+
+  fetchAccountOptions().then((accounts) => {
+    totalAccountCount = accounts.length;
+    multi.setOptions(accounts);
+    multi.setSelected(currentAccounts);
+    currentAccounts = multi.getSelected();
+    updateApplyHighlight();
+  });
+
+  updateApplyHighlight();
 
   const doApply = () => {
     const next = {
-      account: accountSelect.value || null,
+      accounts: [...currentAccounts],
       side: sideSelect.value || null,
       from: fromInput.value || null,
       to: toInput.value || null,
     };
     writeFilterToUrl(next);
-    if (isAnyFilterActive(next)) {
-      applyBtn.classList.add("active");
-    } else {
-      applyBtn.classList.remove("active");
-    }
+    updateApplyHighlight();
     onApply(next);
   };
 
@@ -119,33 +140,34 @@ export function renderFilterBar(container, filter, onApply) {
     doApply();
   });
 
-  const resetPreset = () => {
-    presetSelect.value = "";
-  };
+  const resetPreset = () => { presetSelect.value = ""; };
   fromInput.addEventListener("input", resetPreset);
   toInput.addEventListener("input", resetPreset);
 
   applyBtn.addEventListener("click", doApply);
 
   clearBtn.addEventListener("click", () => {
-    accountSelect.value = "";
+    multi.setSelected([]);
+    currentAccounts = [];
     sideSelect.value = "";
     fromInput.value = "";
     toInput.value = "";
     presetSelect.value = "";
-    const cleared = { account: null, side: null, from: null, to: null };
+    const cleared = { accounts: [], side: null, from: null, to: null };
     writeFilterToUrl(cleared);
-    applyBtn.classList.remove("active");
+    updateApplyHighlight();
     onApply(cleared);
   });
 
   window.addEventListener("popstate", () => {
     const reread = parseFilterFromUrl();
-    accountSelect.value = reread.account || "";
+    multi.setSelected(reread.accounts || []);
+    currentAccounts = multi.getSelected();
     sideSelect.value = reread.side || "";
     fromInput.value = reread.from || "";
     toInput.value = reread.to || "";
     presetSelect.value = "";
+    updateApplyHighlight();
     onApply(reread);
   });
 }

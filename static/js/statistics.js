@@ -42,7 +42,9 @@ async function fetchAll(filter) {
 
 function positionsUrl(filter, extras) {
   const params = new URLSearchParams();
-  if (filter.account) params.set("account", filter.account);
+  for (const a of filter.accounts || []) {
+    params.append("account", a);
+  }
   if (filter.side) params.set("side", filter.side);
   if (filter.from) params.set("session_date_from", filter.from);
   if (filter.to) params.set("session_date_to", filter.to);
