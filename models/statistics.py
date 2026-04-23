@@ -5,7 +5,7 @@ from models.base import StrictModel
 
 
 class StatsFilter(StrictModel):
-    account: str | None = None
+    accounts: tuple[str, ...] = ()
     from_date: date | None = None  # inclusive, session date
     to_date: date | None = None  # inclusive, session date
     side: Literal["Long", "Short"] | None = None

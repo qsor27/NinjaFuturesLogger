@@ -59,7 +59,7 @@ class StatisticsService:
     # -- I/O --------------------------------------------------------------
 
     def _load_closed_positions(self, filter: StatsFilter) -> _LoadResult:
-        executions = self._load_executions(account=filter.account)
+        executions = self._load_executions(accounts=filter.accounts)
         groups: dict[tuple[str, str], list[Execution]] = {}
         for e in executions:
             groups.setdefault((e.account, e.instrument), []).append(e)
@@ -114,7 +114,7 @@ class StatisticsService:
             return False
         return True
 
-    def _load_executions(self, *, account: str | None) -> list[Execution]:
+    def _load_executions(self, *, accounts: tuple[str, ...]) -> list[Execution]:
         sql = (
             "SELECT nt_execution_id, account, instrument, timestamp, side,"
             " original_action, quantity, price, commission, entry_exit,"
@@ -122,9 +122,10 @@ class StatisticsService:
             "FROM executions"
         )
         params: tuple = ()
-        if account is not None:
-            sql += " WHERE account = ?"
-            params = (account,)
+        if accounts:
+            placeholders = ",".join("?" * len(accounts))
+            sql += f" WHERE account IN ({placeholders})"
+            params = tuple(accounts)
         sql += " ORDER BY account, instrument, timestamp, nt_execution_id"
         conn = connect(self._config.db_path)
         try:

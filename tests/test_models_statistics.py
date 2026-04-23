@@ -24,13 +24,13 @@ from models.statistics import (
 
 def test_stats_filter_defaults_all_none():
     f = StatsFilter()
-    assert f.account is None
+    assert f.accounts == ()
     assert f.from_date is None
     assert f.to_date is None
 
 
 def test_stats_filter_accepts_dates():
-    f = StatsFilter(account="Sim", from_date=date(2026, 1, 1), to_date=date(2026, 4, 13))
+    f = StatsFilter(accounts=("Sim",), from_date=date(2026, 1, 1), to_date=date(2026, 4, 13))
     assert f.from_date == date(2026, 1, 1)
 
 

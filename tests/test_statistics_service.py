@@ -144,12 +144,30 @@ def test_load_closed_positions_filters_by_account(tmp_path):
     _seed(db_path, account="A")
     _seed_extra_account(db_path)
     svc = _service(db_path)
-    result_a = svc._load_closed_positions(StatsFilter(account="A"))
-    result_b = svc._load_closed_positions(StatsFilter(account="B"))
+    result_a = svc._load_closed_positions(StatsFilter(accounts=("A",)))
+    result_b = svc._load_closed_positions(StatsFilter(accounts=("B",)))
     assert len(result_a.closed_with_pnl) == 1
     assert len(result_b.closed_with_pnl) == 1
     assert result_a.closed_with_pnl[0].account == "A"
     assert result_b.closed_with_pnl[0].account == "B"
+
+
+def test_load_closed_positions_filters_by_multiple_accounts(tmp_path):
+    db_path = _migrated_db(tmp_path)
+    _seed(db_path, account="A")
+    _seed_extra_account(db_path)
+    svc = _service(db_path)
+    # Empty tuple = all accounts
+    result_all = svc._load_closed_positions(StatsFilter())
+    assert len(result_all.closed_with_pnl) == 2
+    # Multi-account filter returns the union
+    result_ab = svc._load_closed_positions(StatsFilter(accounts=("A", "B")))
+    assert len(result_ab.closed_with_pnl) == 2
+    returned = sorted(p.account for p in result_ab.closed_with_pnl)
+    assert returned == ["A", "B"]
+    # Single-element tuple still works
+    result_a = svc._load_closed_positions(StatsFilter(accounts=("A",)))
+    assert len(result_a.closed_with_pnl) == 1
 
 
 def test_load_closed_positions_filters_by_session_date_range(tmp_path):
