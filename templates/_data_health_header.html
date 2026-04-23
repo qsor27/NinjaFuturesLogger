@@ -1,0 +1,22 @@
+{# Shared header for the two Data Health tabs: verdict banner + tab bar.
+   Rendered verdict is populated client-side from /api/data-health/summary.
+   `active_tab` must be either "coverage" or "system". #}
+{% macro render(active_tab) %}
+<div id="verdict-banner" data-active-tab="{{ active_tab }}"></div>
+<nav class="dh-tabs" style="margin:1em 0 1.5em 0;border-bottom:2px solid #2a2a2a;display:flex;gap:0">
+  <a href="/data-health"
+     class="dh-tab {% if active_tab == 'coverage' %}dh-tab-active{% endif %}"
+     style="padding:0.6em 1.5em;color:{% if active_tab == 'coverage' %}var(--text-primary){% else %}var(--text-muted){% endif %};
+            background:{% if active_tab == 'coverage' %}var(--bg-card){% else %}transparent{% endif %};
+            border-top-left-radius:4px;border-top-right-radius:4px;
+            border-bottom:{% if active_tab == 'coverage' %}2px solid var(--accent){% else %}none{% endif %};
+            margin-bottom:-2px;text-decoration:none;font-weight:600">Data Health</a>
+  <a href="/data-health/system"
+     class="dh-tab {% if active_tab == 'system' %}dh-tab-active{% endif %}"
+     style="padding:0.6em 1.5em;color:{% if active_tab == 'system' %}var(--text-primary){% else %}var(--text-muted){% endif %};
+            background:{% if active_tab == 'system' %}var(--bg-card){% else %}transparent{% endif %};
+            border-top-left-radius:4px;border-top-right-radius:4px;
+            border-bottom:{% if active_tab == 'system' %}2px solid var(--accent){% else %}none{% endif %};
+            margin-bottom:-2px;text-decoration:none;font-weight:600">System</a>
+</nav>
+{% endmacro %}

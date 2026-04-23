@@ -41,6 +41,10 @@ def build_pages_blueprint() -> Blueprint:
     def data_health_page():
         return render_template("data_health.html")
 
+    @bp.get("/data-health/system")
+    def data_health_system_page():
+        return render_template("data_health_system.html")
+
     @bp.get("/system/health")
     def system_health_page():
         return render_template("system_health.html")

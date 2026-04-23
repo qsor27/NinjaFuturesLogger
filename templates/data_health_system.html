@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_data_health_header.html" import render as dh_header %}
+{% block title %}Data Health · System — FTL{% endblock %}
+{% block content %}
+{{ dh_header("system") }}
+<h1 style="margin:0.5em 0 0.25em 0">System</h1>
+<div style="color:var(--text-muted);font-size:0.9em;margin-bottom:1em">Is the data pipeline healthy?</div>
+
+<div style="display:grid;grid-template-columns:3fr 2fr;gap:1.5em;margin-top:1em">
+  <div>
+    <h3 style="margin:0 0 0.5em 0;font-size:1em;color:var(--text-muted)">Sources</h3>
+    <div id="sources-band"></div>
+  </div>
+  <div>
+    <h3 style="margin:0 0 0.5em 0;font-size:1em;color:var(--text-muted)">Maintainer + Rate limiter</h3>
+    <div id="maintainer-panel"></div>
+  </div>
+</div>
+
+<h3 style="margin-top:2em">Activity log — every fetch attempt</h3>
+<div id="attempts-panel"></div>
+
+<div style="margin-top:2em;font-size:0.85em;color:var(--text-muted);border-top:1px solid var(--border-card);padding-top:0.75em">
+  Looking for missing bars? See <a href="/data-health">Data Health</a> for the coverage matrix + gap retry.
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/data_health_verdict.js') }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/data_health_system.js') }}"></script>
+{% endblock %}

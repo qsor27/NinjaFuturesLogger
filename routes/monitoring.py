@@ -146,6 +146,64 @@ def build_monitoring_blueprint() -> Blueprint:
             return jsonify({"error": f"job '{job_id}' not found"}), 404
         return jsonify({"ok": True, "job_id": job_id})
 
+    @bp.get("/api/data-health/summary")
+    def data_health_summary():
+        """One-line verdict for the dashboard header.
+
+        Combines source breaker state + open gap reports into a plain-English
+        status. The template renders this as a banner on both the Coverage
+        and System pages so the reader has the same mental anchor.
+        """
+        conn = connect(_db_path())
+        try:
+            open_gaps = conn.execute(
+                "SELECT COUNT(*) AS c, MIN(next_retry_at) AS next_retry"
+                " FROM ohlc_gap_reports WHERE state = 'open'"
+            ).fetchone()
+            abandoned_gaps = conn.execute(
+                "SELECT COUNT(*) AS c FROM ohlc_gap_reports WHERE state = 'abandoned'"
+            ).fetchone()
+        finally:
+            conn.close()
+
+        registry = current_app.config.get("FTL_OHLC_REGISTRY")
+        source_states = registry.status_snapshots() if registry is not None else []
+        open_sources = [s for s in source_states if s["state"] == "open"]
+
+        open_gap_count = int(open_gaps["c"]) if open_gaps else 0
+        abandoned_count = int(abandoned_gaps["c"]) if abandoned_gaps else 0
+
+        candidates = [s.get("next_retry_at") for s in open_sources if s.get("next_retry_at")]
+        if open_gaps and open_gaps["next_retry"]:
+            candidates.append(int(open_gaps["next_retry"]))
+        next_retry_at = min(candidates) if candidates else None
+
+        if not open_sources and open_gap_count == 0:
+            verdict, icon, word = "healthy", "green", "Healthy"
+            line = "All sources responding. No stuck gaps."
+        elif open_sources:
+            verdict, icon, word = "degraded", "red", "Degraded"
+            s = open_sources[0]
+            opened_at = s.get("opened_at")
+            since_str = time.strftime("%H:%M", time.localtime(opened_at)) if opened_at else "—"
+            line = f"{s['name']} tripped at {since_str}. " f"{open_gap_count} open gap(s)."
+        else:
+            verdict, icon, word = "attention", "yellow", "Attention"
+            line = f"All sources healthy, {open_gap_count} gap(s) waiting on retries."
+
+        return jsonify(
+            {
+                "verdict": verdict,
+                "icon": icon,
+                "word": word,
+                "line": line,
+                "open_sources_count": len(open_sources),
+                "open_gaps_count": open_gap_count,
+                "abandoned_gaps_count": abandoned_count,
+                "next_retry_at": next_retry_at,
+            }
+        )
+
     @bp.get("/api/data-health/maintainer")
     def data_health_maintainer():
         services = _services()

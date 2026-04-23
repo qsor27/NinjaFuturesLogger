@@ -1,86 +1,16 @@
-initDataHealth();
+// Data Health / Coverage tab: completeness matrix, per-cell detail panel,
+// delete-and-refetch, stuck-gaps panel.
 
-async function initDataHealth() {
-  await renderSourcesBand();
-  await renderMaintainerPanel();
+initCoverage();
+
+async function initCoverage() {
   await renderMatrix();
-  await renderAttemptsPanel();
   await renderGapsPanel();
-}
-
-async function renderMaintainerPanel() {
-  const el = document.getElementById("maintainer-panel");
-  if (!el) return;
-  const resp = await fetch("/api/data-health/maintainer");
-  const body = await resp.json();
-  const next = body.next_run_at ? new Date(body.next_run_at * 1000).toLocaleString() : "—";
-  const last = body.last_run_at ? new Date(body.last_run_at * 1000).toLocaleString() : "—";
-  const lastStatus = body.last_run_status ?? "—";
-  const tb = body.token_bucket || {};
-  el.innerHTML = `
-    <h3 style="margin-top:1em">Coverage Maintainer</h3>
-    <table>
-      <tr><th>Next run</th><td>${next}</td></tr>
-      <tr><th>Last run</th><td>${last} (${escHtml(lastStatus)})</td></tr>
-      <tr><th>Tokens available</th><td>${tb.available ?? "—"} / ${tb.capacity ?? "—"}</td></tr>
-      <tr><th>Acquired (lifetime)</th><td>${tb.acquired_total ?? 0}</td></tr>
-      <tr><th>Timeouts (lifetime)</th><td>${tb.timeouts_total ?? 0}</td></tr>
-    </table>`;
-}
-
-async function renderSourcesBand() {
-  const el = document.getElementById("sources-band");
-  if (!el) return;
-  const resp = await fetch("/api/ohlc/sources");
-  const { sources } = await resp.json();
-  const hasOpen = sources.some((s) => s.state === "open");
-  let banner = "";
-  if (hasOpen) {
-    const openSources = sources.filter((s) => s.state === "open");
-    banner = openSources.map((s) =>
-      `<div class="alert-banner">
-        OHLC source <strong>${escHtml(s.name)}</strong> is currently unavailable
-        (since ${s.opened_at ? new Date(s.opened_at * 1000).toLocaleString() : "unknown"},
-        reason: ${escHtml(s.last_error ?? "unknown")}).
-        Falling back to next available source. The rest of the app continues to work normally.
-      </div>`
-    ).join("");
-  }
-  const rows = sources.map((s) => {
-    const stateColor = s.state === "closed" ? "#0a7f0a" : s.state === "open" ? "#b00020" : "#c07000";
-    const lastSuccess = s.last_success_at ? new Date(s.last_success_at * 1000).toLocaleString() : "—";
-    const lastFail = s.last_failure_at ? new Date(s.last_failure_at * 1000).toLocaleString() : "—";
-    // Plan 18: breaker reports next_retry_at directly (adaptive cooldown).
-    const nextRetry = s.next_retry_at
-      ? new Date(s.next_retry_at * 1000).toLocaleString()
-      : "—";
-    const tripsSuffix = s.consecutive_trips > 1 ? ` (trip ${s.consecutive_trips})` : "";
-    const errTooltip = s.last_failure_class
-      ? ` title="${escHtml(s.last_failure_class)}"`
-      : "";
-    const noteSuffix = s.name === "stooq"
-      ? ' <span style="color:#6c757d;font-size:0.9em">(daily bars only — used as fallback for 1d when yfinance is unavailable)</span>'
-      : '';
-    return `<tr>
-      <td>${escHtml(s.name)}${noteSuffix}</td>
-      <td style="color:${stateColor};font-weight:600">${escHtml(s.state)}${tripsSuffix}</td>
-      <td>${lastSuccess}</td>
-      <td>${lastFail}</td>
-      <td${errTooltip}>${escHtml(s.last_error ?? "—")}</td>
-      <td>${nextRetry}</td>
-    </tr>`;
-  });
-  el.innerHTML = `
-    ${banner}
-    <h3 style="margin-top:0">OHLC Sources</h3>
-    <table>
-      <thead><tr><th>Source</th><th>State</th><th>Last Success</th><th>Last Failure</th><th>Last Error</th><th>Next Retry</th></tr></thead>
-      <tbody>${rows.join("")}</tbody>
-    </table>`;
 }
 
 async function renderMatrix() {
   const el = document.getElementById("completeness-matrix");
+  if (!el) return;
   const urlDays = new URLSearchParams(window.location.search).get("days");
   const days = document.getElementById("days-input")?.value ?? urlDays;
   el.innerHTML = "<p>Loading…</p>";
@@ -91,7 +21,9 @@ async function renderMatrix() {
     window.history.replaceState(null, "", next);
   }
 
-  const url = days ? `/api/data-health/completeness?days=${encodeURIComponent(days)}` : "/api/data-health/completeness";
+  const url = days
+    ? `/api/data-health/completeness?days=${encodeURIComponent(days)}`
+    : "/api/data-health/completeness";
   const resp = await fetch(url);
   const body = await resp.json();
 
@@ -158,9 +90,9 @@ async function openDetailPanel(instrument, timeframe, start, end) {
   const body = await resp.json();
 
   const deleteControls = `
-    <div style="margin:0.5em 0;padding:0.5em;border:1px solid #ddd">
+    <div style="margin:0.5em 0;padding:0.5em;border:1px solid var(--border-card)">
       <strong>Delete bars in window</strong>
-      <div style="font-size:0.9em;color:#6c757d;margin:0.25em 0">
+      <div style="font-size:0.9em;color:var(--text-muted);margin:0.25em 0">
         Removes all stored bars in this window. The next fetch (on-demand or self-heal) will repopulate.
       </div>
       <button id="delete-bars-btn"
@@ -168,6 +100,7 @@ async function openDetailPanel(instrument, timeframe, start, end) {
         data-start="${start}" data-end="${end}">Delete + refetch</button>
       <span id="delete-bars-status" style="margin-left:0.5em"></span>
     </div>`;
+
   if (!body.gaps.length) {
     panel.innerHTML = `<h3>${escHtml(instrument)} / ${escHtml(timeframe)}</h3>
       <p>No gaps in this window. ${body.present_bars} of ${body.expected_slots} expected bars present.</p>
@@ -279,68 +212,6 @@ async function pollJob(jobId, btn) {
   }
 }
 
-function escHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-// --- Recent fetch attempts ------------------------------------------------
-
-async function renderAttemptsPanel() {
-  const el = document.getElementById("attempts-panel");
-  if (!el) return;
-  const resp = await fetch("/api/ohlc/attempts?limit=40");
-  const { attempts } = await resp.json();
-  if (!attempts.length) {
-    el.innerHTML = `<h3>Recent fetch attempts</h3><div class="notice">No attempts recorded yet.</div>`;
-    return;
-  }
-  const rows = attempts.map((a) => {
-    const started = a.started_at ? new Date(a.started_at * 1000).toLocaleString() : "—";
-    const dur = a.completed_at && a.started_at
-      ? `${a.completed_at - a.started_at}s` : "—";
-    const status = a.final_status ?? "running";
-    const color =
-      status === "ok" ? "#0a7f0a"
-      : status === "cached" ? "#6c757d"
-      : status === "partial" ? "#c07000"
-      : status === "interrupted" ? "#b00020"
-      : status === "all_sources_unavailable" ? "#b00020" : "#333";
-    const sources = (a.sources || []).map((s) => {
-      const sc = s.outcome === "ok" ? "#0a7f0a"
-        : s.outcome === "empty" ? "#6c757d"
-        : s.outcome.startsWith("skipped") ? "#c07000" : "#b00020";
-      const errTxt = s.error ? ` — ${escHtml(s.error)}` : "";
-      return `<div style="padding-left:1em">
-        <span style="color:${sc}">${escHtml(s.source)}</span>
-        ${escHtml(s.outcome)} · ${s.bars_returned} bars · ${s.duration_ms ?? "—"}ms${errTxt}
-      </div>`;
-    }).join("");
-    return `<tr>
-      <td>${started}</td>
-      <td>${escHtml(a.trigger)}</td>
-      <td>${escHtml(a.instrument)} ${escHtml(a.timeframe)}</td>
-      <td style="color:${color}">${escHtml(status)}</td>
-      <td>${a.bars_written}</td>
-      <td>${dur}</td>
-    </tr>
-    <tr class="source-detail"><td colspan="6">${sources}</td></tr>`;
-  }).join("");
-  el.innerHTML = `
-    <h3>Recent fetch attempts</h3>
-    <table>
-      <thead><tr>
-        <th>Time</th><th>Trigger</th><th>Target</th>
-        <th>Status</th><th>Bars</th><th>Duration</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-}
-
-// --- Open gaps ------------------------------------------------------------
-
 async function renderGapsPanel() {
   const el = document.getElementById("gaps-panel");
   if (!el) return;
@@ -350,7 +221,8 @@ async function renderGapsPanel() {
   ]);
   const open = openResp.gaps || [];
   const abandoned = abandonedResp.gaps || [];
-  el.innerHTML = `<h3>Open gaps (${open.length})</h3>` + renderGapTable(open, "open")
+  el.innerHTML = `<div style="color:var(--text-muted);margin-bottom:0.5em">Open gaps (${open.length})</div>`
+    + renderGapTable(open, "open")
     + (abandoned.length
         ? `<h4 style="margin-top:1em">Abandoned gaps (${abandoned.length})</h4>`
           + renderGapTable(abandoned, "abandoned")
@@ -395,4 +267,11 @@ function renderGapTable(rows, variant) {
     </tr></thead>
     <tbody>${body}</tbody>
   </table>`;
+}
+
+function escHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
