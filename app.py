@@ -53,6 +53,10 @@ def create_app(
     conn = connect(config.db_path)
     try:
         run_migrations(conn, Path("migrations"))
+        from services.ohlc.attempts import orphan_sweep
+
+        orphan_sweep(conn, now=int(_time.time()))
+        conn.commit()
     finally:
         conn.close()
 
@@ -164,6 +168,36 @@ def create_app(
         ),
         trigger=IntervalTrigger(hours=4),
         id="ohlc_historical_sweep",
+        replace_existing=True,
+    )
+
+    from services.ohlc.self_heal import self_heal_tick
+
+    services.scheduler.add_job(
+        lambda: self_heal_tick(
+            db_path=config.db_path, fetch_fn=_fetch, now=int(_time.time())
+        ),
+        trigger=IntervalTrigger(minutes=15),
+        id="ohlc_self_heal",
+        replace_existing=True,
+    )
+
+    from services.ohlc.attempts import trim_older_than
+
+    def _retention_trim():
+        cutoff = int(_time.time()) - 30 * 86400
+        conn = connect(config.db_path)
+        try:
+            conn.execute("BEGIN")
+            trim_older_than(conn, cutoff=cutoff)
+            conn.execute("COMMIT")
+        finally:
+            conn.close()
+
+    services.scheduler.add_job(
+        _retention_trim,
+        trigger=CronTrigger(hour=3, minute=0, timezone="America/Chicago"),
+        id="ohlc_attempts_retention",
         replace_existing=True,
     )
 
