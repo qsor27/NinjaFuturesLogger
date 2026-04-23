@@ -12,7 +12,7 @@ export function isUrlEmpty(url, keys) {
 
 export async function fetchDefaults() {
   const resp = await fetch("/api/filter-defaults");
-  if (!resp.ok) return { positions: null, stats: null };
+  if (!resp.ok) return { accounts: [], positions: null, stats: null };
   return await resp.json();
 }
 
@@ -29,5 +29,10 @@ export async function clearDefault(scope) {
   const resp = await fetch(`/api/filter-defaults/${encodeURIComponent(scope)}`, {
     method: "DELETE",
   });
+  return resp.ok;
+}
+
+export async function clearAllDefaults() {
+  const resp = await fetch("/api/filter-defaults", { method: "DELETE" });
   return resp.ok;
 }

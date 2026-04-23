@@ -2,7 +2,7 @@ import { buildQuery, fetchJSON, formatDollars, formatTime, setText } from "./api
 import { renderPresetSelect } from "./date_presets.js";
 import { createMultiSelect } from "./MultiSelect.js";
 import {
-  clearDefault,
+  clearAllDefaults,
   fetchDefaults,
   isUrlEmpty,
   saveDefault,
@@ -170,12 +170,11 @@ const POSITIONS_URL_KEYS = [
   "page",
 ];
 
-function applyPositionsDefault(def) {
+function applyPositionsDefault(accounts, def) {
   if (accountMulti) {
-    accountMulti.setSelected(
-      Array.isArray(def.accounts) ? def.accounts : []
-    );
+    accountMulti.setSelected(Array.isArray(accounts) ? accounts : []);
   }
+  if (!def) return;
   const setField = (name, value) => {
     const el = form.querySelector(`[name="${name}"]`);
     if (el) el.value = value || "";
@@ -477,30 +476,33 @@ function resetFilterForm() {
   const clearDefaultBtn = document.getElementById("filter-clear-default");
   const resetFilterBtn = document.getElementById("filter-clear");
 
-  let hasDefault = defaults.positions !== null && defaults.positions !== undefined;
+  const savedAccounts = Array.isArray(defaults.accounts) ? defaults.accounts : [];
+  let hasDefault = savedAccounts.length > 0 || defaults.positions != null;
   clearDefaultBtn.hidden = !hasDefault;
 
   if (hasDefault && isUrlEmpty(window.location.href, POSITIONS_URL_KEYS)) {
-    applyPositionsDefault(defaults.positions);
+    applyPositionsDefault(savedAccounts, defaults.positions);
   }
 
   saveBtn.addEventListener("click", async () => {
     const selected = accountMulti ? accountMulti.getSelected() : [];
-    const body = {
-      accounts: selected,
+    const positionsBody = {
       instrument: form.querySelector('[name="instrument"]').value || "",
       side: form.querySelector('[name="side"]').value || "",
       outcome: form.querySelector('[name="outcome"]').value || "",
     };
-    const ok = await saveDefault("positions", body);
-    if (ok) {
+    const [okA, okP] = await Promise.all([
+      saveDefault("accounts", { accounts: selected }),
+      saveDefault("positions", positionsBody),
+    ]);
+    if (okA && okP) {
       hasDefault = true;
       clearDefaultBtn.hidden = false;
     }
   });
 
   clearDefaultBtn.addEventListener("click", async () => {
-    const ok = await clearDefault("positions");
+    const ok = await clearAllDefaults();
     if (ok) {
       hasDefault = false;
       clearDefaultBtn.hidden = true;

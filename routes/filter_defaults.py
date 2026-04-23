@@ -2,13 +2,15 @@ from flask import Blueprint, current_app, jsonify, request
 from pydantic import ValidationError
 
 from config import (
+    FilterDefaults,
     PositionsFilterDefault,
     StatsFilterDefault,
+    clear_all_filter_defaults,
     load_config,
     save_filter_default,
 )
 
-_VALID_SCOPES = ("positions", "stats")
+_VALID_SCOPES = ("accounts", "positions", "stats")
 
 
 def build_filter_defaults_blueprint() -> Blueprint:
@@ -18,7 +20,6 @@ def build_filter_defaults_blueprint() -> Blueprint:
         return current_app.config["FTL_CONFIG_PATH"]
 
     def _reload() -> None:
-        """Refresh the in-memory Config after a save."""
         current_app.config["FTL_CONFIG"] = load_config(_cfg_path())
 
     @bp.get("/api/filter-defaults")
@@ -27,6 +28,7 @@ def build_filter_defaults_blueprint() -> Blueprint:
         fd = cfg.filter_defaults
         return jsonify(
             {
+                "accounts": list(fd.accounts),
                 "positions": (fd.positions.model_dump() if fd.positions else None),
                 "stats": (fd.stats.model_dump() if fd.stats else None),
             }
@@ -41,15 +43,29 @@ def build_filter_defaults_blueprint() -> Blueprint:
         if not isinstance(body, dict):
             return jsonify({"error": "body must be a JSON object"}), 400
 
-        model_cls = PositionsFilterDefault if scope == "positions" else StatsFilterDefault
+        # Validate the body shape before persisting. The accounts scope has a
+        # bespoke shape ({accounts: [...]}); positions/stats use their Pydantic
+        # models.
         try:
-            model_cls(**body)
+            if scope == "accounts":
+                if set(body.keys()) != {"accounts"}:
+                    return (
+                        jsonify(
+                            {"error": "accounts body must be exactly {'accounts': [...]}"}
+                        ),
+                        400,
+                    )
+                FilterDefaults(accounts=body["accounts"])
+            elif scope == "positions":
+                PositionsFilterDefault(**body)
+            else:  # stats
+                StatsFilterDefault(**body)
         except ValidationError as e:
             return jsonify({"error": str(e)}), 400
 
         try:
             save_filter_default(_cfg_path(), scope, body)
-        except ValidationError as e:
+        except (ValidationError, ValueError) as e:
             return jsonify({"error": str(e)}), 400
         _reload()
         return jsonify({"ok": True})
@@ -59,6 +75,12 @@ def build_filter_defaults_blueprint() -> Blueprint:
         if scope not in _VALID_SCOPES:
             return jsonify({"error": f"invalid scope: {scope!r}"}), 400
         save_filter_default(_cfg_path(), scope, None)
+        _reload()
+        return jsonify({"ok": True})
+
+    @bp.delete("/api/filter-defaults")
+    def delete_all():
+        clear_all_filter_defaults(_cfg_path())
         _reload()
         return jsonify({"ok": True})
 

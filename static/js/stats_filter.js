@@ -4,7 +4,7 @@
 import { renderPresetSelect } from "./date_presets.js";
 import { createMultiSelect } from "./MultiSelect.js";
 import {
-  clearDefault,
+  clearAllDefaults,
   fetchDefaults,
   isUrlEmpty,
   saveDefault,
@@ -137,19 +137,19 @@ export function renderFilterBar(container, filter, onApply) {
     multi.setOptions(accounts);
     suppressAutoApply = false;
 
-    const stats = defaults ? defaults.stats : null;
-    hasDefault = stats !== null && stats !== undefined;
+    const savedAccounts = Array.isArray(defaults.accounts) ? defaults.accounts : [];
+    const savedStats = defaults.stats;
+    hasDefault = savedAccounts.length > 0 || savedStats != null;
     setClearDefaultVisible(hasDefault);
 
     const urlIsEmpty = isUrlEmpty(window.location.href, STATS_URL_KEYS);
 
     if (hasDefault && urlIsEmpty) {
-      const savedAccounts = Array.isArray(stats.accounts) ? stats.accounts : [];
       suppressAutoApply = true;
       multi.setSelected(savedAccounts);
       suppressAutoApply = false;
       currentAccounts = multi.getSelected();
-      if (stats.side) sideSelect.value = stats.side;
+      if (savedStats && savedStats.side) sideSelect.value = savedStats.side;
       doApply();
     } else {
       suppressAutoApply = true;
@@ -191,18 +191,18 @@ export function renderFilterBar(container, filter, onApply) {
   clearBtn.addEventListener("click", resetFilterBar);
 
   saveDefaultBtn.addEventListener("click", async () => {
-    const ok = await saveDefault("stats", {
-      accounts: [...currentAccounts],
-      side: sideSelect.value || "",
-    });
-    if (ok) {
+    const [okA, okS] = await Promise.all([
+      saveDefault("accounts", { accounts: [...currentAccounts] }),
+      saveDefault("stats", { side: sideSelect.value || "" }),
+    ]);
+    if (okA && okS) {
       hasDefault = true;
       setClearDefaultVisible(true);
     }
   });
 
   clearDefaultBtn.addEventListener("click", async () => {
-    const ok = await clearDefault("stats");
+    const ok = await clearAllDefaults();
     if (ok) {
       hasDefault = false;
       setClearDefaultVisible(false);
