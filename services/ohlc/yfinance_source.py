@@ -2,7 +2,12 @@ import math
 from datetime import UTC, datetime
 
 from models.bar import Bar
-from services.instruments import source_symbol
+from services.instruments import (
+    front_month_window,
+    get_registry,
+    parse_instrument,
+    source_symbol,
+)
 
 
 def _download(symbol: str, *, start, end, interval):
@@ -53,7 +58,18 @@ def _download(symbol: str, *, start, end, interval):
 
 
 class YfinanceSource:
-    """Primary OHLC source. Wraps the yfinance library."""
+    """Primary OHLC source. Wraps the yfinance library.
+
+    Front-month fallback: when a specific-contract symbol (e.g. MNQM26.CME)
+    returns no data AND the requested window is entirely inside the contract's
+    front-month window (see services.instruments.front_month_window), retry
+    once with Yahoo's continuous symbol (e.g. MNQ=F). Bars sourced this way
+    are tagged `source="yfinance-continuous"` so the trail distinguishes
+    them from specific-contract bars.
+
+    The fallback only applies to quarterly contracts (H/M/U/Z) where the
+    continuous symbol provably tracks the same underlying during the window.
+    """
 
     name = "yfinance"
     supported_timeframes = frozenset({"1m", "5m", "15m", "1h", "1d"})
@@ -65,6 +81,46 @@ class YfinanceSource:
         if symbol is None:
             return []
 
+        fallback_symbol = _continuous_fallback_symbol(instrument, start, end)
+        if fallback_symbol == symbol:
+            # Already the continuous symbol — no fallback path to try.
+            fallback_symbol = None
+
+        try:
+            bars = self._fetch_symbol(
+                instrument, symbol, timeframe, start, end, source_tag="yfinance"
+            )
+        except RuntimeError:
+            # _download raises RuntimeError only for the yfinance _ERRORS
+            # path ("lookup failed / possibly delisted"). If a fallback is
+            # available, retry there; otherwise re-raise so the breaker
+            # counts this as a failure.
+            if fallback_symbol is None:
+                raise
+            bars = []
+
+        if bars or fallback_symbol is None:
+            return bars
+
+        return self._fetch_symbol(
+            instrument,
+            fallback_symbol,
+            timeframe,
+            start,
+            end,
+            source_tag="yfinance-continuous",
+        )
+
+    def _fetch_symbol(
+        self,
+        instrument: str,
+        symbol: str,
+        timeframe: str,
+        start: int,
+        end: int,
+        *,
+        source_tag: str,
+    ) -> list[Bar]:
         # yfinance enforces a 7-day-per-request limit for 1m data. Chunk any
         # 1m range longer than that and concat — the fetcher still sees one
         # call per gap. Other intraday timeframes are served in a single
@@ -118,7 +174,29 @@ class YfinanceSource:
                         low=float(row.Low),
                         close=float(row.Close),
                         volume=int(volume),
-                        source="yfinance",
+                        source=source_tag,
                     )
                 )
         return bars
+
+
+def _continuous_fallback_symbol(instrument: str, start: int, end: int) -> str | None:
+    """Return the continuous Yahoo symbol if fallback is safe for this window.
+
+    Safe means: the instrument is a specific quarterly contract, the registry
+    has a continuous symbol for it, and [start, end) lies fully inside the
+    contract's front-month window.
+    """
+    root, contract = parse_instrument(instrument)
+    if contract is None:
+        return None  # already continuous — no fallback available
+    window = front_month_window(instrument)
+    if window is None:
+        return None
+    w_start, w_end = window
+    if start < w_start or end > w_end:
+        return None
+    cfg = get_registry().get(root)
+    if cfg is None:
+        return None
+    return cfg.sources.yfinance.continuous

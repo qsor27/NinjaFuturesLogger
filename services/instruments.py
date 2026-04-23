@@ -116,6 +116,63 @@ def _render_contract_template(template: str, *, root: str, contract: str) -> str
     return template.format(ROOT=root, M=_MONTH_CODES[month_word], YY=year)
 
 
+_QUARTERLY_CODE_TO_MONTH = {"H": 3, "M": 6, "U": 9, "Z": 12}
+_PREV_QUARTERLY = {"H": ("Z", -1), "M": ("H", 0), "U": ("M", 0), "Z": ("U", 0)}
+
+
+def _third_friday(year: int, month: int):
+    """Return the date of the 3rd Friday of (year, month)."""
+    from datetime import date, timedelta
+
+    first = date(year, month, 1)
+    offset = (4 - first.weekday()) % 7  # Friday = weekday 4
+    first_friday = first + timedelta(days=offset)
+    return first_friday + timedelta(days=14)
+
+
+def front_month_window(instrument: str) -> tuple[int, int] | None:
+    """Return (start_utc, end_utc) unix-seconds range over which the given
+    specific contract is the front month on the CME quarterly cycle.
+
+    The window spans [prev_quarterly_expiry, this_contract_expiry + 1 day),
+    both in UTC calendar-day terms. Inside this window, Yahoo's continuous
+    `MNQ=F` (and similar) tracks this specific contract. Outside, it tracks
+    a different underlying.
+
+    Returns None if:
+    - the instrument has no contract suffix (already continuous);
+    - the suffix is malformed;
+    - the expiry month is not in the quarterly cycle H/M/U/Z. (Non-quarterly
+      contracts — e.g. monthly crude — would need a different roll rule;
+      callers should not use this helper for them.)
+    """
+    from datetime import UTC, datetime, timedelta
+
+    _root, contract = parse_instrument(instrument)
+    if contract is None or len(contract) != 5:
+        return None
+    month_word = contract[:3].upper()
+    year = contract[3:]
+    if month_word not in _MONTH_CODES or not year.isdigit():
+        return None
+    code = _MONTH_CODES[month_word]
+    if code not in _QUARTERLY_CODE_TO_MONTH:
+        return None
+
+    year_int = 2000 + int(year)
+    expiry = _third_friday(year_int, _QUARTERLY_CODE_TO_MONTH[code])
+
+    prev_code, year_delta = _PREV_QUARTERLY[code]
+    prev_expiry = _third_friday(year_int + year_delta, _QUARTERLY_CODE_TO_MONTH[prev_code])
+
+    start = int(
+        datetime(prev_expiry.year, prev_expiry.month, prev_expiry.day, tzinfo=UTC).timestamp()
+    )
+    end_day = expiry + timedelta(days=1)
+    end = int(datetime(end_day.year, end_day.month, end_day.day, tzinfo=UTC).timestamp())
+    return (start, end)
+
+
 def source_symbol(instrument: str, source: str) -> str | None:
     root, contract = parse_instrument(instrument)
     cfg = _REGISTRY.get(root)
