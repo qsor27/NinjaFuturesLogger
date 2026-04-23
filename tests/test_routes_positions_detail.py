@@ -126,27 +126,33 @@ def test_executions_endpoint_exit_rows_have_pnl(tmp_config):
 
 def test_executions_endpoint_exit_pnl_uses_commission_fallback(tmp_path, tmp_config):
     import json
+
     from services.instruments import set_registry_path
+
     instruments_json = tmp_path / "instruments.json"
-    instruments_json.write_text(json.dumps({
-        "MNQ": {
-            "display_name": "Micro E-mini Nasdaq-100",
-            "multiplier": 2.0,
-            "tick_size": 0.25,
-            "commission_per_contract": 1.08,
-            "sources": {
-                "yfinance": {"continuous": "MNQ=F", "contract_template": None},
-                "stooq": {"continuous": "mnq.f", "contract_template": None},
-            },
-            "session": {
-                "timezone": "America/Chicago",
-                "open": "17:00",
-                "close": "16:00",
-                "daily_break_start": "16:00",
-                "daily_break_end": "17:00",
-            },
-        }
-    }))
+    instruments_json.write_text(
+        json.dumps(
+            {
+                "MNQ": {
+                    "display_name": "Micro E-mini Nasdaq-100",
+                    "multiplier": 2.0,
+                    "tick_size": 0.25,
+                    "commission_per_contract": 1.08,
+                    "sources": {
+                        "yfinance": {"continuous": "MNQ=F", "contract_template": None},
+                        "stooq": {"continuous": "mnq.f", "contract_template": None},
+                    },
+                    "session": {
+                        "timezone": "America/Chicago",
+                        "open": "17:00",
+                        "close": "16:00",
+                        "daily_break_start": "16:00",
+                        "daily_break_end": "17:00",
+                    },
+                }
+            }
+        )
+    )
     app, services = create_app(tmp_config, start_background=False)
     set_registry_path(instruments_json)
     try:

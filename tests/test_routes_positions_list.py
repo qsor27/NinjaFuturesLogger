@@ -171,15 +171,11 @@ def test_list_session_date_range_filter(tmp_config):
         )
         client = app.test_client()
 
-        resp = client.get(
-            "/api/positions?session_date_from=2026-04-13&session_date_to=2026-04-13"
-        )
+        resp = client.get("/api/positions?session_date_from=2026-04-13&session_date_to=2026-04-13")
         assert resp.status_code == 200
         assert resp.get_json()["page"]["total"] == 1
 
-        resp = client.get(
-            "/api/positions?session_date_from=2026-04-13&session_date_to=2026-04-14"
-        )
+        resp = client.get("/api/positions?session_date_from=2026-04-13&session_date_to=2026-04-14")
         assert resp.get_json()["page"]["total"] == 2
 
         resp = client.get("/api/positions?session_date_from=2026-04-14")

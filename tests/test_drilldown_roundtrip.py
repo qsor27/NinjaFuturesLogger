@@ -5,6 +5,7 @@ stats bucket, then fetch /api/positions with the drill-down facet and assert
 the counts match. Prevents silent divergence between aggregation and filter
 logic.
 """
+
 from app import create_app
 from db import connect
 from models.execution import Execution
@@ -13,10 +14,20 @@ from services.import_db import bulk_insert_executions
 
 def _ex(exid, account, instrument, ts, side, action, ex_mark, pos_col):
     return Execution(
-        nt_execution_id=exid, account=account, instrument=instrument, timestamp=ts,
-        side=side, original_action=action, quantity=1, price=100.0, commission=0.0,
-        entry_exit=ex_mark, position_after=pos_col, source_order_id=None,
-        source_filename="f.csv", imported_at=ts,
+        nt_execution_id=exid,
+        account=account,
+        instrument=instrument,
+        timestamp=ts,
+        side=side,
+        original_action=action,
+        quantity=1,
+        price=100.0,
+        commission=0.0,
+        entry_exit=ex_mark,
+        position_after=pos_col,
+        source_order_id=None,
+        source_filename="f.csv",
+        imported_at=ts,
     )
 
 
@@ -81,9 +92,7 @@ def test_by_hour_roundtrip(tmp_config):
         hour_10 = next(b for b in stats["buckets"] if b["hour"] == 10)
         assert hour_10["position_count"] == 1
 
-        pos = c.get(
-            f"/api/positions?hour_of_day=10&hour_tz={tz}"
-        ).get_json()
+        pos = c.get(f"/api/positions?hour_of_day=10&hour_tz={tz}").get_json()
         assert pos["page"]["total"] == hour_10["position_count"]
     finally:
         services.stop()

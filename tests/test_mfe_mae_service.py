@@ -485,7 +485,7 @@ def test_mid_minute_entry_includes_partial_first_bar():
         points_pnl=1.0,
     )
     bars = [
-        _bar(time=0, high=110.0, low=99.0),    # partial-overlap bar with the peak
+        _bar(time=0, high=110.0, low=99.0),  # partial-overlap bar with the peak
         _bar(time=60, high=102.0, low=99.5),
         _bar(time=120, high=101.5, low=99.0),
     ]

@@ -75,27 +75,33 @@ def test_effective_commission_uses_execution_value_when_positive():
 
 def test_effective_commission_uses_fallback_when_execution_is_zero(tmp_path):
     import json
+
     from services.instruments import set_registry_path
+
     instruments_json = tmp_path / "instruments.json"
-    instruments_json.write_text(json.dumps({
-        "MNQ": {
-            "display_name": "Micro E-mini Nasdaq-100",
-            "multiplier": 2.0,
-            "tick_size": 0.25,
-            "commission_per_contract": 1.08,
-            "sources": {
-                "yfinance": {"continuous": "MNQ=F", "contract_template": None},
-                "stooq": {"continuous": "mnq.f", "contract_template": None},
-            },
-            "session": {
-                "timezone": "America/Chicago",
-                "open": "17:00",
-                "close": "16:00",
-                "daily_break_start": "16:00",
-                "daily_break_end": "17:00",
-            },
-        }
-    }))
+    instruments_json.write_text(
+        json.dumps(
+            {
+                "MNQ": {
+                    "display_name": "Micro E-mini Nasdaq-100",
+                    "multiplier": 2.0,
+                    "tick_size": 0.25,
+                    "commission_per_contract": 1.08,
+                    "sources": {
+                        "yfinance": {"continuous": "MNQ=F", "contract_template": None},
+                        "stooq": {"continuous": "mnq.f", "contract_template": None},
+                    },
+                    "session": {
+                        "timezone": "America/Chicago",
+                        "open": "17:00",
+                        "close": "16:00",
+                        "daily_break_start": "16:00",
+                        "daily_break_end": "17:00",
+                    },
+                }
+            }
+        )
+    )
     set_registry_path(instruments_json)
     # NT reports 0 (sim-style), fallback applies: 1.08 × 2 contracts
     assert effective_commission("MNQ", execution_commission=0.0, quantity=2) == pytest.approx(2.16)

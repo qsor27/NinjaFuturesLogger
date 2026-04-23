@@ -450,8 +450,8 @@ def test_dow_single_monday_position():
 def test_dow_win_rate_and_avg_pnl_across_two_mondays():
     # Two Monday sessions: +100 and -50 → win_rate 0.5, avg_pnl 25.0
     positions = [
-        _at(1776070800, eid="a", pnl=100.0),   # 2026-04-13 Mon
-        _at(1776675600, eid="b", pnl=-50.0),   # 2026-04-20 Mon
+        _at(1776070800, eid="a", pnl=100.0),  # 2026-04-13 Mon
+        _at(1776675600, eid="b", pnl=-50.0),  # 2026-04-20 Mon
     ]
     result = bucket_by_day_of_week(positions)
     mon = result[0]
@@ -464,8 +464,9 @@ def test_dow_win_rate_and_avg_pnl_across_two_mondays():
 
 def test_dow_win_rate_none_when_all_scratches():
     # commission == |pnl| → scratch → win_rate is None
-    scratch = _pos(eid="s", entry_time=1776070800, exit_time=1776070860,
-                   dollars_pnl=2.0, commission=2.0)
+    scratch = _pos(
+        eid="s", entry_time=1776070800, exit_time=1776070860, dollars_pnl=2.0, commission=2.0
+    )
     result = bucket_by_day_of_week([scratch])
     assert result[0].win_rate is None
 
@@ -475,8 +476,8 @@ def test_dow_uses_session_date_not_entry_calendar_date():
     # Confirmed by existing test_bucket_uses_session_date_not_calendar
     positions = [_at(1776115800, eid="rollover", pnl=10.0)]
     result = bucket_by_day_of_week(positions)
-    assert result[0].trades == 0   # Monday gets nothing
-    assert result[1].trades == 1   # Tuesday gets the rollover trade
+    assert result[0].trades == 0  # Monday gets nothing
+    assert result[1].trades == 1  # Tuesday gets the rollover trade
 
 
 def test_dow_multiple_trades_same_day_count_as_one_trading_day():
@@ -516,8 +517,9 @@ def test_bucket_by_hour_win_rate_none_when_empty():
 
 def test_bucket_by_hour_win_rate_single_winner():
     # 09:00 UTC = 04:00 Chicago; one winning position
-    positions = [_pos(eid="w", entry_time=1776070800, exit_time=1776070860,
-                      dollars_pnl=10.0, commission=0.0)]
+    positions = [
+        _pos(eid="w", entry_time=1776070800, exit_time=1776070860, dollars_pnl=10.0, commission=0.0)
+    ]
     result = bucket_by_hour(positions, display_tz=ZoneInfo("America/Chicago"))
     assert result[4].win_rate == 1.0
     # Hours with no trades remain None
@@ -527,12 +529,15 @@ def test_bucket_by_hour_win_rate_single_winner():
 def test_bucket_by_hour_win_rate_mixed_same_hour():
     # Two winners, one loser, all in hour 04 (09:00 UTC)
     positions = [
-        _pos(eid="w1", entry_time=1776070800, exit_time=1776070860,
-             dollars_pnl=10.0, commission=0.0),
-        _pos(eid="w2", entry_time=1776070820, exit_time=1776070880,
-             dollars_pnl=20.0, commission=0.0),
-        _pos(eid="l1", entry_time=1776070840, exit_time=1776070900,
-             dollars_pnl=-15.0, commission=0.0),
+        _pos(
+            eid="w1", entry_time=1776070800, exit_time=1776070860, dollars_pnl=10.0, commission=0.0
+        ),
+        _pos(
+            eid="w2", entry_time=1776070820, exit_time=1776070880, dollars_pnl=20.0, commission=0.0
+        ),
+        _pos(
+            eid="l1", entry_time=1776070840, exit_time=1776070900, dollars_pnl=-15.0, commission=0.0
+        ),
     ]
     result = bucket_by_hour(positions, display_tz=ZoneInfo("America/Chicago"))
     assert result[4].win_rate == pytest.approx(2 / 3)
@@ -540,8 +545,9 @@ def test_bucket_by_hour_win_rate_mixed_same_hour():
 
 def test_bucket_by_hour_win_rate_scratch_excluded():
     # Scratches (|pnl| <= commission) should not count toward wins or losses
-    scratch = _pos(eid="s", entry_time=1776070800, exit_time=1776070860,
-                   dollars_pnl=1.0, commission=2.0)
+    scratch = _pos(
+        eid="s", entry_time=1776070800, exit_time=1776070860, dollars_pnl=1.0, commission=2.0
+    )
     result = bucket_by_hour([scratch], display_tz=ZoneInfo("America/Chicago"))
     assert result[4].position_count == 1
     assert result[4].win_rate is None  # 0 wins, 0 losses → None
@@ -576,10 +582,12 @@ def test_tpd_multiple_days_same_bucket():
     # Two different Mondays each with exactly 1 trade:
     # Mon 2026-04-13: winner +100, Mon 2026-04-20: loser -50
     positions = [
-        _pos(eid="w", entry_time=1776070800, exit_time=1776070860,
-             dollars_pnl=100.0, commission=0.0),
-        _pos(eid="l", entry_time=1776675600, exit_time=1776675660,
-             dollars_pnl=-50.0, commission=0.0),
+        _pos(
+            eid="w", entry_time=1776070800, exit_time=1776070860, dollars_pnl=100.0, commission=0.0
+        ),
+        _pos(
+            eid="l", entry_time=1776675600, exit_time=1776675660, dollars_pnl=-50.0, commission=0.0
+        ),
     ]
     result = bucket_by_trades_per_day(positions)
     assert len(result) == 1
@@ -598,12 +606,15 @@ def test_tpd_per_trade_win_rate_not_per_day():
     # Per-day success would be 100% (the day was profitable overall)
     # Per-trade win rate is 2/3 (what we want)
     positions = [
-        _pos(eid="w1", entry_time=1776070800, exit_time=1776070860,
-             dollars_pnl=100.0, commission=0.0),
-        _pos(eid="w2", entry_time=1776070820, exit_time=1776070880,
-             dollars_pnl=50.0, commission=0.0),
-        _pos(eid="l", entry_time=1776070840, exit_time=1776070900,
-             dollars_pnl=-80.0, commission=0.0),
+        _pos(
+            eid="w1", entry_time=1776070800, exit_time=1776070860, dollars_pnl=100.0, commission=0.0
+        ),
+        _pos(
+            eid="w2", entry_time=1776070820, exit_time=1776070880, dollars_pnl=50.0, commission=0.0
+        ),
+        _pos(
+            eid="l", entry_time=1776070840, exit_time=1776070900, dollars_pnl=-80.0, commission=0.0
+        ),
     ]
     result = bucket_by_trades_per_day(positions)
     assert len(result) == 1

@@ -19,10 +19,10 @@ class PositionFilter:
     session_date_from: date | None = None
     session_date_to: date | None = None
     # Drill-down fields (2026-04-16):
-    day_of_week: int | None = None       # 0=Mon … 4=Fri
-    hour_of_day: int | None = None       # 0..23
-    hour_tz: str | None = None           # IANA tz, required when hour_of_day is set
-    trades_per_day: int | None = None    # positive int; post-filter aggregation
+    day_of_week: int | None = None  # 0=Mon … 4=Fri
+    hour_of_day: int | None = None  # 0..23
+    hour_tz: str | None = None  # IANA tz, required when hour_of_day is set
+    trades_per_day: int | None = None  # positive int; post-filter aggregation
 
 
 def apply_filters(
@@ -71,7 +71,8 @@ def apply_filters(
             counts[sd] = counts.get(sd, 0) + 1
         target = filter_.trades_per_day
         survivors = [
-            p for p in survivors
+            p
+            for p in survivors
             if counts[compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))] == target
         ]
 
