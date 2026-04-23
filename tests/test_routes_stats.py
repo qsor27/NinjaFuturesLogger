@@ -147,3 +147,103 @@ def test_distribution(client):
     body = resp.get_json()
     assert body["bucket_count"] == 10
     assert len(body["buckets"]) == 10
+
+
+def _seed_two_accounts(db_path):
+    conn = connect(db_path)
+    try:
+        bulk_insert_executions(
+            conn,
+            [
+                Execution(
+                    nt_execution_id="a1",
+                    account="A",
+                    instrument="MNQ",
+                    timestamp=1776070800,
+                    side="Buy",
+                    original_action="Buy",
+                    quantity=1,
+                    price=100.0,
+                    commission=2.0,
+                    entry_exit="Entry",
+                    position_after="1 L",
+                    source_order_id=None,
+                    source_filename="f.csv",
+                    imported_at=1,
+                ),
+                Execution(
+                    nt_execution_id="a2",
+                    account="A",
+                    instrument="MNQ",
+                    timestamp=1776071400,
+                    side="Sell",
+                    original_action="Sell",
+                    quantity=1,
+                    price=110.0,
+                    commission=2.0,
+                    entry_exit="Exit",
+                    position_after="-",
+                    source_order_id=None,
+                    source_filename="f.csv",
+                    imported_at=2,
+                ),
+                Execution(
+                    nt_execution_id="b1",
+                    account="B",
+                    instrument="MNQ",
+                    timestamp=1776072000,
+                    side="Buy",
+                    original_action="Buy",
+                    quantity=1,
+                    price=100.0,
+                    commission=2.0,
+                    entry_exit="Entry",
+                    position_after="1 L",
+                    source_order_id=None,
+                    source_filename="f.csv",
+                    imported_at=3,
+                ),
+                Execution(
+                    nt_execution_id="b2",
+                    account="B",
+                    instrument="MNQ",
+                    timestamp=1776072600,
+                    side="Sell",
+                    original_action="Sell",
+                    quantity=1,
+                    price=105.0,
+                    commission=2.0,
+                    entry_exit="Exit",
+                    position_after="-",
+                    source_order_id=None,
+                    source_filename="f.csv",
+                    imported_at=4,
+                ),
+            ],
+        )
+    finally:
+        conn.close()
+
+
+def test_stats_summary_multi_account(tmp_config):
+    app, services = create_app(tmp_config, start_background=False)
+    _seed_two_accounts(tmp_config.db_path)
+    try:
+        c = app.test_client()
+
+        # Legacy single account
+        resp = c.get("/api/stats/summary?account=A")
+        assert resp.status_code == 200
+        assert resp.get_json()["total_positions"] == 1
+
+        # Multi-account returns union
+        resp = c.get("/api/stats/summary?account=A&account=B")
+        assert resp.status_code == 200
+        assert resp.get_json()["total_positions"] == 2
+
+        # No account param returns everything
+        resp = c.get("/api/stats/summary")
+        assert resp.status_code == 200
+        assert resp.get_json()["total_positions"] == 2
+    finally:
+        services.stop()

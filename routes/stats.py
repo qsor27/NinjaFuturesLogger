@@ -7,7 +7,7 @@ from services.statistics import StatisticsService
 
 
 def _parse_filter(args) -> StatsFilter:
-    account = args.get("account") or None
+    accounts = tuple(a for a in args.getlist("account") if a)
 
     def _parse_date(key: str) -> date | None:
         v = args.get(key)
@@ -23,7 +23,7 @@ def _parse_filter(args) -> StatsFilter:
         raise ValueError("side must be 'Long' or 'Short'")
 
     return StatsFilter(
-        account=account,
+        accounts=accounts,
         from_date=_parse_date("from"),
         to_date=_parse_date("to"),
         side=raw_side,
