@@ -195,4 +195,108 @@ def build_ohlc_blueprint() -> Blueprint:
     def get_sources():
         return jsonify({"sources": _registry().status_snapshots()})
 
+    @bp.get("/api/ohlc/attempts")
+    def get_attempts():
+        instrument = request.args.get("instrument")
+        timeframe = request.args.get("timeframe")
+        try:
+            since = int(request.args.get("since", "0"))
+        except ValueError:
+            return jsonify({"error": "since must be int"}), 400
+        try:
+            limit = max(1, min(500, int(request.args.get("limit", "100"))))
+        except ValueError:
+            return jsonify({"error": "limit must be int"}), 400
+
+        where = ["started_at >= ?"]
+        params: list = [since]
+        if instrument:
+            where.append("instrument = ?")
+            params.append(instrument)
+        if timeframe:
+            where.append("timeframe = ?")
+            params.append(timeframe)
+        clause = " AND ".join(where)
+        conn = connect(_db_path())
+        try:
+            rows = conn.execute(
+                f"SELECT * FROM fetch_attempts WHERE {clause}" f" ORDER BY started_at DESC LIMIT ?",
+                (*params, limit),
+            ).fetchall()
+            by_attempt = {r["id"]: {**dict(r), "sources": []} for r in rows}
+            if rows:
+                ids = list(by_attempt.keys())
+                placeholders = ",".join(["?"] * len(ids))
+                sources = conn.execute(
+                    f"SELECT * FROM fetch_source_attempts"
+                    f" WHERE attempt_id IN ({placeholders}) ORDER BY id",
+                    ids,
+                ).fetchall()
+                for s in sources:
+                    by_attempt[s["attempt_id"]]["sources"].append(dict(s))
+        finally:
+            conn.close()
+        return jsonify({"attempts": list(by_attempt.values())})
+
+    @bp.get("/api/ohlc/gaps")
+    def get_gaps():
+        state = request.args.get("state", "open")
+        if state not in ("open", "abandoned", "resolved", "all"):
+            return jsonify({"error": "invalid state"}), 400
+        conn = connect(_db_path())
+        try:
+            if state == "all":
+                rows = conn.execute(
+                    "SELECT * FROM ohlc_gap_reports" " ORDER BY next_retry_at ASC LIMIT 500"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM ohlc_gap_reports WHERE state = ?"
+                    " ORDER BY next_retry_at ASC LIMIT 500",
+                    (state,),
+                ).fetchall()
+        finally:
+            conn.close()
+        return jsonify({"gaps": [dict(r) for r in rows]})
+
+    @bp.post("/api/ohlc/gaps/<int:gap_id>/retry")
+    def post_gap_retry(gap_id: int):
+        import time as _t
+
+        from services.ohlc.fetcher import fetch_range
+        from services.ohlc.gap_reports import reset_for_retry
+
+        conn = connect(_db_path())
+        try:
+            row = conn.execute(
+                "SELECT instrument, timeframe, gap_start, gap_end"
+                " FROM ohlc_gap_reports WHERE id = ?",
+                (gap_id,),
+            ).fetchone()
+            if row is None:
+                return jsonify({"error": "not found"}), 404
+            conn.execute("BEGIN")
+            reset_for_retry(conn, gap_id=gap_id, now=int(_t.time()))
+            conn.execute("COMMIT")
+        finally:
+            conn.close()
+
+        pool = _pool()
+        registry = _registry()
+        db_path = _db_path()
+
+        def _run():
+            return fetch_range(
+                db_path=db_path,
+                registry=registry,
+                instrument=row["instrument"],
+                timeframe=row["timeframe"],
+                start=row["gap_start"],
+                end=row["gap_end"],
+                trigger="self_heal",
+            )
+
+        pool.submit(_run)
+        return jsonify({"ok": True, "gap_id": gap_id}), 202
+
     return bp
