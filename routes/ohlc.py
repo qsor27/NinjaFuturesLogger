@@ -299,4 +299,61 @@ def build_ohlc_blueprint() -> Blueprint:
         pool.submit(_run)
         return jsonify({"ok": True, "gap_id": gap_id}), 202
 
+    @bp.post("/api/ohlc/bars/delete")
+    def post_delete_bars():
+        """Delete bars in [start, end) for (instrument, timeframe).
+
+        Useful when a provider wrote incorrect prices (wrong contract,
+        bad source) and you want to wipe + refetch. The next fetch_range
+        call (on_demand via the chart, or self_heal on its schedule) will
+        repopulate.
+        """
+        from services.ohlc.gap_detection import timeframe_seconds
+        from services.ohlc.store import delete_range
+
+        body = request.get_json(silent=True) or {}
+        instrument = body.get("instrument")
+        timeframe = body.get("timeframe")
+        try:
+            start = int(body.get("start"))
+            end = int(body.get("end"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "start and end are required integers"}), 400
+        if not isinstance(instrument, str) or not instrument:
+            return jsonify({"error": "instrument is required"}), 400
+        if not isinstance(timeframe, str):
+            return jsonify({"error": "timeframe is required"}), 400
+        try:
+            timeframe_seconds(timeframe)
+        except ValueError:
+            return jsonify({"error": f"unknown timeframe: {timeframe}"}), 400
+        if start >= end:
+            return jsonify({"error": "start must be < end"}), 400
+
+        conn = connect(_db_path())
+        try:
+            conn.execute("BEGIN")
+            deleted = delete_range(
+                conn,
+                instrument=instrument,
+                timeframe=timeframe,
+                start=start,
+                end=end,
+            )
+            conn.execute("COMMIT")
+        finally:
+            conn.close()
+
+        log.info(
+            "deleted bars",
+            extra={
+                "instrument": instrument,
+                "tf": timeframe,
+                "start": start,
+                "end": end,
+                "rows": deleted,
+            },
+        )
+        return jsonify({"ok": True, "deleted": deleted})
+
     return bp

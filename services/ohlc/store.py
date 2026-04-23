@@ -79,6 +79,28 @@ def read_range(
     ]
 
 
+def delete_range(
+    conn: sqlite3.Connection,
+    *,
+    instrument: str,
+    timeframe: str,
+    start: int,
+    end: int,
+) -> int:
+    """Delete bars in [start, end). Returns the number of rows removed.
+
+    Caller is responsible for the transaction (BEGIN/COMMIT). Re-fetch the
+    same window afterwards (via fetch_range with trigger='on_demand') to
+    repopulate; the self-heal tick will also retry any gap-reports the
+    deletion creates.
+    """
+    cur = conn.execute(
+        "DELETE FROM bars WHERE instrument = ? AND timeframe = ?" "  AND time >= ? AND time < ?",
+        (instrument, timeframe, start, end),
+    )
+    return cur.rowcount or 0
+
+
 def list_times(
     conn: sqlite3.Connection,
     *,

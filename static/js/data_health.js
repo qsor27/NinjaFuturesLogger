@@ -157,9 +157,21 @@ async function openDetailPanel(instrument, timeframe, start, end) {
   const resp = await fetch(`/api/data-health/missing/${instrument}/${timeframe}?start=${start}&end=${end}`);
   const body = await resp.json();
 
+  const deleteControls = `
+    <div style="margin:0.5em 0;padding:0.5em;border:1px solid #ddd">
+      <strong>Delete bars in window</strong>
+      <div style="font-size:0.9em;color:#6c757d;margin:0.25em 0">
+        Removes all stored bars in this window. The next fetch (on-demand or self-heal) will repopulate.
+      </div>
+      <button id="delete-bars-btn"
+        data-inst="${instrument}" data-tf="${timeframe}"
+        data-start="${start}" data-end="${end}">Delete + refetch</button>
+      <span id="delete-bars-status" style="margin-left:0.5em"></span>
+    </div>`;
   if (!body.gaps.length) {
     panel.innerHTML = `<h3>${escHtml(instrument)} / ${escHtml(timeframe)}</h3>
       <p>No gaps in this window. ${body.present_bars} of ${body.expected_slots} expected bars present.</p>
+      ${deleteControls}
       <button id="close-panel">Close</button>`;
   } else {
     const gapRows = body.gaps.map((g) =>
@@ -180,10 +192,51 @@ async function openDetailPanel(instrument, timeframe, start, end) {
         <thead><tr><th>Gap Start</th><th>Gap End</th><th>Action</th></tr></thead>
         <tbody>${gapRows}</tbody>
       </table>
+      ${deleteControls}
       <button id="close-panel">Close</button>`;
 
     panel.querySelectorAll(".fetch-gap-btn").forEach((btn) => {
       btn.addEventListener("click", () => fetchGap(btn.dataset.inst, btn.dataset.tf, btn.dataset.start, btn.dataset.end, btn));
+    });
+  }
+
+  const delBtn = document.getElementById("delete-bars-btn");
+  if (delBtn) {
+    delBtn.addEventListener("click", async () => {
+      const inst = delBtn.dataset.inst;
+      const tf = delBtn.dataset.tf;
+      const s = parseInt(delBtn.dataset.start);
+      const e = parseInt(delBtn.dataset.end);
+      const rangeLabel = `${new Date(s * 1000).toLocaleString()} – ${new Date(e * 1000).toLocaleString()}`;
+      if (!window.confirm(`Delete all ${inst} ${tf} bars in\n${rangeLabel}?\n\nThis cannot be undone. A fetch will be triggered automatically afterwards.`)) {
+        return;
+      }
+      const status = document.getElementById("delete-bars-status");
+      delBtn.disabled = true;
+      status.textContent = "Deleting…";
+      const delResp = await fetch("/api/ohlc/bars/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instrument: inst, timeframe: tf, start: s, end: e }),
+      });
+      const delBody = await delResp.json();
+      if (!delResp.ok) {
+        status.textContent = `Error: ${delBody.error || "unknown"}`;
+        delBtn.disabled = false;
+        return;
+      }
+      status.textContent = `Deleted ${delBody.deleted} bars. Refetching…`;
+      const fetchResp = await fetch(`/api/chart/${inst}/fetch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timeframe: tf, start: s, end: e }),
+      });
+      const fetchBody = await fetchResp.json();
+      if (fetchResp.status === 202) {
+        status.textContent = `Deleted ${delBody.deleted} bars. Refetch job ${fetchBody.job_id} started.`;
+      } else {
+        status.textContent = `Deleted ${delBody.deleted} bars. Refetch error: ${fetchBody.error || fetchResp.status}`;
+      }
     });
   }
   document.getElementById("close-panel")?.addEventListener("click", () => {
