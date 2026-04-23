@@ -1,28 +1,35 @@
+/* Scope every rule under .multiselect so our specificity beats the
+   filter-bar / filters label rules in base.html and stats.css, which
+   otherwise force label children into a vertical column. */
+
 .multiselect {
   position: relative;
   display: inline-block;
   min-width: 12em;
 }
 
-.multiselect-button {
+.multiselect .multiselect-button {
   width: 100%;
   text-align: left;
-  padding: 0.25rem 0.5rem;
-  background: var(--form-bg, #1a1a1a);
-  color: var(--text, #eee);
-  border: 1px solid var(--border, #444);
-  border-radius: 3px;
+  padding: 6px 8px;
+  background: var(--bg-card, var(--form-bg, #1a1a1a));
+  color: var(--text-primary, var(--text, #eee));
+  border: 1px solid var(--border-card, var(--border, #444));
+  border-radius: 6px;
   cursor: pointer;
   font: inherit;
+  font-size: 13px;
 }
-.multiselect-button::after {
+.multiselect .multiselect-button::after {
   content: " \25BE";
   float: right;
   opacity: 0.6;
 }
-.multiselect-button[aria-expanded="true"] { border-color: var(--accent, #8b5cf6); }
+.multiselect .multiselect-button[aria-expanded="true"] {
+  border-color: var(--accent, #8b5cf6);
+}
 
-.multiselect-panel {
+.multiselect .multiselect-panel {
   position: absolute;
   top: calc(100% + 2px);
   left: 0;
@@ -30,36 +37,49 @@
   min-width: 100%;
   max-height: 16rem;
   overflow-y: auto;
-  background: var(--panel-bg, #1a1a1a);
-  border: 1px solid var(--border, #444);
-  border-radius: 3px;
-  padding: 0.25rem 0;
+  background: var(--bg-card, var(--panel-bg, #1a1a1a));
+  color: var(--text-primary, var(--text, #eee));
+  border: 1px solid var(--border-card, var(--border, #444));
+  border-radius: 6px;
+  padding: 4px 0;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
 }
 
-.multiselect-shortcuts {
+.multiselect .multiselect-shortcuts {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.25rem 0.75rem;
-  border-bottom: 1px solid var(--border, #444);
-  font-size: 0.85em;
+  flex-direction: row;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border-card, var(--border, #444));
+  font-size: 11px;
 }
-.multiselect-shortcuts button {
+.multiselect .multiselect-shortcuts button {
   background: none;
   border: none;
   color: var(--accent, #8b5cf6);
   cursor: pointer;
-  padding: 0.1rem 0.25rem;
+  padding: 2px 4px;
   font: inherit;
 }
-.multiselect-shortcuts button:hover { text-decoration: underline; }
+.multiselect .multiselect-shortcuts button:hover { text-decoration: underline; }
 
-.multiselect-option {
+.multiselect .multiselect-option {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.75rem;
+  gap: 6px;
+  padding: 3px 10px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary, var(--text, #eee));
   cursor: pointer;
 }
-.multiselect-option:hover { background: var(--hover-bg, rgba(139,92,246,0.15)); }
-.multiselect-option input { cursor: pointer; }
+.multiselect .multiselect-option:hover {
+  background: var(--hover-bg, rgba(139, 92, 246, 0.15));
+}
+.multiselect .multiselect-option input {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
