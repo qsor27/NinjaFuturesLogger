@@ -121,11 +121,16 @@ def record_retry_outcome(
     conn: sqlite3.Connection,
     *,
     gap_id: int,
-    attempt_id: str,
+    attempt_id: str | None,
     resolved: bool,
     now: int,
 ) -> None:
-    """Update a gap-report row after a self-heal fetch attempt."""
+    """Update a gap-report row after a self-heal fetch attempt.
+
+    `attempt_id` may be None if the caller doesn't have a matching
+    fetch_attempts row to correlate (e.g. self-heal, which delegates the
+    fetch and doesn't see the inner attempt_id).
+    """
     if resolved:
         conn.execute(
             "UPDATE ohlc_gap_reports"
