@@ -31,7 +31,7 @@ def _pos(
 
 def test_apply_filters_account():
     positions = [_pos(entry_id="a", account="X"), _pos(entry_id="b", account="Y")]
-    out = apply_filters(positions, PositionFilter(account="X"))
+    out = apply_filters(positions, PositionFilter(accounts=("X",)))
     assert [p.entry_execution_id for p in out] == ["a"]
 
 
@@ -75,7 +75,7 @@ def test_apply_filters_compose_and():
         _pos(entry_id="b", account="X", side="Short"),
         _pos(entry_id="c", account="Y", side="Long"),
     ]
-    out = apply_filters(positions, PositionFilter(account="X", side="Long"))
+    out = apply_filters(positions, PositionFilter(accounts=("X",), side="Long"))
     assert [p.entry_execution_id for p in out] == ["a"]
 
 
@@ -111,3 +111,25 @@ def test_paginate_clamps_negative_page_to_one():
     page, total = paginate(positions, page=0, page_size=50)
     assert len(page) == 3
     assert total == 3
+
+
+def test_apply_filters_accounts_empty_means_all():
+    positions = [_pos(entry_id="a", account="X"), _pos(entry_id="b", account="Y")]
+    out = apply_filters(positions, PositionFilter())  # default accounts = ()
+    assert [p.entry_execution_id for p in out] == ["a", "b"]
+
+
+def test_apply_filters_accounts_multi():
+    positions = [
+        _pos(entry_id="a", account="X"),
+        _pos(entry_id="b", account="Y"),
+        _pos(entry_id="c", account="Z"),
+    ]
+    out = apply_filters(positions, PositionFilter(accounts=("X", "Z")))
+    assert [p.entry_execution_id for p in out] == ["a", "c"]
+
+
+def test_apply_filters_accounts_unknown_name_yields_nothing():
+    positions = [_pos(entry_id="a", account="X"), _pos(entry_id="b", account="Y")]
+    out = apply_filters(positions, PositionFilter(accounts=("does-not-exist",)))
+    assert out == []

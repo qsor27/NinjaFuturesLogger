@@ -71,7 +71,7 @@ def test_list_positions_page_account_filter(migrated_db):
     )
     result = list_positions_page(
         migrated_db,
-        filter_=PositionFilter(account="X"),
+        filter_=PositionFilter(accounts=("X",)),
         page=1,
         page_size=50,
     )

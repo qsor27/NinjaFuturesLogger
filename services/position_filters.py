@@ -10,7 +10,7 @@ from services.time_utils import compute_session_date
 
 @dataclass(frozen=True)
 class PositionFilter:
-    account: str | None = None
+    accounts: tuple[str, ...] = ()
     instrument: str | None = None
     side: str | None = None  # "Long" | "Short"
     outcome: Outcome | None = None  # "winner" | "loser" | "scratch" | "open"
@@ -32,7 +32,7 @@ def apply_filters(
     """Pure function: compose all filter predicates with AND."""
 
     def _keep(p: Position) -> bool:
-        if filter_.account is not None and p.account != filter_.account:
+        if filter_.accounts and p.account not in filter_.accounts:
             return False
         if filter_.instrument is not None and p.instrument != filter_.instrument:
             return False
