@@ -106,9 +106,13 @@ def list_positions_page(
     Rule 4 from doc 12: this function recomputes positions on every call.
     No cache, no materialization.
     """
+    # Push down the single-account case as a SQL WHERE filter for efficiency.
+    # For zero or multiple accounts, load the superset and let apply_filters
+    # narrow in Python — executions is a small table (one user).
+    pushdown_account = filter_.accounts[0] if len(filter_.accounts) == 1 else None
     executions = _load_executions(
         db_path,
-        account=filter_.account,
+        account=pushdown_account,
         instrument=filter_.instrument,
     )
     groups: dict[tuple[str, str], list] = {}
