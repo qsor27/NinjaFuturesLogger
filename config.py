@@ -138,3 +138,40 @@ def save_theme(path: Path | str, value: str) -> None:
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
         os.replace(str(tmp), str(path))
+
+
+def save_filter_default(
+    path: Path | str,
+    scope: str,
+    value: dict | None,
+) -> None:
+    """Update `filter_defaults.<scope>` in app.json via atomic tmp+rename.
+
+    `scope` must be one of "positions" or "stats". `value` of None removes
+    the scope entry. A non-None dict is validated against the per-scope
+    Pydantic model — unknown keys or wrong types raise ValidationError.
+    All other Config fields are preserved by a read-modify-write under a
+    module-level lock.
+    """
+    if scope == "positions":
+        model_cls = PositionsFilterDefault
+    elif scope == "stats":
+        model_cls = StatsFilterDefault
+    else:
+        raise ValueError(f"invalid filter-defaults scope: {scope!r}")
+
+    if value is not None:
+        model_cls(**value)  # raises ValidationError on bad input
+
+    path = Path(path)
+    with _SAVE_LOCK:
+        raw_text = path.read_text(encoding="utf-8")
+        raw = json.loads(raw_text)
+        fd = raw.setdefault("filter_defaults", {})
+        if value is None:
+            fd.pop(scope, None)
+        else:
+            fd[scope] = value
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+        os.replace(str(tmp), str(path))
