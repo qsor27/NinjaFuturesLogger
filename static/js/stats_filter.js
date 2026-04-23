@@ -185,7 +185,7 @@ export function renderFilterBar(container, filter, onApply) {
 
   applyBtn.addEventListener("click", doApply);
 
-  clearBtn.addEventListener("click", () => {
+  const resetFilterBar = () => {
     multi.setSelected([]);
     currentAccounts = [];
     sideSelect.value = "";
@@ -196,7 +196,9 @@ export function renderFilterBar(container, filter, onApply) {
     writeFilterToUrl(cleared);
     updateApplyHighlight();
     onApply(cleared);
-  });
+  };
+
+  clearBtn.addEventListener("click", resetFilterBar);
 
   saveDefaultBtn.addEventListener("click", async () => {
     const ok = await saveDefault("stats", {
@@ -214,6 +216,7 @@ export function renderFilterBar(container, filter, onApply) {
     if (ok) {
       hasDefault = false;
       setClearDefaultVisible(false);
+      resetFilterBar();
     }
   });
 

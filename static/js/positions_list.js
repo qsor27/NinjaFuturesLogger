@@ -474,6 +474,17 @@ function wirePresetDropdown() {
     if (ok) {
       hasDefault = false;
       clearBtn.hidden = true;
+      // Also reset the current filter so "Clear default" visibly undoes
+      // the saved default. The form has no dedicated Clear button, so this
+      // is the only path to a clean slate from the UI.
+      if (accountMulti) accountMulti.setSelected([]);
+      for (const el of form.querySelectorAll("select, input")) {
+        if (el.type === "date" || el.type === "number" || el.tagName === "SELECT") {
+          el.value = "";
+        }
+      }
+      currentPage = 1;
+      await load();
     }
   });
 
