@@ -134,6 +134,34 @@ class CircuitBreaker:
             "last_failure_class": self.last_failure_class,
         }
 
+    def snapshot(self) -> dict:
+        with self._lock:
+            return {
+                "state": self.state,
+                "consecutive_failures": self.consecutive_failures,
+                "consecutive_trips": self.consecutive_trips,
+                "current_cooldown_seconds": self.current_cooldown_seconds,
+                "opened_at": self.opened_at,
+                "next_retry_at": self.next_retry_at,
+                "last_failure_at": self.last_failure_at,
+                "last_success_at": self.last_success_at,
+                "last_error": self.last_error,
+                "last_failure_class": self.last_failure_class,
+            }
+
+    def restore(self, row: dict) -> None:
+        with self._lock:
+            self.state = row["state"]
+            self.consecutive_failures = int(row["consecutive_failures"])
+            self.consecutive_trips = int(row["consecutive_trips"])
+            self.current_cooldown_seconds = int(row["current_cooldown_seconds"])
+            self.opened_at = row["opened_at"]
+            self.next_retry_at = row["next_retry_at"]
+            self.last_failure_at = row["last_failure_at"]
+            self.last_success_at = row["last_success_at"]
+            self.last_error = row["last_error"]
+            self.last_failure_class = row["last_failure_class"]
+
     def _classify(self, error: BaseException) -> tuple[FailureClass, int | None]:
         """Return (class, retry_after_seconds).
 

@@ -59,7 +59,7 @@ class SourceRegistry:
         return [breaker.status_snapshot() for _s, breaker in self.entries]
 
 
-def build_default_registry(*, clock: Callable[[], int]) -> SourceRegistry:
+def build_default_registry(*, clock: Callable[[], int], db_path=None) -> SourceRegistry:
     """Default order: yfinance primary, stooq fallback.
 
     Breaker tuning:
@@ -90,4 +90,14 @@ def build_default_registry(*, clock: Callable[[], int]) -> SourceRegistry:
         backoff_multiplier=2.0,
         jitter_fraction=0.15,
     )
+    if db_path is not None:
+        from db import connect
+        from services.ohlc.breaker_persistence import load_breaker
+
+        conn = connect(db_path)
+        try:
+            for _source, breaker in reg.entries:
+                load_breaker(conn, breaker)
+        finally:
+            conn.close()
     return reg

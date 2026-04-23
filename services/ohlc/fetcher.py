@@ -10,7 +10,8 @@ from services.ohlc.attempts import (
     new_attempt_id,
     record_source_attempt,
 )
-from services.ohlc.circuit_breaker import FailureClassification
+from services.ohlc.breaker_persistence import persist_breaker
+from services.ohlc.circuit_breaker import CircuitBreaker, FailureClassification
 from services.ohlc.gap_detection import find_gaps
 from services.ohlc.gap_reports import update_gap_reports
 from services.ohlc.rate_limiter import TokenBucket
@@ -214,6 +215,7 @@ def fetch_range(
             except Exception as e:
                 dur_ms = int((time.monotonic() - t0) * 1000)
                 breaker.record_failure(e)
+                _persist_breaker(db_path, breaker)
                 _record_source(
                     db_path,
                     attempt_id,
@@ -239,6 +241,7 @@ def fetch_range(
 
             dur_ms = int((time.monotonic() - t0) * 1000)
             breaker.record_success()
+            _persist_breaker(db_path, breaker)
             bars_collected.extend(bars)
             outcome = "ok" if bars else "empty"
             _record_source(
@@ -316,6 +319,20 @@ def fetch_range(
         attempts=attempts,
         attempt_id=attempt_id,
     )
+
+
+def _persist_breaker(db_path, breaker: CircuitBreaker) -> None:
+    """Best-effort persistence of breaker state. Errors are non-fatal."""
+    try:
+        conn = connect(db_path)
+        try:
+            conn.execute("BEGIN")
+            persist_breaker(conn, breaker, now=_now())
+            conn.execute("COMMIT")
+        finally:
+            conn.close()
+    except Exception:
+        log.exception("breaker persist failed", extra={"source": breaker.name})
 
 
 def _record_source(

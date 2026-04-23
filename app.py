@@ -86,7 +86,7 @@ def create_app(
         post_tick_hooks=[_integrity_hook],
     )
 
-    ohlc_registry = build_default_registry(clock=lambda: int(_time.time()))
+    ohlc_registry = build_default_registry(clock=lambda: int(_time.time()), db_path=config.db_path)
     ohlc_jobs = FetchJobRegistry()
 
     token_bucket = TokenBucket(capacity=30, refill_per_sec=0.5, clock=_time.monotonic)
@@ -174,9 +174,7 @@ def create_app(
     from services.ohlc.self_heal import self_heal_tick
 
     services.scheduler.add_job(
-        lambda: self_heal_tick(
-            db_path=config.db_path, fetch_fn=_fetch, now=int(_time.time())
-        ),
+        lambda: self_heal_tick(db_path=config.db_path, fetch_fn=_fetch, now=int(_time.time())),
         trigger=IntervalTrigger(minutes=15),
         id="ohlc_self_heal",
         replace_existing=True,
