@@ -10,13 +10,14 @@
   #list-root table.positions-table th.col-dragging { opacity: 0.4; }
   #list-root table.positions-table th.col-drop-target { background: var(--accent-soft, rgba(139,92,246,0.25)); }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/multiselect.css') }}">
 {% endblock %}
 {% block content %}
   <h1>Positions</h1>
   <div id="back-to-stats" class="back-link" hidden></div>
   <form class="filters" id="filter-form">
     <label>Account
-      <select name="account"><option value="">All</option></select>
+      <div id="account-filter-host"></div>
     </label>
     <label>Instrument
       <select name="instrument"><option value="">All</option></select>

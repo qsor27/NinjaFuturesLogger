@@ -1,5 +1,6 @@
 import { buildQuery, fetchJSON, formatDollars, formatTime, setText } from "./api.js";
 import { renderPresetSelect } from "./date_presets.js";
+import { createMultiSelect } from "./MultiSelect.js";
 
 const form = document.getElementById("filter-form");
 const listRoot = document.getElementById("list-root");
@@ -11,7 +12,7 @@ const PAGE_SIZE = 50;
 const backToStats = document.getElementById("back-to-stats");
 
 const FILTER_NAMES = [
-  "account", "instrument", "side", "outcome",
+  "instrument", "side", "outcome",
   "session_date_from", "session_date_to",
   "day_of_week", "hour_of_day", "hour_tz", "trades_per_day",
 ];
@@ -148,17 +149,20 @@ function saveColumnOrder(order) {
 let columnOrder = loadColumnOrder();
 let lastPositions = [];
 let dragSourceKey = null;
+let accountMulti = null;
 
 async function populateFilterOptions() {
   const opts = await fetchJSON("/api/positions/filters");
-  const accountSelect = form.querySelector('select[name="account"]');
+  const accountHost = document.getElementById("account-filter-host");
+  const initialSelected = new URL(window.location.href).searchParams
+    .getAll("account").filter((s) => s !== "");
+  accountMulti = createMultiSelect(accountHost, {
+    options: opts.accounts,
+    selected: initialSelected,
+    label: "Account",
+    allLabel: "All accounts",
+  });
   const instrumentSelect = form.querySelector('select[name="instrument"]');
-  for (const a of opts.accounts) {
-    const o = document.createElement("option");
-    o.value = a;
-    o.textContent = a;
-    accountSelect.appendChild(o);
-  }
   for (const i of opts.instruments) {
     const o = document.createElement("option");
     o.value = i;
@@ -173,6 +177,7 @@ function readFilters() {
   for (const name of FILTER_NAMES) {
     out[name] = data.get(name) || "";
   }
+  out.account = accountMulti ? accountMulti.getSelected() : [];
   if (out.hour_of_day && !out.hour_tz) {
     try {
       out.hour_tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
@@ -192,7 +197,12 @@ function filtersToUrl(filters, page) {
 
 function pushState(filters, page) {
   const url = new URL(window.location.href);
+  url.searchParams.delete("account");
+  for (const a of filters.account || []) {
+    url.searchParams.append("account", a);
+  }
   for (const [k, v] of Object.entries({ ...filters, page })) {
+    if (k === "account") continue;
     if (v === "" || v === null || v === undefined) {
       url.searchParams.delete(k);
     } else {
@@ -348,11 +358,12 @@ function renderBackToStats() {
     return;
   }
   const statsParams = new URLSearchParams();
-  const account = params.get("account");
+  for (const a of params.getAll("account")) {
+    if (a) statsParams.append("account", a);
+  }
   const side = params.get("side");
   const from = params.get("session_date_from");
   const to = params.get("session_date_to");
-  if (account) statsParams.set("account", account);
   if (side) statsParams.set("side", side);
   if (from) statsParams.set("from", from);
   if (to) statsParams.set("to", to);
