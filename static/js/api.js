@@ -49,11 +49,20 @@ export async function deleteJSON(url) {
 }
 
 // Build a query string from an object, skipping null/empty values.
+// Array values are serialized as repeated params (e.g. {account: ["A","B"]}
+// -> "account=A&account=B"). Strings and numbers serialize as single values.
 export function buildQuery(params) {
   const usp = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value === null || value === undefined || value === "") continue;
-    usp.set(key, String(value));
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v === null || v === undefined || v === "") continue;
+        usp.append(key, String(v));
+      }
+    } else {
+      usp.set(key, String(value));
+    }
   }
   const s = usp.toString();
   return s ? "?" + s : "";
