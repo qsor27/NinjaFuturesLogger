@@ -22,7 +22,7 @@ def _parse_filter_from_query(args) -> PositionFilter:
     from datetime import date
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-    account = args.get("account") or None
+    accounts = tuple(a for a in args.getlist("account") if a)
     instrument = args.get("instrument") or None
 
     side = args.get("side") or None
@@ -82,7 +82,7 @@ def _parse_filter_from_query(args) -> PositionFilter:
         raise ValueError("trades_per_day must be >= 1")
 
     return PositionFilter(
-        account=account,
+        accounts=accounts,
         instrument=instrument,
         side=side,
         outcome=outcome,

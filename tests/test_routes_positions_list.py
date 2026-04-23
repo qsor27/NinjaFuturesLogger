@@ -65,10 +65,23 @@ def test_list_account_filter(tmp_config):
                 _ex("d", "Y", "MNQ", 400, "Sell", "Sell", "Exit", "-"),
             ],
         )
+        # Legacy single-value URL keeps working (one-element getlist).
         resp = app.test_client().get("/api/positions?account=Y")
         body = resp.get_json()
         assert body["page"]["total"] == 1
         assert body["positions"][0]["account"] == "Y"
+
+        # Multi-value URL: repeated `account=` params return the union.
+        resp = app.test_client().get("/api/positions?account=X&account=Y")
+        body = resp.get_json()
+        assert body["page"]["total"] == 2
+        returned = sorted(p["account"] for p in body["positions"])
+        assert returned == ["X", "Y"]
+
+        # Empty URL still returns everything.
+        resp = app.test_client().get("/api/positions")
+        body = resp.get_json()
+        assert body["page"]["total"] == 2
     finally:
         services.stop()
 
