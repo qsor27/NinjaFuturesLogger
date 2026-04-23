@@ -41,9 +41,7 @@ def build_filter_defaults_blueprint() -> Blueprint:
         if not isinstance(body, dict):
             return jsonify({"error": "body must be a JSON object"}), 400
 
-        model_cls = (
-            PositionsFilterDefault if scope == "positions" else StatsFilterDefault
-        )
+        model_cls = PositionsFilterDefault if scope == "positions" else StatsFilterDefault
         try:
             model_cls(**body)
         except ValidationError as e:

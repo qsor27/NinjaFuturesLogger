@@ -5,11 +5,11 @@ import pytest
 from pydantic import ValidationError
 
 from config import (
-    Config,
     FilterDefaults,
     PositionsFilterDefault,
     StatsFilterDefault,
     load_config,
+    save_filter_default,
 )
 
 
@@ -63,17 +63,12 @@ def test_config_with_filter_defaults_round_trips(tmp_path: Path):
     assert cfg.filter_defaults.positions == PositionsFilterDefault(
         accounts=("Sim101",), instrument="MNQ", side="Long", outcome=""
     )
-    assert cfg.filter_defaults.stats == StatsFilterDefault(
-        accounts=("Sim101",), side=""
-    )
+    assert cfg.filter_defaults.stats == StatsFilterDefault(accounts=("Sim101",), side="")
 
 
 def test_positions_filter_default_rejects_unknown_key():
     with pytest.raises(ValidationError):
         PositionsFilterDefault(accounts=(), instrument="", side="", outcome="", evil="x")  # type: ignore[call-arg]
-
-
-from config import save_filter_default
 
 
 def test_save_filter_default_writes_positions(tmp_path: Path):
@@ -98,9 +93,7 @@ def test_save_filter_default_writes_stats(tmp_path: Path):
         {"accounts": ["A", "B"], "side": "Short"},
     )
     cfg = load_config(path)
-    assert cfg.filter_defaults.stats == StatsFilterDefault(
-        accounts=("A", "B"), side="Short"
-    )
+    assert cfg.filter_defaults.stats == StatsFilterDefault(accounts=("A", "B"), side="Short")
 
 
 def test_save_filter_default_none_clears_scope(tmp_path: Path):
@@ -157,9 +150,7 @@ def test_save_filter_default_thread_safe(tmp_path: Path):
         except Exception as e:
             errors.append(e)
 
-    threads = [
-        _threading.Thread(target=worker, args=([f"A{i}"],)) for i in range(20)
-    ]
+    threads = [_threading.Thread(target=worker, args=([f"A{i}"],)) for i in range(20)]
     for t in threads:
         t.start()
     for t in threads:

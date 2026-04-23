@@ -6,6 +6,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import field_validator
+
 from models.base import StrictModel
 
 _SAVE_LOCK = threading.Lock()
