@@ -185,7 +185,7 @@ function applyPositionsDefault(def) {
   setField("outcome", def.outcome);
 }
 
-async function populateFilterOptions() {
+async function populateFilterOptions(onAccountChange) {
   const opts = await fetchJSON("/api/positions/filters");
   const accountHost = document.getElementById("account-filter-host");
   const initialSelected = new URL(window.location.href).searchParams
@@ -195,6 +195,7 @@ async function populateFilterOptions() {
     selected: initialSelected,
     label: "Account",
     allLabel: "All accounts",
+    onChange: () => { if (onAccountChange) onAccountChange(); },
   });
   const instrumentSelect = form.querySelector('select[name="instrument"]');
   for (const i of opts.instruments) {
@@ -410,10 +411,24 @@ function renderBackToStats() {
   backToStats.appendChild(a);
 }
 
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
+// Apply-on-change: any filter edit triggers a fresh fetch. The submit handler
+// is kept as a guard so pressing Enter inside a field doesn't reload the page.
+let suppressAutoLoad = false;
+function triggerLoad() {
+  if (suppressAutoLoad) return;
   currentPage = 1;
   load();
+}
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+  triggerLoad();
+});
+form.addEventListener("change", (e) => {
+  // Ignore changes on elements that manage their own reload path (preset
+  // dropdown and the MultiSelect widget both call load directly).
+  if (e.target.id === "filter-date-preset") return;
+  if (e.target.closest("#account-filter-host")) return;
+  triggerLoad();
 });
 
 function wirePresetDropdown() {
@@ -437,18 +452,33 @@ function wirePresetDropdown() {
   toInput.addEventListener("input", resetPreset);
 }
 
+function resetFilterForm() {
+  suppressAutoLoad = true;
+  if (accountMulti) accountMulti.setSelected([]);
+  for (const el of form.querySelectorAll("select, input")) {
+    if (el.type === "date" || el.type === "number" || el.tagName === "SELECT") {
+      el.value = "";
+    }
+  }
+  suppressAutoLoad = false;
+  currentPage = 1;
+  return load();
+}
+
 (async () => {
-  await populateFilterOptions();
+  suppressAutoLoad = true;
+  await populateFilterOptions(() => triggerLoad());
   restoreFiltersFromUrl();
   renderBackToStats();
   wirePresetDropdown();
 
   const defaults = await fetchDefaults();
   const saveBtn = document.getElementById("filter-save-default");
-  const clearBtn = document.getElementById("filter-clear-default");
+  const clearDefaultBtn = document.getElementById("filter-clear-default");
+  const resetFilterBtn = document.getElementById("filter-clear");
 
   let hasDefault = defaults.positions !== null && defaults.positions !== undefined;
-  clearBtn.hidden = !hasDefault;
+  clearDefaultBtn.hidden = !hasDefault;
 
   if (hasDefault && isUrlEmpty(window.location.href, POSITIONS_URL_KEYS)) {
     applyPositionsDefault(defaults.positions);
@@ -465,28 +495,23 @@ function wirePresetDropdown() {
     const ok = await saveDefault("positions", body);
     if (ok) {
       hasDefault = true;
-      clearBtn.hidden = false;
+      clearDefaultBtn.hidden = false;
     }
   });
 
-  clearBtn.addEventListener("click", async () => {
+  clearDefaultBtn.addEventListener("click", async () => {
     const ok = await clearDefault("positions");
     if (ok) {
       hasDefault = false;
-      clearBtn.hidden = true;
-      // Also reset the current filter so "Clear default" visibly undoes
-      // the saved default. The form has no dedicated Clear button, so this
-      // is the only path to a clean slate from the UI.
-      if (accountMulti) accountMulti.setSelected([]);
-      for (const el of form.querySelectorAll("select, input")) {
-        if (el.type === "date" || el.type === "number" || el.tagName === "SELECT") {
-          el.value = "";
-        }
-      }
-      currentPage = 1;
-      await load();
+      clearDefaultBtn.hidden = true;
+      await resetFilterForm();
     }
   });
 
+  resetFilterBtn.addEventListener("click", () => {
+    resetFilterForm();
+  });
+
+  suppressAutoLoad = false;
   await load();
 })();

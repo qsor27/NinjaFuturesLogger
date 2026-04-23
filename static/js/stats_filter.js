@@ -81,8 +81,7 @@ export function renderFilterBar(container, filter, onApply) {
     <label>To
       <input type="date" id="filter-to">
     </label>
-    <button id="filter-apply">Apply</button>
-    <button id="filter-clear">Clear</button>
+    <button id="filter-clear" type="button">Clear</button>
     <button id="filter-save-default" type="button">Save as default</button>
     <button id="filter-clear-default" type="button" hidden>Clear default</button>
   `;
@@ -92,7 +91,6 @@ export function renderFilterBar(container, filter, onApply) {
   const presetSelect = container.querySelector("#filter-date-preset");
   const fromInput = container.querySelector("#filter-from");
   const toInput = container.querySelector("#filter-to");
-  const applyBtn = container.querySelector("#filter-apply");
   const clearBtn = container.querySelector("#filter-clear");
   const saveDefaultBtn = container.querySelector("#filter-save-default");
   const clearDefaultBtn = container.querySelector("#filter-clear-default");
@@ -103,24 +101,30 @@ export function renderFilterBar(container, filter, onApply) {
 
   let currentAccounts = [...(filter.accounts || [])];
   let totalAccountCount = null;
+  // Suppresses auto-apply during programmatic mutations (default-load, clear,
+  // popstate). Without this the onChange callback of the widget would fire a
+  // duplicate load while we're mid-setup.
+  let suppressAutoApply = false;
+
+  const doApply = () => {
+    if (suppressAutoApply) return;
+    const next = {
+      accounts: [...currentAccounts],
+      side: sideSelect.value || null,
+      from: fromInput.value || null,
+      to: toInput.value || null,
+    };
+    writeFilterToUrl(next);
+    onApply(next);
+  };
+
   const multi = createMultiSelect(accountHost, {
     options: [],
     selected: currentAccounts,
     label: "Account",
     allLabel: "All accounts",
-    onChange: (sel) => { currentAccounts = sel; updateApplyHighlight(); },
+    onChange: (sel) => { currentAccounts = sel; doApply(); },
   });
-
-  const updateApplyHighlight = () => {
-    const snapshot = {
-      accounts: currentAccounts,
-      side: sideSelect.value || null,
-      from: fromInput.value || null,
-      to: toInput.value || null,
-    };
-    if (isAnyFilterActive(snapshot, totalAccountCount)) applyBtn.classList.add("active");
-    else applyBtn.classList.remove("active");
-  };
 
   let hasDefault = false;
   const setClearDefaultVisible = (visible) => {
@@ -129,7 +133,9 @@ export function renderFilterBar(container, filter, onApply) {
 
   Promise.all([fetchAccountOptions(), fetchDefaults()]).then(([accounts, defaults]) => {
     totalAccountCount = accounts.length;
+    suppressAutoApply = true;
     multi.setOptions(accounts);
+    suppressAutoApply = false;
 
     const stats = defaults ? defaults.stats : null;
     hasDefault = stats !== null && stats !== undefined;
@@ -139,38 +145,19 @@ export function renderFilterBar(container, filter, onApply) {
 
     if (hasDefault && urlIsEmpty) {
       const savedAccounts = Array.isArray(stats.accounts) ? stats.accounts : [];
+      suppressAutoApply = true;
       multi.setSelected(savedAccounts);
+      suppressAutoApply = false;
       currentAccounts = multi.getSelected();
       if (stats.side) sideSelect.value = stats.side;
-      const next = {
-        accounts: [...currentAccounts],
-        side: sideSelect.value || null,
-        from: null,
-        to: null,
-      };
-      writeFilterToUrl(next);
-      updateApplyHighlight();
-      onApply(next);
+      doApply();
     } else {
+      suppressAutoApply = true;
       multi.setSelected(currentAccounts);
+      suppressAutoApply = false;
       currentAccounts = multi.getSelected();
-      updateApplyHighlight();
     }
   });
-
-  updateApplyHighlight();
-
-  const doApply = () => {
-    const next = {
-      accounts: [...currentAccounts],
-      side: sideSelect.value || null,
-      from: fromInput.value || null,
-      to: toInput.value || null,
-    };
-    writeFilterToUrl(next);
-    updateApplyHighlight();
-    onApply(next);
-  };
 
   renderPresetSelect(presetSelect, "", (_preset, range) => {
     if (!range) return;
@@ -183,10 +170,14 @@ export function renderFilterBar(container, filter, onApply) {
   fromInput.addEventListener("input", resetPreset);
   toInput.addEventListener("input", resetPreset);
 
-  applyBtn.addEventListener("click", doApply);
+  sideSelect.addEventListener("change", doApply);
+  fromInput.addEventListener("change", doApply);
+  toInput.addEventListener("change", doApply);
 
   const resetFilterBar = () => {
+    suppressAutoApply = true;
     multi.setSelected([]);
+    suppressAutoApply = false;
     currentAccounts = [];
     sideSelect.value = "";
     fromInput.value = "";
@@ -194,7 +185,6 @@ export function renderFilterBar(container, filter, onApply) {
     presetSelect.value = "";
     const cleared = { accounts: [], side: null, from: null, to: null };
     writeFilterToUrl(cleared);
-    updateApplyHighlight();
     onApply(cleared);
   };
 
@@ -222,13 +212,14 @@ export function renderFilterBar(container, filter, onApply) {
 
   window.addEventListener("popstate", () => {
     const reread = parseFilterFromUrl();
+    suppressAutoApply = true;
     multi.setSelected(reread.accounts || []);
+    suppressAutoApply = false;
     currentAccounts = multi.getSelected();
     sideSelect.value = reread.side || "";
     fromInput.value = reread.from || "";
     toInput.value = reread.to || "";
     presetSelect.value = "";
-    updateApplyHighlight();
     onApply(reread);
   });
 }
