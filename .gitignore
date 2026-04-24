@@ -17,6 +17,7 @@ data/config/instruments.json
 .claude/
 pip_install.log
 .superpowers/
+docker-compose.override.yml
 
 # Internal development docs — not for public repo
 CLAUDE.md
@@ -27,3 +28,6 @@ docs/agent-runs/
 docs/GrowthIdeas.md
 docs/browser-ac-handoff.md
 docs/browser-acceptance-checklist.md
+
+# Windows installer build artifacts
+windows/payload/
