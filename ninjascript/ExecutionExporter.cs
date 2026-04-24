@@ -72,8 +72,11 @@ namespace NinjaTrader.NinjaScript.Indicators
                 ScaleJustification            = NinjaTrader.Gui.Chart.ScaleJustification.Right;
                 IsSuspendedWhileInactive      = false;
 
-                // Default settings - use user's Documents folder for cross-platform compatibility
-                ExportPath                    = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "FuturesTradingLog", "data");
+                // Default write target for NinjaFuturesLogger. The installer ensures this
+                // path exists before the user adds the indicator to a chart. If the user
+                // chose a custom install location, the installer rewrites this line at
+                // copy time - do not edit by hand in production installs.
+                ExportPath                    = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NinjaFuturesLogger", "data", "inbox");
                 CreateDailyFiles              = true;
                 MaxFileSizeMB                 = 10;
                 EnableLogging                 = true;
