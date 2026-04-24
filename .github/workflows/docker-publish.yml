@@ -41,6 +41,10 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
 
+      - name: Capture build timestamp
+        id: buildstamp
+        run: echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push to GHCR
         uses: docker/build-push-action@v6
         with:
@@ -48,3 +52,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            FTL_GIT_SHA=${{ github.sha }}
+            FTL_BUILT_AT=${{ steps.buildstamp.outputs.built_at }}
+            FTL_IMAGE_TAG=${{ github.ref_name }}
