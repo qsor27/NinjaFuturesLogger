@@ -1,0 +1,22 @@
+<section class="settings-panel" id="nt-connection-panel"
+         data-endpoint="/api/settings/nt-connection"
+         data-install-endpoint="/api/first-run/install-indicator">
+  <h2>NinjaTrader Connection</h2>
+
+  <dl class="settings-keyvalue">
+    <dt>NinjaTrader detected</dt>
+    <dd data-field="nt_found">&hellip;</dd>
+    <dt>Indicators folder</dt>
+    <dd><code data-field="indicators_path">&hellip;</code></dd>
+    <dt>Indicator installed</dt>
+    <dd data-field="indicator_installed_at">&hellip;</dd>
+    <dt>Last CSV received</dt>
+    <dd data-field="last_csv">&hellip;</dd>
+  </dl>
+
+  <div class="settings-actions">
+    <button type="button" data-action="refresh">Re-run NT detection</button>
+    <button type="button" data-action="reinstall">Re-install indicator</button>
+  </div>
+</section>
+<script type="module" src="{{ url_for('static', filename='js/nt_connection.js') }}"></script>
