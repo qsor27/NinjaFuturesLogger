@@ -30,6 +30,13 @@ class SchedulerConfig(StrictModel):
     heartbeat_seconds: int
 
 
+class WindowsConfig(StrictModel):
+    # TCP port the Windows launcher binds to (default 8000). Only used by
+    # the Go launcher on Windows installer deployments; Docker/Linux runs
+    # ignore this field.
+    port: int = 8000
+
+
 class PositionsFilterDefault(StrictModel):
     # accounts lives on FilterDefaults (shared across /positions and /stats),
     # so it is intentionally NOT a field here.
@@ -68,6 +75,7 @@ class Config(StrictModel):
     display_timezone: str | None = None
     theme: Literal["dark", "light"] = "dark"
     filter_defaults: FilterDefaults = FilterDefaults()
+    windows: WindowsConfig = WindowsConfig()
 
 
 def _migrate_filter_defaults(raw: dict) -> None:
@@ -137,6 +145,32 @@ def save_display_timezone(path: Path | str, value: str | None) -> None:
         raw_text = path.read_text(encoding="utf-8")
         raw = json.loads(raw_text)
         raw["display_timezone"] = value
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+        os.replace(str(tmp), str(path))
+
+
+def save_windows_port(path: Path | str, value: int) -> None:
+    """Update `windows.port` in app.json via atomic tmp+rename.
+
+    Validates that value is in the IANA unprivileged-port range [1024, 65535].
+    All other Config fields are preserved by a read-modify-write under a
+    module-level lock.
+
+    Takes effect on next launcher start — the running Python process is
+    already bound to the old port.
+    """
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"port must be an integer, got {type(value).__name__}")
+    if value < 1024 or value > 65535:
+        raise ValueError(f"port must be in [1024, 65535], got {value}")
+
+    path = Path(path)
+    with _SAVE_LOCK:
+        raw_text = path.read_text(encoding="utf-8")
+        raw = json.loads(raw_text)
+        w = raw.setdefault("windows", {})
+        w["port"] = value
         tmp = path.with_suffix(path.suffix + ".tmp")
         tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
         os.replace(str(tmp), str(path))
