@@ -8,6 +8,7 @@ const endpoints = {
   install: root.dataset.endpointInstall,
   inbox: root.dataset.endpointInbox,
   complete: root.dataset.endpointComplete,
+  indicatorPath: "/api/first-run/indicator-path",
 };
 
 function showStep(name) {
@@ -31,6 +32,22 @@ async function getJSON(url) {
 }
 
 let detectedIndicatorsPath = null;
+let cachedIndicatorPath = null;
+
+async function loadIndicatorPath() {
+  const pathEl = root.querySelector('[data-region="indicator-path"]');
+  if (!pathEl) return;
+  try {
+    const data = await getJSON(endpoints.indicatorPath);
+    cachedIndicatorPath = data.path;
+    pathEl.textContent = data.path;
+    if (!data.exists) {
+      pathEl.textContent += " (file missing - reinstall the app)";
+    }
+  } catch {
+    pathEl.textContent = "(could not load path)";
+  }
+}
 
 async function runDetect() {
   showStep("detect");
@@ -41,6 +58,7 @@ async function runDetect() {
     showStep("install-offer");
   } else {
     showStep("manual");
+    await loadIndicatorPath();
   }
 }
 
@@ -105,14 +123,26 @@ root.addEventListener("click", async (e) => {
       break;
     case "manual":
       showStep("manual");
+      await loadIndicatorPath();
       break;
     case "next-manual":
       showStep("followup");
       startInboxPolling();
       break;
-    case "download-cs":
-      window.location.href = "/static/ninjascript/ExecutionExporter.cs";
+    case "copy-path": {
+      if (cachedIndicatorPath && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(cachedIndicatorPath);
+          const btn = root.querySelector('[data-action="copy-path"]');
+          const original = btn.textContent;
+          btn.textContent = "Copied ✓";
+          setTimeout(() => { btn.textContent = original; }, 1500);
+        } catch {
+          alert("Couldn't copy to clipboard. Path:\n" + cachedIndicatorPath);
+        }
+      }
       break;
+    }
     case "skip":
     case "finish":
       await finish();

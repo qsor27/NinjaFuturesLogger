@@ -31,15 +31,17 @@
 
   <div class="wizard-step" data-step="manual" hidden>
     <h2>Install the indicator manually</h2>
+    <p>The NinjaFuturesLogger installer placed <code>ExecutionExporter.cs</code> at:</p>
+    <p><code data-region="indicator-path">loading&hellip;</code></p>
     <ol>
-      <li>Copy <code>ExecutionExporter.cs</code> (button below) to NinjaTrader's
-          <code>Documents\NinjaTrader 8\bin\Custom\Indicators\</code> folder.</li>
+      <li>Open Windows Explorer to that folder and copy the <code>.cs</code> file.</li>
+      <li>Paste it into <code>Documents\NinjaTrader 8\bin\Custom\Indicators\</code>.</li>
       <li>Open (or restart) NinjaTrader 8.</li>
       <li>Press <kbd>F11</kbd> to open the NinjaScript Editor.</li>
       <li>Press <kbd>F5</kbd> to compile.</li>
       <li>Add the <em>ExecutionExporter</em> indicator to any chart.</li>
     </ol>
-    <button type="button" data-action="download-cs">Download ExecutionExporter.cs</button>
+    <button type="button" data-action="copy-path">Copy path to clipboard</button>
     <button type="button" data-action="next-manual">I've done this - continue</button>
   </div>
 
