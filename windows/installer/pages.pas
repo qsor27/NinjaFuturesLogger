@@ -47,6 +47,60 @@ begin
   Result := DataDir;
 end;
 
+// Seed a default app.json in the chosen data dir so first launch has a
+// valid Pydantic-loadable config. Idempotent: if app.json already exists,
+// leave it alone (user re-installs keep their customizations).
+procedure SeedAppJsonIfMissing();
+var
+  ConfigPath: String;
+  Lines: TStringList;
+  DirForward: String;
+begin
+  if DataDir = '' then
+    DataDir := ExpandConstant('{localappdata}\NinjaFuturesLogger\data');
+  ConfigPath := DataDir + '\config\app.json';
+  if FileExists(ConfigPath) then
+    Exit;
+
+  ForceDirectories(DataDir + '\config');
+  // JSON strings use forward slashes for Windows paths — both Python
+  // pathlib and SQLite handle them fine, and forward slashes skip the
+  // backslash-escaping that would otherwise be required in JSON.
+  // StringChangeEx mutates its first arg in place and returns a count.
+  DirForward := DataDir;
+  StringChangeEx(DirForward, '\', '/', True);
+
+  Lines := TStringList.Create;
+  try
+    Lines.Add('{');
+    Lines.Add('  "data_dir": "' + DirForward + '",');
+    Lines.Add('  "db_path": "' + DirForward + '/app.db",');
+    Lines.Add('  "inbox_dir": "' + DirForward + '/inbox",');
+    Lines.Add('  "archive_dir": "' + DirForward + '/archive",');
+    Lines.Add('  "log_dir": "' + DirForward + '/logs",');
+    Lines.Add('  "session": {');
+    Lines.Add('    "exchange_timezone": "America/Chicago",');
+    Lines.Add('    "trade_date_rollover": "17:00",');
+    Lines.Add('    "archive_job_time": "18:00",');
+    Lines.Add('    "source_timezone": "America/Chicago"');
+    Lines.Add('  },');
+    Lines.Add('  "thread_pool": { "max_workers": 4 },');
+    Lines.Add('  "scheduler": { "heartbeat_seconds": 60 },');
+    Lines.Add('  "theme": "dark",');
+    Lines.Add('  "windows": { "port": 8000 }');
+    Lines.Add('}');
+    Lines.SaveToFile(ConfigPath);
+  finally
+    Lines.Free;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SeedAppJsonIfMissing();
+end;
+
 function NeedsWebView2(): Boolean;
 var
   Version: string;
