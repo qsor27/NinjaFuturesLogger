@@ -1,0 +1,15 @@
+# requirements-windows.txt
+# Windows bundle requirements. Used by the Inno Setup build (Plan 2).
+# Delta from requirements.txt:
+#   - removed: gunicorn (Windows-incompatible; uses fcntl)
+#   + added:   waitress (production WSGI on Windows)
+#   + added:   pywebview (embedded WebView2 window)
+
+Flask==3.0.3
+pydantic==2.9.2
+APScheduler==3.10.4
+watchdog==4.0.2
+requests==2.32.3
+yfinance==0.2.66
+waitress==3.0.0
+pywebview==5.3
