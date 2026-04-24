@@ -32,19 +32,26 @@ foreach ($d in @($PythonDir, $SitePkgs, $AppDir, $NinjaDir)) {
 Write-Host "Extracting Python embeddable..."
 Expand-Archive -Path (Join-Path $Externals "python-embed.zip") -DestinationPath $PythonDir -Force
 
-# Unlock site-packages imports in the embeddable distribution's ._pth file.
-# The embeddable ships with "#import site" commented out; we uncomment it
-# and append our site-packages directory so it's on sys.path.
+# Unlock site-packages + app imports in the embeddable distribution's ._pth.
+# The embeddable ships with "#import site" commented out and PYTHONPATH
+# ignored (._pth enables "isolated" mode). We must explicitly list every
+# directory we want on sys.path:
+#   ..\site-packages   — pip-installed Flask, pydantic, waitress, etc.
+#   ..\app             — our Python source (app.py, routes/, services/, ...)
+# Without ..\app, `from app import create_app` fails with ModuleNotFoundError
+# even though app.py sits right next to main.py — because the script dir
+# isn't auto-added to sys.path under ._pth isolation.
 $pthFile = Get-ChildItem $PythonDir -Filter "python3*._pth" | Select-Object -First 1
 if ($null -eq $pthFile) {
     throw "Could not find python3*._pth in $PythonDir"
 }
-Write-Host "Unlocking site-packages import via $($pthFile.Name)..."
+Write-Host "Unlocking imports via $($pthFile.Name)..."
 $content = Get-Content $pthFile.FullName
 $content = $content | ForEach-Object {
     if ($_ -match "^#import site") { "import site" } else { $_ }
 }
 $content += "..\site-packages"
+$content += "..\app"
 $content | Set-Content $pthFile.FullName -Encoding ascii
 
 Write-Host "Bootstrapping pip into the embedded interpreter..."
