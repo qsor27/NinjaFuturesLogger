@@ -145,15 +145,3 @@ def test_complete_is_idempotent(client):
     resp = client.post("/api/first-run/complete")
     assert resp.status_code == 200
     assert get_preference(db_path, "first_run_complete") == "true"
-
-
-def test_indicator_source_download(client, tmp_path, monkeypatch):
-    src = tmp_path / "src" / "ExecutionExporter.cs"
-    src.parent.mkdir()
-    src.write_text("// fake indicator source")
-    monkeypatch.setenv("FTL_NT_INDICATOR_SOURCE", str(src))
-    resp = client.get("/static/ninjascript/ExecutionExporter.cs")
-    assert resp.status_code == 200
-    assert resp.data == b"// fake indicator source"
-    # Check that Content-Disposition triggers download
-    assert "attachment" in resp.headers.get("Content-Disposition", "")

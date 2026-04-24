@@ -105,10 +105,4 @@ def build_first_run_blueprint() -> Blueprint:
         set_preference(current_app.config["FTL_DB_PATH"], "first_run_complete", "true")
         return jsonify({"success": True})
 
-    @bp.get("/static/ninjascript/ExecutionExporter.cs")
-    def indicator_source():
-        from flask import send_file
-
-        return send_file(str(_resolve_source()), mimetype="text/plain", as_attachment=True)
-
     return bp
