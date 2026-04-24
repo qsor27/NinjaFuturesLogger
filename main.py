@@ -29,6 +29,14 @@ def run() -> None:
     except ValueError as e:
         raise RuntimeError(f"FTL_PORT must be an integer, got {port_raw!r}") from e
 
+    # The Go launcher doesn't set a working directory for us, so Python's
+    # cwd is wherever the user double-clicked from. create_app loads
+    # migrations with a relative Path("migrations") — we anchor cwd to this
+    # file's parent (the install's app/ directory, which contains
+    # migrations/) so those loads resolve correctly. Docker sets WORKDIR
+    # /app, so this chdir is a no-op there.
+    os.chdir(Path(__file__).resolve().parent)
+
     config_path = Path(data_dir) / "config" / "app.json"
     config = load_config(config_path)
     flask_app, services = create_app(config, start_background=True)
