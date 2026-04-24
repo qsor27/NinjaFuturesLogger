@@ -1,15 +1,8 @@
 FROM python:3.11-slim AS runtime
 
-ARG FTL_GIT_SHA=unknown
-ARG FTL_BUILT_AT=unknown
-ARG FTL_IMAGE_TAG=unknown
-
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    FTL_GIT_SHA=$FTL_GIT_SHA \
-    FTL_BUILT_AT=$FTL_BUILT_AT \
-    FTL_IMAGE_TAG=$FTL_IMAGE_TAG
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
@@ -19,6 +12,15 @@ RUN apt-get update \
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Version stamp — declared after pip install so changing the SHA does not
+# invalidate the dependency layer.
+ARG FTL_GIT_SHA=unknown
+ARG FTL_BUILT_AT=unknown
+ARG FTL_IMAGE_TAG=unknown
+ENV FTL_GIT_SHA=$FTL_GIT_SHA \
+    FTL_BUILT_AT=$FTL_BUILT_AT \
+    FTL_IMAGE_TAG=$FTL_IMAGE_TAG
 
 COPY . .
 
