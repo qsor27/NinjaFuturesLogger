@@ -1,11 +1,68 @@
 {% extends "base.html" %}
-{% block title %}First-Run Setup{% endblock %}
+{% block title %}First-Run Setup - NinjaFuturesLogger{% endblock %}
+
 {% block content %}
-<div id="first-run-root" data-endpoint-detect="/api/first-run/detect-nt"
-                          data-endpoint-install="/api/first-run/install-indicator"
-                          data-endpoint-inbox="/api/first-run/inbox-status"
-                          data-endpoint-complete="/api/first-run/complete">
-  <h1>First-run setup</h1>
-  <p>Wizard UI lands in Task 12.</p>
-</div>
+<section id="first-run-root"
+         data-endpoint-detect="/api/first-run/detect-nt"
+         data-endpoint-install="/api/first-run/install-indicator"
+         data-endpoint-inbox="/api/first-run/inbox-status"
+         data-endpoint-complete="/api/first-run/complete">
+
+  <div class="wizard-step" data-step="welcome">
+    <h1>Welcome to NinjaFuturesLogger</h1>
+    <p>This quick setup connects NinjaTrader 8 to the logger so your trades flow in automatically.</p>
+    <button type="button" data-action="next-welcome">Continue</button>
+    <a href="#" data-action="skip">Skip setup - I'll do this later</a>
+  </div>
+
+  <div class="wizard-step" data-step="detect" hidden>
+    <h2>Looking for NinjaTrader&hellip;</h2>
+    <p data-region="detect-status">Checking your Documents folder&hellip;</p>
+  </div>
+
+  <div class="wizard-step" data-step="install-offer" hidden>
+    <h2>Install the ExecutionExporter indicator?</h2>
+    <p>Found NinjaTrader 8 at <code data-region="indicators-path"></code>.</p>
+    <p>I can copy the ExecutionExporter indicator into your Indicators folder.
+       It will be configured to write CSVs to your logger inbox.</p>
+    <button type="button" data-action="install-indicator">Install indicator</button>
+    <button type="button" data-action="manual">I'll do it myself</button>
+  </div>
+
+  <div class="wizard-step" data-step="manual" hidden>
+    <h2>Install the indicator manually</h2>
+    <ol>
+      <li>Copy <code>ExecutionExporter.cs</code> (button below) to NinjaTrader's
+          <code>Documents\NinjaTrader 8\bin\Custom\Indicators\</code> folder.</li>
+      <li>Open (or restart) NinjaTrader 8.</li>
+      <li>Press <kbd>F11</kbd> to open the NinjaScript Editor.</li>
+      <li>Press <kbd>F5</kbd> to compile.</li>
+      <li>Add the <em>ExecutionExporter</em> indicator to any chart.</li>
+    </ol>
+    <button type="button" data-action="download-cs">Download ExecutionExporter.cs</button>
+    <button type="button" data-action="next-manual">I've done this - continue</button>
+  </div>
+
+  <div class="wizard-step" data-step="followup" hidden>
+    <h2>Final NinjaTrader steps</h2>
+    <ol>
+      <li>Open (or restart) NinjaTrader 8.</li>
+      <li>Press <kbd>F11</kbd> to open the NinjaScript Editor.</li>
+      <li>Press <kbd>F5</kbd> to compile. ExecutionExporter should appear in the Indicators list.</li>
+      <li>Right-click any chart &rarr; Indicators &rarr; add <em>ExecutionExporter</em>.</li>
+    </ol>
+    <p data-region="verify-status">Waiting for your first export&hellip;</p>
+    <a href="#" data-action="skip">Skip - I'll verify later</a>
+  </div>
+
+  <div class="wizard-step" data-step="done" hidden>
+    <h2>Receiving executions &#x2713;</h2>
+    <p>Your logger is connected to NinjaTrader. You can revisit these steps later under
+       Settings &rsaquo; NinjaTrader Connection.</p>
+    <button type="button" data-action="finish">Finish</button>
+  </div>
+
+</section>
+
+<script type="module" src="{{ url_for('static', filename='js/first_run.js') }}"></script>
 {% endblock %}
