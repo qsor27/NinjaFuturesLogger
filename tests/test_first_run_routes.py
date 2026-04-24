@@ -4,6 +4,7 @@ import pytest
 
 from app import create_app
 from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
+from services.preferences import get_preference
 
 
 def _build_config(tmp_path: Path) -> Config:
@@ -63,3 +64,42 @@ def test_detect_nt_returns_found_when_indicators_dir_exists(client, tmp_path):
     body = resp.get_json()
     assert body["found"] is True
     assert body["indicators_path"].endswith("Indicators")
+
+
+def test_install_indicator_copies_file_and_sets_preference(client, tmp_path, monkeypatch):
+    dest_dir = tmp_path / "indicators"
+    dest_dir.mkdir()
+
+    # Point the source-file resolver at a synthesized source
+    src = tmp_path / "src" / "ExecutionExporter.cs"
+    src.parent.mkdir()
+    src.write_text("// source")
+    monkeypatch.setenv("FTL_NT_INDICATOR_SOURCE", str(src))
+
+    resp = client.post(
+        "/api/first-run/install-indicator",
+        json={"dest_dir": str(dest_dir), "on_conflict": "overwrite"},
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["success"] is True
+    assert body["dest_path"].endswith("ExecutionExporter.cs")
+    assert (dest_dir / "ExecutionExporter.cs").read_text() == "// source"
+
+    db_path = client.application.config["FTL_DB_PATH"]
+    assert get_preference(db_path, "indicator_installed_at") is not None
+
+
+def test_install_indicator_rejects_missing_body(client):
+    resp = client.post("/api/first-run/install-indicator", json={})
+    assert resp.status_code == 400
+
+
+def test_install_indicator_rejects_bad_on_conflict_value(client, tmp_path):
+    dest_dir = tmp_path / "indicators"
+    dest_dir.mkdir()
+    resp = client.post(
+        "/api/first-run/install-indicator",
+        json={"dest_dir": str(dest_dir), "on_conflict": "nuke"},
+    )
+    assert resp.status_code == 400
