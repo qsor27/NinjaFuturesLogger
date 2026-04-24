@@ -3,6 +3,18 @@
 {% block content %}
 <h1>System Health</h1>
 <div id="healthz-section"></div>
+<section id="support-bundle-section">
+  <h2>Support Bundle</h2>
+  <p class="muted">
+    Download a zip containing recent logs, fetch attempts, gap reports, breaker state,
+    integrity issues, import runs, app config, and a version stamp. Send this file
+    to whoever is helping you troubleshoot.
+  </p>
+  <label for="support-bundle-days">Days of history:</label>
+  <input type="number" id="support-bundle-days" min="1" max="180" value="7" />
+  <button id="support-bundle-btn" type="button">Download Support Bundle</button>
+  <span id="support-bundle-status" style="margin-left: 12px"></span>
+</section>
 <h2>APScheduler Jobs</h2>
 <div id="jobs-table"></div>
 <h2>Thread Pool</h2>

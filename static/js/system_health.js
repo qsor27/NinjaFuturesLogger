@@ -5,6 +5,7 @@ initSystemHealth();
 async function initSystemHealth() {
   await renderHealthz();
   await renderHealth();
+  initSupportBundle();
   setupAutoRefresh();
 }
 
@@ -148,4 +149,27 @@ function escHtml(s) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function initSupportBundle() {
+  const btn = document.getElementById("support-bundle-btn");
+  const daysInput = document.getElementById("support-bundle-days");
+  const status = document.getElementById("support-bundle-status");
+  if (!btn || !daysInput || !status) return;
+
+  btn.addEventListener("click", () => {
+    const raw = daysInput.value.trim();
+    const days = Number.parseInt(raw, 10);
+    if (!Number.isFinite(days) || days < 1 || days > 180) {
+      status.style.color = "#f43f5e";
+      status.textContent = "Days must be between 1 and 180.";
+      return;
+    }
+    status.style.color = "";
+    status.textContent = "Preparing…";
+    window.location.href = `/api/support/bundle?days=${days}`;
+    setTimeout(() => {
+      status.textContent = "Download should have started. Check your Downloads folder.";
+    }, 1500);
+  });
 }
