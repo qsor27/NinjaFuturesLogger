@@ -103,3 +103,28 @@ def test_install_indicator_rejects_bad_on_conflict_value(client, tmp_path):
         json={"dest_dir": str(dest_dir), "on_conflict": "nuke"},
     )
     assert resp.status_code == 400
+
+
+def test_inbox_status_empty(client):
+    resp = client.get("/api/first-run/inbox-status")
+    assert resp.status_code == 200
+    assert resp.get_json() == {
+        "files_count": 0,
+        "last_csv_name": None,
+        "last_csv_mtime": None,
+    }
+
+
+def test_inbox_status_reports_latest(client):
+    inbox = Path(client.application.config["FTL_INBOX_DIR"])
+    (inbox / "NinjaTrader_Executions_20250101.csv").write_text("header\n")
+    (inbox / "NinjaTrader_Executions_20250102.csv").write_text("header\n")
+    resp = client.get("/api/first-run/inbox-status")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["files_count"] == 2
+    assert body["last_csv_name"] in {
+        "NinjaTrader_Executions_20250101.csv",
+        "NinjaTrader_Executions_20250102.csv",
+    }
+    assert isinstance(body["last_csv_mtime"], int)

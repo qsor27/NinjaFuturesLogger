@@ -83,4 +83,21 @@ def build_first_run_blueprint() -> Blueprint:
             }
         )
 
+    @bp.get("/api/first-run/inbox-status")
+    def inbox_status():
+        inbox = Path(current_app.config["FTL_INBOX_DIR"])
+        if not inbox.is_dir():
+            return jsonify({"files_count": 0, "last_csv_name": None, "last_csv_mtime": None})
+        files = sorted(inbox.glob("NinjaTrader_Executions_*.csv"))
+        if not files:
+            return jsonify({"files_count": 0, "last_csv_name": None, "last_csv_mtime": None})
+        latest = max(files, key=lambda p: p.stat().st_mtime)
+        return jsonify(
+            {
+                "files_count": len(files),
+                "last_csv_name": latest.name,
+                "last_csv_mtime": int(latest.stat().st_mtime),
+            }
+        )
+
     return bp
