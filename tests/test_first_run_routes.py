@@ -46,3 +46,20 @@ def test_first_run_page_renders(client):
     resp = client.get("/first-run")
     assert resp.status_code == 200
     assert b"first-run-root" in resp.data
+
+
+def test_detect_nt_returns_not_found_for_empty_override(client, tmp_path):
+    resp = client.get(f"/api/first-run/detect-nt?documents={tmp_path}")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body == {"found": False, "indicators_path": None}
+
+
+def test_detect_nt_returns_found_when_indicators_dir_exists(client, tmp_path):
+    indicators = tmp_path / "NinjaTrader 8" / "bin" / "Custom" / "Indicators"
+    indicators.mkdir(parents=True)
+    resp = client.get(f"/api/first-run/detect-nt?documents={tmp_path}")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["found"] is True
+    assert body["indicators_path"].endswith("Indicators")
