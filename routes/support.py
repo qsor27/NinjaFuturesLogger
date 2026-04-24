@@ -3,8 +3,11 @@ from pathlib import Path
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
+from logging_config import get_logger
 from services.support_bundle import build_bundle
 from services.version import get_version
+
+log = get_logger("http.support")
 
 MIN_DAYS = 1
 MAX_DAYS = 180
@@ -32,6 +35,7 @@ def build_support_blueprint() -> Blueprint:
         try:
             system_health = services.system_health_snapshot()
         except Exception:
+            log.exception("system_health_snapshot failed during bundle build")
             system_health = {"error": "system_health_snapshot raised"}
 
         now = int(time.time())
@@ -43,6 +47,10 @@ def build_support_blueprint() -> Blueprint:
             days=days,
             now=now,
             system_health=system_health,
+        )
+        log.info(
+            "support_bundle_issued",
+            extra={"days": days, "bytes": len(payload)},
         )
         filename = f"support-bundle-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime(now))}.zip"
         return Response(
