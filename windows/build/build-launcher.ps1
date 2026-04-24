@@ -8,11 +8,19 @@ $ErrorActionPreference = "Stop"
 $RepoRoot    = Resolve-Path "$PSScriptRoot\..\..\"
 $LauncherDir = Join-Path $RepoRoot "windows\launcher"
 $PayloadDir  = Join-Path $RepoRoot "windows\payload"
-$GoExe       = "C:\Program Files\Go\bin\go.exe"
 
-if (-not (Test-Path $GoExe)) {
-    throw "Go not found at $GoExe. Install via 'winget install GoLang.Go' and retry."
+# Locate Go. Local dev typically has it at "C:\Program Files\Go\bin\go.exe";
+# GitHub Actions' actions/setup-go@v5 puts it under C:\hostedtoolcache\...
+# and adds it to PATH. Check PATH first, then the local-dev fallback.
+$goOnPath = Get-Command go -ErrorAction SilentlyContinue
+if ($goOnPath) {
+    $GoExe = $goOnPath.Source
+} elseif (Test-Path "C:\Program Files\Go\bin\go.exe") {
+    $GoExe = "C:\Program Files\Go\bin\go.exe"
+} else {
+    throw "Go not found. Install via 'winget install GoLang.Go' (local) or add actions/setup-go@v5 (CI) and retry."
 }
+Write-Host "Using Go: $GoExe"
 if (-not (Test-Path $PayloadDir)) {
     New-Item -ItemType Directory -Force -Path $PayloadDir | Out-Null
 }
