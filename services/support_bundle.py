@@ -5,7 +5,6 @@ recent observability rows from SQLite, JSON log files, app config,
 instrument registry, and a version stamp. Read-only — no side effects.
 """
 
-import sqlite3
 from pathlib import Path
 
 from db import connect
@@ -49,11 +48,7 @@ def snapshot_db(
             else:
                 sql = f"SELECT * FROM {table} ORDER BY {order_by} LIMIT ?"
                 rows = conn.execute(sql, (MAX_ROWS_PER_TABLE,)).fetchall()
-            out[table] = [_row_to_dict(r) for r in rows]
+            out[table] = [dict(r) for r in rows]
     finally:
         conn.close()
     return out
-
-
-def _row_to_dict(row: sqlite3.Row) -> dict:
-    return {k: row[k] for k in row.keys()}
