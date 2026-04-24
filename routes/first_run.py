@@ -6,6 +6,7 @@ Surfaces:
   POST /api/first-run/install-indicator    - Task 7
   GET  /api/first-run/inbox-status         - Task 8
   POST /api/first-run/complete             - Task 9
+  GET  /api/first-run/indicator-path       - Task 2
 """
 
 import os
@@ -104,5 +105,15 @@ def build_first_run_blueprint() -> Blueprint:
     def complete():
         set_preference(current_app.config["FTL_DB_PATH"], "first_run_complete", "true")
         return jsonify({"success": True})
+
+    @bp.get("/api/first-run/indicator-path")
+    def indicator_path():
+        source = _resolve_source()
+        return jsonify(
+            {
+                "path": str(source),
+                "exists": source.is_file(),
+            }
+        )
 
     return bp

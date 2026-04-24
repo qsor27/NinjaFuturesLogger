@@ -145,3 +145,27 @@ def test_complete_is_idempotent(client):
     resp = client.post("/api/first-run/complete")
     assert resp.status_code == 200
     assert get_preference(db_path, "first_run_complete") == "true"
+
+
+def test_indicator_path_reports_existing_file(client, tmp_path, monkeypatch):
+    src = tmp_path / "src" / "ExecutionExporter.cs"
+    src.parent.mkdir()
+    src.write_text("// fixture")
+    monkeypatch.setenv("FTL_NT_INDICATOR_SOURCE", str(src))
+
+    resp = client.get("/api/first-run/indicator-path")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["path"] == str(src)
+    assert body["exists"] is True
+
+
+def test_indicator_path_reports_missing_file(client, tmp_path, monkeypatch):
+    missing = tmp_path / "nope.cs"
+    monkeypatch.setenv("FTL_NT_INDICATOR_SOURCE", str(missing))
+
+    resp = client.get("/api/first-run/indicator-path")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["path"] == str(missing)
+    assert body["exists"] is False
