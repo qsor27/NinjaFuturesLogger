@@ -128,3 +128,20 @@ def test_inbox_status_reports_latest(client):
         "NinjaTrader_Executions_20250102.csv",
     }
     assert isinstance(body["last_csv_mtime"], int)
+
+
+def test_complete_sets_preference(client):
+    db_path = client.application.config["FTL_DB_PATH"]
+    assert get_preference(db_path, "first_run_complete") is None
+    resp = client.post("/api/first-run/complete")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"success": True}
+    assert get_preference(db_path, "first_run_complete") == "true"
+
+
+def test_complete_is_idempotent(client):
+    db_path = client.application.config["FTL_DB_PATH"]
+    client.post("/api/first-run/complete")
+    resp = client.post("/api/first-run/complete")
+    assert resp.status_code == 200
+    assert get_preference(db_path, "first_run_complete") == "true"

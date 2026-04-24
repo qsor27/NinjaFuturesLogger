@@ -100,4 +100,9 @@ def build_first_run_blueprint() -> Blueprint:
             }
         )
 
+    @bp.post("/api/first-run/complete")
+    def complete():
+        set_preference(current_app.config["FTL_DB_PATH"], "first_run_complete", "true")
+        return jsonify({"success": True})
+
     return bp
