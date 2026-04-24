@@ -1,0 +1,24 @@
+<section class="settings-panel" id="windows-port-panel"
+         data-endpoint="/api/settings/windows-port">
+  <h2>Windows Launcher Port</h2>
+  <p style="color: var(--text-secondary); font-size: 13px; margin-top: 0;">
+    TCP port the Windows desktop launcher binds to when starting the app.
+    Only applies to the Windows installer deployment &mdash; has no effect
+    in Docker. Changes take effect the next time you launch the app.
+  </p>
+
+  <dl class="settings-keyvalue">
+    <dt>Current port</dt>
+    <dd><code data-field="port">&hellip;</code></dd>
+  </dl>
+
+  <div class="settings-actions" style="display: flex; gap: 12px; align-items: center;">
+    <label>
+      New port:
+      <input type="number" data-field="port-input" min="1024" max="65535" style="width: 100px;">
+    </label>
+    <button type="button" data-action="save">Save</button>
+    <span data-region="status" aria-live="polite" style="color: var(--text-secondary); font-size: 13px;"></span>
+  </div>
+</section>
+<script type="module" src="{{ url_for('static', filename='js/windows_port.js') }}"></script>
