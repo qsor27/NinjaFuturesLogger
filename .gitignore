@@ -38,3 +38,4 @@ windows/launcher/resource.syso
 # Go build outputs in launcher source dir (local test builds)
 windows/launcher/launcher
 windows/launcher/launcher.exe
+windows/launcher/versioninfo.build.json

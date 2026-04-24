@@ -2,7 +2,12 @@
 ; Per-user install, no UAC.
 
 #define MyAppName        "NinjaFuturesLogger"
-#define MyAppVersion     "0.1.0"
+; MyAppVersion is normally supplied by build-installer.ps1 via
+;   iscc /DMyAppVersion=v1.2.3 installer.iss
+; Fall back to a placeholder for direct manual compiles.
+#ifndef MyAppVersion
+  #define MyAppVersion   "0.0.0-dev"
+#endif
 #define MyAppPublisher   "qsor27"
 #define MyAppExeName     "NinjaFuturesLogger.exe"
 #define MyAppId          "{{NFL-2CAE-4A1B-B1C1-6D9A28E}}"

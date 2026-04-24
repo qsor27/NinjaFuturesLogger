@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// Version is set at build time via `-ldflags -X main.Version=v1.2.3`.
+// Matches the Docker image tag and the Windows installer filename — all
+// three come from windows/build/resolve-version.ps1.
+var Version = "dev"
+
 // lg is set once ResolveDataDir succeeds. Before that, fatalError has no
 // log to write to (falls back to MessageBox-only).
 var lg *Logger
@@ -33,7 +38,7 @@ func main() {
 	lg, _ = NewLogger(logPath)
 	defer lg.Close()
 
-	lg.Info("launcher_start", "version", "0.1.0", "data_dir", dataDir)
+	lg.Info("launcher_start", "version", Version, "data_dir", dataDir)
 
 	port, err := ReadPort(dataDir)
 	if err != nil {

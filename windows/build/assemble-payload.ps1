@@ -90,6 +90,17 @@ New-Item -ItemType Directory -Force -Path $NinjaDir | Out-Null
 Copy-Item (Join-Path $RepoRoot "ninjascript\*.cs") -Destination $NinjaDir -Force
 
 Write-Host ""
+Write-Host "Writing version.txt..."
+. "$PSScriptRoot\resolve-version.ps1"
+$v = Resolve-Version
+$versionFile = Join-Path $PayloadRoot "version.txt"
+@(
+    "image_tag=$($v.Display)",
+    "git_sha=$($v.GitSha)",
+    "built_at=$($v.BuiltAt)"
+) | Set-Content -Path $versionFile -Encoding ascii
+Write-Host "  version.txt      $($v.Display) @ $($v.GitSha)"
+
 Write-Host "Payload assembled at $PayloadRoot"
 Write-Host "  python/          $(if (Test-Path (Join-Path $PythonDir 'python.exe')) { 'OK' } else { 'MISSING' })"
 Write-Host "  site-packages/   $(((Get-ChildItem $SitePkgs -Directory) | Measure-Object).Count) packages"

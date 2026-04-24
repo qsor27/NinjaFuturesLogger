@@ -28,8 +28,15 @@ Write-Host "Using ISCC: $iscc"
 
 $iss = Join-Path $RepoRoot "windows\installer\installer.iss"
 
+# Resolve version; override the #define in installer.iss via /D so the
+# installer filename, Apps & Features registry entry, and wizard UI all
+# match the Docker image tag.
+. "$PSScriptRoot\resolve-version.ps1"
+$v = Resolve-Version
+Write-Host "Version: $($v.Display)"
+
 Write-Host "Compiling $iss ..."
-& $iscc $iss
+& $iscc "/DMyAppVersion=$($v.Display)" $iss
 if ($LASTEXITCODE -ne 0) {
     throw "Inno Setup compilation failed with exit code $LASTEXITCODE"
 }

@@ -22,6 +22,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history + tags so windows/build/resolve-version.ps1 can run
+          # `git describe --tags` on manual workflow_dispatch runs where
+          # github.ref_name isn't an authoritative version.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
