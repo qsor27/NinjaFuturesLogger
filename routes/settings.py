@@ -191,6 +191,32 @@ def build_settings_blueprint() -> Blueprint:
         current_app.config["FTL_CONFIG"] = load_config(cfg_path)
         return jsonify({"theme": value})
 
+    # ---- windows launcher port ----
+
+    @bp.get("/api/settings/windows-port")
+    def get_windows_port():
+        cfg = current_app.config["FTL_CONFIG"]
+        return jsonify({"port": cfg.windows.port})
+
+    @bp.put("/api/settings/windows-port")
+    def put_windows_port():
+        from config import save_windows_port
+
+        body = request.get_json(silent=True) or {}
+        value = body.get("port")
+        if not isinstance(value, int) or isinstance(value, bool):
+            return jsonify({"error": "port must be an integer"}), 400
+        if value < 1024 or value > 65535:
+            return jsonify({"error": "port must be in [1024, 65535]"}), 400
+
+        cfg_path = current_app.config["FTL_CONFIG_PATH"]
+        try:
+            save_windows_port(cfg_path, value)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        current_app.config["FTL_CONFIG"] = load_config(cfg_path)
+        return jsonify({"port": value, "restart_required": True})
+
     # ---- custom field definitions ----
 
     def _svc():
