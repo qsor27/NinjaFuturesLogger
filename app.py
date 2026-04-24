@@ -23,6 +23,7 @@ from routes.pages import build_pages_blueprint
 from routes.positions import build_positions_blueprint
 from routes.settings import build_settings_blueprint
 from routes.stats import build_stats_blueprint
+from routes.support import build_support_blueprint
 from routes.user_metadata import build_user_metadata_blueprint
 from services.import_pipeline import ImportPipeline
 from services.import_watchdog import TickHandler
@@ -112,6 +113,7 @@ def create_app(
     app.config["HEARTBEAT_SECONDS"] = config.scheduler.heartbeat_seconds
     app.config["FTL_CONFIG"] = config
     app.config["FTL_CONFIG_PATH"] = str(Path(config.data_dir) / "config" / "app.json")
+    app.config["FTL_LOG_DIR"] = config.log_dir
     app.config["FTL_DB_PATH"] = config.db_path
     app.config["FTL_INBOX_DIR"] = config.inbox_dir
     app.config["FTL_IMPORT_PIPELINE"] = pipeline
@@ -139,6 +141,7 @@ def create_app(
     app.register_blueprint(build_stats_blueprint())
     app.register_blueprint(build_monitoring_blueprint())
     app.register_blueprint(build_filter_defaults_blueprint())
+    app.register_blueprint(build_support_blueprint())
 
     services.scheduler.add_job(
         lambda: pipeline.scan_inbox(config.inbox_dir),
