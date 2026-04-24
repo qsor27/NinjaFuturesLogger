@@ -1,8 +1,17 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, current_app, redirect, render_template, url_for
+
+from services.preferences import get_preference
 
 
 def build_pages_blueprint() -> Blueprint:
     bp = Blueprint("pages", __name__)
+
+    @bp.get("/")
+    def root():
+        first_run_done = get_preference(current_app.config["FTL_DB_PATH"], "first_run_complete")
+        if not first_run_done:
+            return redirect(url_for("first_run.first_run_page"))
+        return redirect(url_for("pages.positions_list"))
 
     @bp.get("/positions")
     def positions_list():
