@@ -48,7 +48,8 @@ def create_app(
     start_background: bool = False,
 ) -> tuple[Flask, BackgroundServices]:
     """Build the Flask app and its BackgroundServices container."""
-    configure_logging(level="INFO")
+    log_file = Path(config.log_dir) / "app.jsonl"
+    configure_logging(level="INFO", log_file=log_file)
 
     conn = connect(config.db_path)
     try:

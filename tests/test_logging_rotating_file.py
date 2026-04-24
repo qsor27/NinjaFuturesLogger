@@ -58,3 +58,42 @@ def test_file_handler_rotates_by_size(tmp_path: Path):
         for h in list(logging.getLogger().handlers):
             h.close()
             logging.getLogger().removeHandler(h)
+
+
+def test_create_app_attaches_file_handler(tmp_path: Path, monkeypatch):
+    from logging.handlers import RotatingFileHandler
+
+    from app import create_app
+    from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
+
+    data_dir = tmp_path / "data"
+    (data_dir / "config").mkdir(parents=True)
+    (data_dir / "inbox").mkdir()
+    (data_dir / "archive").mkdir()
+    (data_dir / "logs").mkdir()
+
+    cfg = Config(
+        data_dir=str(data_dir),
+        db_path=str(data_dir / "trading_log.db"),
+        inbox_dir=str(data_dir / "inbox"),
+        archive_dir=str(data_dir / "archive"),
+        log_dir=str(data_dir / "logs"),
+        session=SessionConfig(
+            exchange_timezone="America/Chicago",
+            trade_date_rollover="16:00",
+            archive_job_time="18:00",
+        ),
+        thread_pool=ThreadPoolConfig(max_workers=4),
+        scheduler=SchedulerConfig(heartbeat_seconds=60),
+    )
+
+    try:
+        app, services = create_app(cfg, start_background=False)
+        root = logging.getLogger()
+        rfhs = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
+        assert len(rfhs) == 1
+        assert Path(rfhs[0].baseFilename) == data_dir / "logs" / "app.jsonl"
+    finally:
+        for h in list(logging.getLogger().handlers):
+            h.close()
+            logging.getLogger().removeHandler(h)
