@@ -24,6 +24,7 @@ from routes.pages import build_pages_blueprint
 from routes.positions import build_positions_blueprint
 from routes.settings import build_settings_blueprint
 from routes.stats import build_stats_blueprint
+from routes.nt_connection import build_nt_connection_blueprint
 from routes.support import build_support_blueprint
 from routes.user_metadata import build_user_metadata_blueprint
 from services.import_pipeline import ImportPipeline
@@ -143,6 +144,7 @@ def create_app(
     app.register_blueprint(build_monitoring_blueprint())
     app.register_blueprint(build_filter_defaults_blueprint())
     app.register_blueprint(build_first_run_blueprint())
+    app.register_blueprint(build_nt_connection_blueprint())
     app.register_blueprint(build_support_blueprint())
 
     services.scheduler.add_job(
