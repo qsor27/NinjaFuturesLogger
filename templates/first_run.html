@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}First-Run Setup{% endblock %}
+{% block content %}
+<div id="first-run-root" data-endpoint-detect="/api/first-run/detect-nt"
+                          data-endpoint-install="/api/first-run/install-indicator"
+                          data-endpoint-inbox="/api/first-run/inbox-status"
+                          data-endpoint-complete="/api/first-run/complete">
+  <h1>First-run setup</h1>
+  <p>Wizard UI lands in Task 12.</p>
+</div>
+{% endblock %}
