@@ -1,0 +1,130 @@
+//@version=6
+indicator("Rejection Levels", overlay = true, max_boxes_count = 500, max_labels_count = 500)
+
+// ---------- Inputs ----------
+swingLen       = input.int(1, "Swing sensitivity (bars each side)", minval = 1)
+maxLevels      = input.int(3, "Levels to show (per side)", minval = 1)
+zoneOpacity    = input.int(80, "Zone opacity", minval = 0, maxval = 100)
+showBorder     = input.bool(false, "Show border")
+confirmOnClose = input.bool(true, "Confirm break on bar close only")
+showLongs      = input.bool(true, "Longs (rejection highs → new low)")
+showShorts     = input.bool(true, "Shorts (rejection lows → new high)")
+markerSizeStr  = input.string("Large", "Marker size", options = ["Tiny", "Small", "Normal", "Large", "Huge"])
+
+markerSize = switch markerSizeStr
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Huge"   => size.huge
+    => size.large
+
+// ---------- Palette ----------
+// Each zone + its marker share a color; the shared counter cycles hue so
+// adjacent levels stay distinct. Long zones sit above their low marker (⌃),
+// short zones below their high marker (⌄).
+var array<color> palette = array.from(color.orange, color.aqua, color.fuchsia, color.lime, color.yellow, color.red)
+var int colorIdx = 0
+
+// =====================================================================
+// LONG side: a rejection HIGH (peak of a failed bounce) before a new LOW
+// =====================================================================
+plL = showLongs ? ta.pivotlow(swingLen, swingLen) : na
+
+var float lSwing    = na
+var int   lSwingBar = na
+var bool  lArmed    = false
+var bool  lAwait    = false
+var color lPendCol  = na
+var array<box>   lBoxes = array.new<box>()
+var array<label> lMarks = array.new<label>()
+
+if not na(plL)
+    lb = bar_index - swingLen
+    // Drop the pending box's low marker onto this swing low (the new-low candle).
+    if lAwait
+        m = label.new(lb, na, "⌃", yloc = yloc.belowbar, style = label.style_none, textcolor = lPendCol, size = markerSize)
+        array.push(lMarks, m)
+        while array.size(lBoxes) > maxLevels
+            box.delete(array.shift(lBoxes))
+        while array.size(lMarks) > maxLevels
+            label.delete(array.shift(lMarks))
+        lAwait := false
+    lSwing    := plL
+    lSwingBar := lb
+    lArmed    := true
+
+lBroke = lArmed and not na(lSwing) and close < lSwing
+lFire  = lBroke and (not confirmOnClose or barstate.isconfirmed)
+if lFire
+    lookback = bar_index - lSwingBar
+    scanTo   = math.min(lookback - 1, 200)
+    float topH   = na
+    int   topOff = na
+    for i = 1 to scanTo
+        if na(topH) or high[i] > topH
+            topH   := high[i]
+            topOff := i
+    if not na(topOff) and topH > lSwing
+        baseCol  = array.get(palette, colorIdx % array.size(palette))
+        colorIdx += 1
+        rTop = topH                              // wick high (top of zone)
+        rBot = math.max(open[topOff], close[topOff])   // body top (bottom of zone)
+        rBar = bar_index - topOff
+        bcol = showBorder ? baseCol : color.new(baseCol, 100)
+        b = box.new(rBar, rTop, bar_index, rBot, bgcolor = color.new(baseCol, zoneOpacity), border_color = bcol, extend = extend.right)
+        array.push(lBoxes, b)
+        lPendCol := baseCol
+        lAwait   := true
+    lArmed := false
+
+// =====================================================================
+// SHORT side: a rejection LOW (trough of a failed dip) before a new HIGH
+// =====================================================================
+phS = showShorts ? ta.pivothigh(swingLen, swingLen) : na
+
+var float sSwing    = na
+var int   sSwingBar = na
+var bool  sArmed    = false
+var bool  sAwait    = false
+var color sPendCol  = na
+var array<box>   sBoxes = array.new<box>()
+var array<label> sMarks = array.new<label>()
+
+if not na(phS)
+    hb = bar_index - swingLen
+    // Drop the pending box's high marker onto this swing high (the new-high candle).
+    if sAwait
+        m = label.new(hb, na, "⌄", yloc = yloc.abovebar, style = label.style_none, textcolor = sPendCol, size = markerSize)
+        array.push(sMarks, m)
+        while array.size(sBoxes) > maxLevels
+            box.delete(array.shift(sBoxes))
+        while array.size(sMarks) > maxLevels
+            label.delete(array.shift(sMarks))
+        sAwait := false
+    sSwing    := phS
+    sSwingBar := hb
+    sArmed    := true
+
+sBroke = sArmed and not na(sSwing) and close > sSwing
+sFire  = sBroke and (not confirmOnClose or barstate.isconfirmed)
+if sFire
+    lookback = bar_index - sSwingBar
+    scanTo   = math.min(lookback - 1, 200)
+    float botL   = na
+    int   botOff = na
+    for i = 1 to scanTo
+        if na(botL) or low[i] < botL
+            botL   := low[i]
+            botOff := i
+    if not na(botOff) and botL < sSwing
+        baseCol  = array.get(palette, colorIdx % array.size(palette))
+        colorIdx += 1
+        rTop = math.min(open[botOff], close[botOff])   // body bottom (top of zone)
+        rBot = botL                              // wick low (bottom of zone)
+        rBar = bar_index - botOff
+        bcol = showBorder ? baseCol : color.new(baseCol, 100)
+        b = box.new(rBar, rTop, bar_index, rBot, bgcolor = color.new(baseCol, zoneOpacity), border_color = bcol, extend = extend.right)
+        array.push(sBoxes, b)
+        sPendCol := baseCol
+        sAwait   := true
+    sArmed := false
