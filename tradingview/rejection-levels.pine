@@ -6,6 +6,7 @@ swingLen       = input.int(1, "Swing sensitivity (bars each side)", minval = 1)
 maxLevels      = input.int(3, "Levels to show (per side)", minval = 1)
 zoneOpacity    = input.int(80, "Zone opacity", minval = 0, maxval = 100)
 showBorder     = input.bool(false, "Show border")
+stopOnClose    = input.bool(false, "Stop extending when price closes back through")
 confirmOnClose = input.bool(true, "Confirm break on bar close only")
 showLongs      = input.bool(true, "Longs (rejection highs → new low)")
 showShorts     = input.bool(true, "Shorts (rejection lows → new high)")
@@ -17,6 +18,8 @@ markerSize = switch markerSizeStr
     "Normal" => size.normal
     "Huge"   => size.huge
     => size.large
+
+boxExtend = stopOnClose ? extend.none : extend.right
 
 // ---------- Palette ----------
 // Each zone + its marker share a color; the shared counter cycles hue so
@@ -35,8 +38,9 @@ var int   lSwingBar = na
 var bool  lArmed    = false
 var bool  lAwait    = false
 var color lPendCol  = na
-var array<box>   lBoxes = array.new<box>()
-var array<label> lMarks = array.new<label>()
+var array<box>   lBoxes  = array.new<box>()
+var array<label> lMarks  = array.new<label>()
+var array<bool>  lActive = array.new<bool>()   // still extending right?
 
 if not na(plL)
     lb = bar_index - swingLen
@@ -44,8 +48,10 @@ if not na(plL)
     if lAwait
         m = label.new(lb, na, "⌃", yloc = yloc.belowbar, style = label.style_none, textcolor = lPendCol, size = markerSize)
         array.push(lMarks, m)
+        // Trim boxes (+ their active flag) and markers together so they stay aligned.
         while array.size(lBoxes) > maxLevels
             box.delete(array.shift(lBoxes))
+            array.shift(lActive)
         while array.size(lMarks) > maxLevels
             label.delete(array.shift(lMarks))
         lAwait := false
@@ -71,11 +77,21 @@ if lFire
         rBot = math.max(open[topOff], close[topOff])   // body top (bottom of zone)
         rBar = bar_index - topOff
         bcol = showBorder ? baseCol : color.new(baseCol, 100)
-        b = box.new(rBar, rTop, bar_index, rBot, bgcolor = color.new(baseCol, zoneOpacity), border_color = bcol, extend = extend.right)
+        b = box.new(rBar, rTop, bar_index, rBot, bgcolor = color.new(baseCol, zoneOpacity), border_color = bcol, extend = boxExtend)
         array.push(lBoxes, b)
+        array.push(lActive, true)
         lPendCol := baseCol
         lAwait   := true
     lArmed := false
+
+// Keep active long zones extending; freeze any that price closes above (through the top).
+if stopOnClose
+    for i = 0 to array.size(lBoxes) - 1
+        if array.get(lActive, i)
+            bx = array.get(lBoxes, i)
+            box.set_right(bx, bar_index)
+            if close > box.get_top(bx)
+                array.set(lActive, i, false)
 
 // =====================================================================
 // SHORT side: a rejection LOW (trough of a failed dip) before a new HIGH
@@ -87,8 +103,9 @@ var int   sSwingBar = na
 var bool  sArmed    = false
 var bool  sAwait    = false
 var color sPendCol  = na
-var array<box>   sBoxes = array.new<box>()
-var array<label> sMarks = array.new<label>()
+var array<box>   sBoxes  = array.new<box>()
+var array<label> sMarks  = array.new<label>()
+var array<bool>  sActive = array.new<bool>()
 
 if not na(phS)
     hb = bar_index - swingLen
@@ -98,6 +115,7 @@ if not na(phS)
         array.push(sMarks, m)
         while array.size(sBoxes) > maxLevels
             box.delete(array.shift(sBoxes))
+            array.shift(sActive)
         while array.size(sMarks) > maxLevels
             label.delete(array.shift(sMarks))
         sAwait := false
@@ -123,8 +141,18 @@ if sFire
         rBot = botL                              // wick low (bottom of zone)
         rBar = bar_index - botOff
         bcol = showBorder ? baseCol : color.new(baseCol, 100)
-        b = box.new(rBar, rTop, bar_index, rBot, bgcolor = color.new(baseCol, zoneOpacity), border_color = bcol, extend = extend.right)
+        b = box.new(rBar, rTop, bar_index, rBot, bgcolor = color.new(baseCol, zoneOpacity), border_color = bcol, extend = boxExtend)
         array.push(sBoxes, b)
+        array.push(sActive, true)
         sPendCol := baseCol
         sAwait   := true
     sArmed := false
+
+// Keep active short zones extending; freeze any that price closes below (through the bottom).
+if stopOnClose
+    for i = 0 to array.size(sBoxes) - 1
+        if array.get(sActive, i)
+            bx = array.get(sBoxes, i)
+            box.set_right(bx, bar_index)
+            if close < box.get_bottom(bx)
+                array.set(sActive, i, false)
