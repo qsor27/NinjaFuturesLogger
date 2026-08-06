@@ -39,6 +39,23 @@ def _is_in_break(ts: int, tz: ZoneInfo, break_start: time, break_end: time) -> b
     return local >= break_start or local < break_end
 
 
+def _is_in_weekend_closure(ts: int, tz: ZoneInfo, close_t: time, open_t: time) -> bool:
+    """Is this UTC unix timestamp inside the weekly closure (Friday session
+    close → Sunday session open, in the instrument's exchange timezone)?
+    CME-style futures don't trade Saturday at all; no provider ever has
+    bars there, so those slots must never count as expected."""
+    local = datetime.fromtimestamp(ts, tz=UTC).astimezone(tz)
+    weekday = local.weekday()
+    lt = local.time()
+    if weekday == 4:  # Friday: closed from session close onward
+        return lt >= close_t
+    if weekday == 5:  # Saturday: closed all day
+        return True
+    if weekday == 6:  # Sunday: closed until session open
+        return lt < open_t
+    return False
+
+
 def expected_session_slots(
     instrument: str,
     timeframe: str,
@@ -64,6 +81,8 @@ def expected_session_slots(
     # (Mon–Fri). Without this, every Saturday/Sunday slot shows up as a
     # perpetual missing gap that no fetch can ever fill.
     skip_weekends = stride >= 86400
+    close_t = _hhmm(session.close)
+    open_t = _hhmm(session.open)
 
     slots: list[int] = []
     t = aligned_start
@@ -74,6 +93,11 @@ def expected_session_slots(
                 t += stride
                 continue
             if is_full_closure(instrument, t):
+                t += stride
+                continue
+        else:
+            # Intraday: the exchange is closed Friday close → Sunday open.
+            if _is_in_weekend_closure(t, tz, close_t, open_t):
                 t += stride
                 continue
         if not has_break or not _is_in_break(t, tz, bs, be):

@@ -99,6 +99,39 @@ def test_skips_daily_break(migrated_db):
     assert gaps == []
 
 
+def test_no_gap_reported_over_weekend_closure(migrated_db):
+    """CME is closed from Friday 16:00 CT to Sunday 17:00 CT. Intraday
+    timeframes must not report that span as missing bars — no provider
+    will ever have data there."""
+    conn = connect(migrated_db)
+    try:
+        # Fri 2026-04-17 21:00 UTC = 16:00 CT (close) → Sun 2026-04-19
+        # 22:00 UTC = 17:00 CT (reopen).
+        start = _t("2026-04-17T21:00:00")
+        end = _t("2026-04-19T22:00:00")
+        gaps = find_gaps(conn, instrument="MNQ", timeframe="1h", start=start, end=end)
+    finally:
+        conn.close()
+    assert gaps == []
+
+
+def test_friday_and_sunday_session_hours_still_expected():
+    """Weekend skipping must not swallow real session hours on its edges."""
+    from services.ohlc.gap_detection import expected_session_slots
+
+    # Friday 14:00–16:00 CT (19:00–21:00 UTC) is in-session.
+    fri = expected_session_slots(
+        "MNQ", "1h", _t("2026-04-17T19:00:00"), _t("2026-04-17T21:00:00")
+    )
+    assert fri == [_t("2026-04-17T19:00:00"), _t("2026-04-17T20:00:00")]
+
+    # Sunday 17:00–18:00 CT (22:00–23:00 UTC) is in-session (post-reopen).
+    sun = expected_session_slots(
+        "MNQ", "1h", _t("2026-04-19T22:00:00"), _t("2026-04-19T23:00:00")
+    )
+    assert sun == [_t("2026-04-19T22:00:00")]
+
+
 def test_classify_window_marks_slots_beyond_reach_as_out_of_reach(tmp_path):
     from pathlib import Path
 
@@ -124,8 +157,9 @@ def test_classify_window_marks_slots_beyond_reach_as_out_of_reach(tmp_path):
     assert summary["out_of_reach"] > 0
     assert summary["missing"] > 0
     reachable = summary["expected"] - summary["out_of_reach"]
-    # ~30 days of session minutes minus the daily break — roughly 40k slots.
-    assert 35_000 < reachable < 50_000
+    # ~30 days of session minutes minus the daily break and the weekend
+    # closures (Fri close → Sun open) — roughly 29k slots.
+    assert 25_000 < reachable < 33_000
 
 
 def test_classify_window_matches_1d_bars_at_utc_midnight(tmp_path):

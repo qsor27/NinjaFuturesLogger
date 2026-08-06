@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 State = Literal["closed", "open", "half_open"]
 
-FailureClass = Literal["rate_limit", "server_error", "network", "other"]
+FailureClass = Literal["rate_limit", "server_error", "network", "no_data", "other"]
 
 
 class FailureClassification(BaseModel):
@@ -107,6 +107,23 @@ class CircuitBreaker:
         with self._lock:
             now = self._clock()
             cls, retry_after = self._classify(error)
+            if cls == "no_data":
+                # The provider answered; it just has no bars for the range
+                # (delisted contract, beyond-reach history, thin market).
+                # That says nothing about provider health: never count it
+                # toward tripping, and treat a half-open probe that got this
+                # far as proof the transport recovered.
+                self.last_failure_at = now
+                self.last_error = repr(error)
+                self.last_failure_class = cls
+                if self.state == "half_open":
+                    self.state = "closed"
+                    self.consecutive_failures = 0
+                    self.consecutive_trips = 0
+                    self.current_cooldown_seconds = self.base_cooldown_seconds
+                    self.opened_at = None
+                    self.next_retry_at = None
+                return
             self.consecutive_failures += 1
             self.last_failure_at = now
             self.last_error = repr(error)

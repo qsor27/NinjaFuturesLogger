@@ -252,3 +252,56 @@ def test_fetcher_acquires_token_before_source_call(tmp_path):
     assert src.calls == 1
     assert bucket.stats()["acquired_total"] == 1
     assert res.bars_added == 1
+
+
+def test_out_of_reach_gaps_are_never_sent_to_sources(migrated_db, monkeypatch):
+    """yfinance hard-rejects intraday requests older than PROVIDER_REACH
+    ('requested range must be within the last N days'). The fetcher must
+    drop such gaps instead of sending guaranteed-to-fail requests."""
+    import services.ohlc.fetcher as fetcher_mod
+
+    now = 1776254400  # 2026-04-15T12:00:00Z, a Wednesday
+    monkeypatch.setattr(fetcher_mod, "_now", lambda: now)
+
+    primary = _FakeSource("primary", supported={"1m"}, bars=[])
+    reg = _registry_with([primary])
+    # 1m reach is 30 days; ask for an in-session weekday window ~58 days
+    # old (2026-02-16T12:00Z, a Monday) — entirely beyond reach.
+    start = now - 58 * 86400
+    result = fetch_range(
+        db_path=migrated_db,
+        registry=reg,
+        instrument="MNQ",
+        timeframe="1m",
+        start=start,
+        end=start + 3600,
+        trigger="sweep",
+    )
+    assert primary.calls == []
+    assert result.status == "out_of_reach"
+    assert result.bars_added == 0
+
+
+def test_gap_straddling_reach_floor_is_trimmed(migrated_db, monkeypatch):
+    """A gap that starts before the reach floor but ends inside it should be
+    trimmed to the reachable part, not dropped or sent whole."""
+    import services.ohlc.fetcher as fetcher_mod
+
+    now = 1776254400  # 2026-04-15T12:00:00Z, a Wednesday
+    monkeypatch.setattr(fetcher_mod, "_now", lambda: now)
+
+    primary = _FakeSource("primary", supported={"1m"}, bars=[])
+    reg = _registry_with([primary])
+    floor = now - 30 * 86400  # 1m reach
+    fetch_range(
+        db_path=migrated_db,
+        registry=reg,
+        instrument="MNQ",
+        timeframe="1m",
+        start=floor - 2 * 3600,
+        end=floor + 2 * 3600,
+        trigger="sweep",
+    )
+    assert primary.calls, "reachable part of the gap should still be fetched"
+    for _inst, _tf, g_start, _g_end in primary.calls:
+        assert g_start >= floor

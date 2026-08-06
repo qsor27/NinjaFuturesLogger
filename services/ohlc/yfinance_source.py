@@ -10,6 +10,22 @@ from services.instruments import (
 )
 
 
+def _lookup_error(symbol: str, detail) -> RuntimeError:
+    """Build the error raised when yfinance's _ERRORS dict reports a lookup
+    failure ('possibly delisted; no price data found', 'data not available
+    for startTime=...'). Yahoo answered — it just has no bars for this
+    symbol/range — so the error is classified `no_data`: the fetcher still
+    falls through to the next source, but the circuit breaker must not
+    count it as a provider outage (plan 18's 'other' class slow-trips,
+    which let permanently-unfillable gaps keep yfinance open for hours).
+    """
+    from services.ohlc._classify import attach_classification
+
+    err = RuntimeError(f"yfinance lookup failed for {symbol!r}: {detail}")
+    attach_classification(err, failure_class="no_data")
+    return err
+
+
 def _download(symbol: str, *, start, end, interval):
     """Indirection so tests can monkeypatch without installing yfinance.
 
@@ -24,9 +40,9 @@ def _download(symbol: str, *, start, end, interval):
 
     Plan 18: HTTP/network errors from the underlying requests transport
     are caught and tagged with a FailureClassification so the breaker can
-    escalate appropriately. A bad-symbol lookup (the _ERRORS path) is
-    deliberately left as "other" — a trader typo should not fast-trip the
-    breaker.
+    escalate appropriately. A bad-symbol / no-data lookup (the _ERRORS
+    path) is classified "no_data" — Yahoo answered, so it must not count
+    toward tripping the breaker at all (see _lookup_error).
     """
     import requests
     import yfinance as yf  # deferred so the test suite never imports it
@@ -52,7 +68,7 @@ def _download(symbol: str, *, start, end, interval):
         raise attach_classification(net_err, failure_class="network") from None
 
     if symbol in _yfs._ERRORS:
-        raise RuntimeError(f"yfinance lookup failed for {symbol!r}: {_yfs._ERRORS[symbol]}")
+        raise _lookup_error(symbol, _yfs._ERRORS[symbol])
 
     return df
 

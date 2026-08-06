@@ -147,3 +147,14 @@ def test_yfinance_uses_contract_symbol_for_suffixed_instrument(monkeypatch, tmp_
     bars = YfinanceSource().fetch("MNQ JUN26", "1h", 0, 3600)
     assert seen["symbol"] == "MNQM26.CME"
     assert bars == []
+
+
+def test_lookup_error_is_classified_no_data():
+    """The _ERRORS path ('possibly delisted; no price data found', 'data not
+    available for startTime=...') means Yahoo answered but has no bars.
+    The raised error must carry the no_data class so the circuit breaker
+    doesn't count it as a provider outage."""
+    err = yfs._lookup_error("MNQ=F", "possibly delisted; no price data found")
+    assert isinstance(err, RuntimeError)
+    assert "MNQ=F" in str(err)
+    assert err.ftl_failure.failure_class == "no_data"

@@ -62,3 +62,27 @@ def test_failed_state_carries_error(pool):
     snap = reg.status(job_id)
     assert snap["state"] == "failed"
     assert "nope" in snap["error"]
+
+
+def test_done_state_includes_fetch_result_summary(pool):
+    """A fetch job that 'completes' having fetched nothing (breaker open,
+    sources down) must not look identical to one that added bars — the UI
+    needs status + bars_added to tell the user what actually happened."""
+    from models.bar import FetchResult
+
+    reg = FetchJobRegistry()
+    job_id = reg.submit(
+        pool,
+        lambda: FetchResult(status="all_sources_unavailable", bars_added=0, attempts=[]),
+        meta={},
+    )
+    _wait(reg, job_id, "done")
+    snap = reg.status(job_id)
+    assert snap["result"] == {"status": "all_sources_unavailable", "bars_added": 0}
+
+
+def test_done_state_without_fetch_result_omits_summary(pool):
+    reg = FetchJobRegistry()
+    job_id = reg.submit(pool, lambda: 42, meta={})
+    _wait(reg, job_id, "done")
+    assert "result" not in reg.status(job_id)

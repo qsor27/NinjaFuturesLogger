@@ -1,10 +1,21 @@
 from pathlib import Path
 
+import pytest
+
 from db import connect
 from migrations import run_migrations
 from models.bar import Bar
 from services.ohlc.fetcher import fetch_range
 from services.ohlc.registry import SourceRegistry
+
+
+@pytest.fixture(autouse=True)
+def _pin_now(monkeypatch):
+    """These tests use epoch-era windows; pin the fetcher clock next to them
+    so the provider-reach clamp doesn't drop the gaps as out of reach."""
+    import services.ohlc.fetcher as fetcher_mod
+
+    monkeypatch.setattr(fetcher_mod, "_now", lambda: 10_000)
 
 
 class _GoodSource:

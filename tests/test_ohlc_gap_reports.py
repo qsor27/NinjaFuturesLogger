@@ -60,7 +60,9 @@ def test_update_gap_reports_skips_gaps_younger_than_one_hour(tmp_path):
 
 def test_update_gap_reports_records_gaps_older_than_one_hour(tmp_path):
     conn = _fresh_conn(tmp_path)
-    now = 10 * 86400
+    # Tue 1970-01-13 18:00 UTC — the window (16:00 UTC = 10:00 CT) is
+    # in-session on a weekday, clear of the weekend closure and daily break.
+    now = 12 * 86400 + 18 * ONE_HOUR
     end = now - 2 * ONE_HOUR  # the whole window is > 1h in the past
     start = end - 600  # 10 x 1m slots, none inserted -> all gaps
     update_gap_reports(
@@ -86,7 +88,7 @@ def test_update_gap_reports_records_gaps_older_than_one_hour(tmp_path):
 
 def test_update_gap_reports_marks_filled_gap_resolved(tmp_path):
     conn = _fresh_conn(tmp_path)
-    now = 10 * 86400
+    now = 12 * 86400 + 18 * ONE_HOUR  # in-session weekday window (see above)
     end = now - 2 * ONE_HOUR
     start = end - 600
     # First pass: no bars — gap recorded.

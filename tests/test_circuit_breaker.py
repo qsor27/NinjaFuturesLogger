@@ -134,3 +134,51 @@ def test_status_snapshot_returns_introspection_dict():
     assert snap["consecutive_failures"] == 1
     assert "last_failure_at" in snap
     assert "last_error" in snap
+
+
+def _no_data_error(msg: str = "no price data found") -> RuntimeError:
+    from services.ohlc.circuit_breaker import FailureClassification
+
+    err = RuntimeError(msg)
+    err.ftl_failure = FailureClassification(failure_class="no_data")
+    return err
+
+
+def test_no_data_failures_never_trip_the_breaker():
+    """'Provider has no data for this range' is not a provider outage.
+    Any number of no_data failures must leave the breaker closed."""
+    cb = _make(_Clock(), threshold=3)
+    for _ in range(10):
+        cb.record_failure(_no_data_error())
+    assert cb.state == "closed"
+    assert cb.consecutive_failures == 0
+    assert cb.allows() is True
+    assert cb.last_failure_class == "no_data"
+
+
+def test_no_data_does_not_reset_generic_failure_count():
+    """no_data must be neutral: it neither counts toward the threshold nor
+    forgives earlier real failures."""
+    cb = _make(_Clock(), threshold=3)
+    cb.record_failure(RuntimeError("boom"))
+    cb.record_failure(RuntimeError("boom"))
+    cb.record_failure(_no_data_error())
+    assert cb.state == "closed"
+    cb.record_failure(RuntimeError("boom"))  # third real failure → trip
+    assert cb.state == "open"
+
+
+def test_no_data_probe_in_half_open_closes_breaker():
+    """A half-open probe that reaches the provider but finds no data proves
+    the transport is healthy — the breaker should close, not re-open."""
+    clock = _Clock()
+    cb = _make(clock, threshold=3, cooldown=600)
+    for _ in range(3):
+        cb.record_failure(RuntimeError("boom"))
+    assert cb.state == "open"
+    clock.advance(601)
+    assert cb.allows() is True  # transitions to half_open
+    assert cb.state == "half_open"
+    cb.record_failure(_no_data_error())
+    assert cb.state == "closed"
+    assert cb.allows() is True

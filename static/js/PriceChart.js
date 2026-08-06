@@ -691,10 +691,33 @@ export class PriceChart {
         start,
         end,
       });
-      const ok = await this._pollJob(job.job_id);
-      if (!ok) {
+      const snap = await this._pollJob(job.job_id);
+      if (!snap) {
         this._renderPlaceholder({
           message: "Fetch did not complete. Try again later.",
+          ctaLabel: "Retry",
+          onCta: () => this._fetchOnDemand(start, end),
+        });
+        this._setState("no-data");
+        return;
+      }
+      const result = snap.result;
+      if (result && result.bars_added === 0 && result.status === "all_sources_unavailable") {
+        this._renderPlaceholder({
+          message:
+            "Data sources are currently unavailable (cooling down after errors). " +
+            "Positions and statistics are unaffected. Try again in a few minutes.",
+          ctaLabel: "Retry",
+          onCta: () => this._fetchOnDemand(start, end),
+        });
+        this._setState("no-data");
+        return;
+      }
+      if (result && result.status === "out_of_reach") {
+        this._renderPlaceholder({
+          message:
+            "This range is older than the data provider serves for this timeframe. " +
+            "Try a coarser timeframe (1h or 1d).",
           ctaLabel: "Retry",
           onCta: () => this._fetchOnDemand(start, end),
         });
@@ -707,12 +730,14 @@ export class PriceChart {
     }
   }
 
+  // Resolves with the final job snapshot ({state, meta, result?}) when the
+  // job reaches "done", or null on failure/timeout.
   async _pollJob(jobId) {
     const startedAt = Date.now();
     while (true) {
       const elapsed = Date.now() - startedAt;
       const delay = nextPollDelay(elapsed);
-      if (delay === null) return false;
+      if (delay === null) return null;
       await new Promise((r) => setTimeout(r, delay));
       let snap;
       try {
@@ -721,8 +746,8 @@ export class PriceChart {
         // transient error; keep polling within the timeout window
         continue;
       }
-      if (snap.state === "done") return true;
-      if (snap.state === "failed") return false;
+      if (snap.state === "done") return snap;
+      if (snap.state === "failed") return null;
     }
   }
 

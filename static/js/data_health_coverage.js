@@ -203,8 +203,25 @@ async function pollJob(jobId, btn) {
   const resp = await fetch(`/api/ohlc/jobs/${jobId}`);
   const body = await resp.json();
   if (body.state === "done") {
-    btn.textContent = "Done — reload to see changes";
-  } else if (body.state === "error") {
+    const result = body.result;
+    if (!result) {
+      btn.textContent = "Done — reload to see changes";
+    } else if (result.bars_added > 0) {
+      btn.textContent = `Done — ${result.bars_added} bars added (reload to see)`;
+    } else if (result.status === "all_sources_unavailable") {
+      btn.textContent = "Sources unavailable — retry later";
+      btn.title = "Every data source is skipped or failing (see System page for breaker state).";
+      btn.disabled = false;
+    } else if (result.status === "out_of_reach") {
+      btn.textContent = "Out of reach";
+      btn.title = "The provider no longer serves this range for this timeframe.";
+    } else if (result.status === "cached") {
+      btn.textContent = "Nothing missing";
+    } else {
+      btn.textContent = `Done (${result.status}) — 0 bars`;
+      btn.disabled = false;
+    }
+  } else if (body.state === "failed" || body.state === "error") {
     btn.textContent = "Fetch failed";
     btn.disabled = false;
   } else {

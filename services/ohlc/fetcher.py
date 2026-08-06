@@ -15,10 +15,41 @@ from services.ohlc.circuit_breaker import CircuitBreaker, FailureClassification
 from services.ohlc.gap_detection import find_gaps
 from services.ohlc.gap_reports import update_gap_reports
 from services.ohlc.rate_limiter import TokenBucket
+from services.ohlc.reach import PROVIDER_REACH
 from services.ohlc.registry import SourceRegistry
 from services.ohlc.store import insert_many
 
 log = get_logger("ohlc.fetcher")
+
+# Requests that start exactly at the provider's reach boundary get rejected
+# ("requested range must be within the last N days") because time advances
+# between gap computation and the provider's check. Keep this far inside
+# the boundary.
+REACH_MARGIN_SECONDS = 3600
+
+
+def _clamp_gaps_to_reach(
+    gaps: list[tuple[int, int]], *, timeframe: str, now: int
+) -> tuple[list[tuple[int, int]], int]:
+    """Drop or trim gaps the provider can no longer serve.
+
+    Only intraday timeframes with a hard lookback cap (< 1 year) are
+    clamped — daily and above are effectively unlimited, and tests use
+    1970-era timestamps that must not be silently dropped. Returns
+    (clamped_gaps, dropped_count).
+    """
+    reach = PROVIDER_REACH.get(timeframe)
+    if reach is None or reach >= 365 * 86400:
+        return gaps, 0
+    floor = now - reach + REACH_MARGIN_SECONDS
+    clamped: list[tuple[int, int]] = []
+    dropped = 0
+    for g_start, g_end in gaps:
+        if g_end <= floor:
+            dropped += 1
+            continue
+        clamped.append((max(g_start, floor), g_end))
+    return clamped, dropped
 
 
 # Indirection so tests can monkeypatch the "now" clock the gap-report writer
@@ -130,6 +161,37 @@ def fetch_range(
         _finalize(db_path, attempt_id, 0, 0, "cached", None, instrument, timeframe, start, end)
         return FetchResult(
             status="cached",
+            bars_added=0,
+            attempts=[],
+            attempt_id=attempt_id,
+        )
+
+    gaps, dropped_out_of_reach = _clamp_gaps_to_reach(gaps, timeframe=timeframe, now=now)
+    if dropped_out_of_reach:
+        log.info(
+            "dropped out-of-reach gaps",
+            extra={
+                "attempt_id": attempt_id,
+                "instrument": instrument,
+                "tf": timeframe,
+                "dropped": dropped_out_of_reach,
+            },
+        )
+    if not gaps:
+        _finalize(
+            db_path,
+            attempt_id,
+            dropped_out_of_reach,
+            0,
+            "out_of_reach",
+            None,
+            instrument,
+            timeframe,
+            start,
+            end,
+        )
+        return FetchResult(
+            status="out_of_reach",
             bars_added=0,
             attempts=[],
             attempt_id=attempt_id,
