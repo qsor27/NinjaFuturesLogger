@@ -48,10 +48,13 @@ class SchedulerConfig(StrictModel):
 
 
 class WindowsConfig(StrictModel):
-    # TCP port the Windows launcher binds to (default 8000). Only used by
-    # the Go launcher on Windows installer deployments; Docker/Linux runs
-    # ignore this field.
-    port: int = 8000
+    # TCP port the Windows launcher binds to. Only used by the Go launcher
+    # on Windows installer deployments; Docker/Linux runs ignore this field
+    # (Docker's port comes from gunicorn/compose, never from here).
+    # 8003 mirrors the installer's seeded default (windows/installer/
+    # pages.pas) and the launcher's defaultPort (windows/launcher/config.go)
+    # — keep all three in sync.
+    port: int = 8003
 
 
 class PositionsFilterDefault(StrictModel):

@@ -35,7 +35,10 @@ def test_save_windows_port_rejects_invalid(tmp_path: Path, bad):
 def test_default_when_windows_section_missing(tmp_path: Path):
     path = seed_app_json(tmp_path)
     cfg = load_config(path)
-    assert cfg.windows.port == 8000  # default from WindowsConfig
+    # 8003 mirrors the installer seed (pages.pas) and launcher defaultPort
+    # (windows/launcher/config.go) — the settings UI must report the port
+    # the launcher will actually use.
+    assert cfg.windows.port == 8003  # default from WindowsConfig
 
 
 def test_update_overwrites_existing_port(tmp_path: Path):

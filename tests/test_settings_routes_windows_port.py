@@ -37,7 +37,7 @@ def test_get_windows_port_returns_default(tmp_path: Path):
     client, _ = _setup_app(tmp_path)
     res = client.get("/api/settings/windows-port")
     assert res.status_code == 200
-    assert res.get_json() == {"port": 8000}
+    assert res.get_json() == {"port": 8003}
 
 
 def test_put_windows_port_persists(tmp_path: Path):
