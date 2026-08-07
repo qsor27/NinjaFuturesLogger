@@ -182,3 +182,9 @@ def test_no_data_probe_in_half_open_closes_breaker():
     cb.record_failure(_no_data_error())
     assert cb.state == "closed"
     assert cb.allows() is True
+
+
+def test_status_snapshot_is_snapshot_plus_name():
+    cb = _make(_Clock())
+    cb.record_failure(RuntimeError("x"))
+    assert cb.status_snapshot() == {"name": "test", **cb.snapshot()}

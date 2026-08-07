@@ -125,19 +125,8 @@ class CircuitBreaker:
                 self._open(now, cls, retry_after)
 
     def status_snapshot(self) -> dict:
-        return {
-            "name": self.name,
-            "state": self.state,
-            "consecutive_failures": self.consecutive_failures,
-            "consecutive_trips": self.consecutive_trips,
-            "current_cooldown_seconds": self.current_cooldown_seconds,
-            "opened_at": self.opened_at,
-            "next_retry_at": self.next_retry_at,
-            "last_failure_at": self.last_failure_at,
-            "last_success_at": self.last_success_at,
-            "last_error": self.last_error,
-            "last_failure_class": self.last_failure_class,
-        }
+        """snapshot() plus the breaker's name, for API surfaces."""
+        return {"name": self.name, **self.snapshot()}
 
     def snapshot(self) -> dict:
         with self._lock:
