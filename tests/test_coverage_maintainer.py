@@ -120,3 +120,10 @@ def test_maintainer_skips_instruments_with_no_contract_template(tmp_path):
 
     coverage_maintainer_tick(db_path=db, fetch_fn=fake_fetch, now=now)
     assert seen == []
+
+
+def test_fetchfn_protocol_has_one_shared_definition():
+    from services.ohlc import coverage_maintainer, self_heal, types
+
+    assert coverage_maintainer.FetchFn is types.FetchFn
+    assert self_heal.FetchFn is types.FetchFn

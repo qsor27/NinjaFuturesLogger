@@ -8,7 +8,6 @@ record_retry_outcome — resolving, backing off, or abandoning.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol
 
 from db import connect
 from logging_config import get_logger
@@ -17,21 +16,9 @@ from services.ohlc.gap_reports import (
     record_retry_outcome,
     select_due,
 )
+from services.ohlc.types import FetchFn
 
 log = get_logger("ohlc.self_heal")
-
-
-class FetchFn(Protocol):
-    def __call__(
-        self,
-        *,
-        db_path: Path | str,
-        instrument: str,
-        timeframe: str,
-        start: int,
-        end: int,
-        trigger: str,
-    ) -> None: ...
 
 
 def self_heal_tick(

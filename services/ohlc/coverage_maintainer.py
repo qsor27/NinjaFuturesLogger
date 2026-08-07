@@ -12,7 +12,6 @@ without any network or DB side effects beyond the coverage table read.
 """
 
 from pathlib import Path
-from typing import Protocol
 
 from db import connect
 from logging_config import get_logger
@@ -21,6 +20,7 @@ from services.ohlc.coverage_state import (
     list_coverage,
     refresh_instrument_coverage_state,
 )
+from services.ohlc.types import FetchFn
 
 log = get_logger("ohlc.coverage_maintainer")
 
@@ -40,19 +40,6 @@ SWEEP_WINDOWS: dict[str, int] = {
     "1h": 730 * 86400,
     "1d": 10 * 365 * 86400,
 }
-
-
-class FetchFn(Protocol):
-    def __call__(
-        self,
-        *,
-        db_path: Path | str,
-        instrument: str,
-        timeframe: str,
-        start: int,
-        end: int,
-        trigger: str,
-    ) -> None: ...
 
 
 def coverage_maintainer_tick(
