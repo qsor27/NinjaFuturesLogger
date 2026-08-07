@@ -286,24 +286,39 @@ def build_ohlc_blueprint() -> Blueprint:
             conn.close()
 
         pool = _pool()
+        jobs = _jobs()
         registry = _registry()
         db_path = _db_path()
         token_bucket = _token_bucket()
+        instrument = row["instrument"]
+        timeframe = row["timeframe"]
+        gap_start = row["gap_start"]
+        gap_end = row["gap_end"]
 
         def _run():
             return fetch_range(
                 db_path=db_path,
                 registry=registry,
-                instrument=row["instrument"],
-                timeframe=row["timeframe"],
-                start=row["gap_start"],
-                end=row["gap_end"],
-                trigger="self_heal",
+                instrument=instrument,
+                timeframe=timeframe,
+                start=gap_start,
+                end=gap_end,
+                trigger="on_demand",
                 token_bucket=token_bucket,
             )
 
-        pool.submit(_run)
-        return jsonify({"ok": True, "gap_id": gap_id}), 202
+        job_id = jobs.submit(
+            pool,
+            _run,
+            meta={
+                "gap_id": gap_id,
+                "instrument": instrument,
+                "timeframe": timeframe,
+                "start": gap_start,
+                "end": gap_end,
+            },
+        )
+        return jsonify({"job_id": job_id, "gap_id": gap_id}), 202
 
     @bp.post("/api/ohlc/bars/delete")
     def post_delete_bars():

@@ -82,4 +82,5 @@ def test_post_retry_reopens_and_schedules(client):
     resp = c.post(f"/api/ohlc/gaps/{gap_id}/retry")
     assert resp.status_code == 202
     body = resp.get_json()
-    assert body["ok"] is True
+    assert body["gap_id"] == gap_id
+    assert isinstance(body["job_id"], str)

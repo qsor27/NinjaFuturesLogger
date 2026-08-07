@@ -4,7 +4,7 @@ from db import connect
 from models.bar import Bar
 from routes.ohlc import build_ohlc_blueprint
 from services.ohlc.jobs import FetchJobRegistry
-from services.ohlc.registry import build_default_registry
+from services.ohlc.registry import SourceRegistry, build_default_registry
 from services.ohlc.store import insert_many
 
 
@@ -187,5 +187,60 @@ def test_post_chart_fetch_acquires_from_token_bucket(tmp_config):
             time.sleep(0.01)
         assert jobs.status(job_id)["state"] == "done"
         assert bucket.stats()["acquired_total"] >= 1
+    finally:
+        pool.shutdown(wait=True)
+
+
+def test_gap_retry_returns_job_id_and_on_demand_trigger(tmp_config):
+    """B8: manual gap retry must use the 202+job_id pattern and record
+    trigger='on_demand', not 'self_heal'."""
+
+    class _Source:
+        name = "fake"
+        supported_timeframes = frozenset({"1m"})
+
+        def fetch(self, instrument, timeframe, start, end):
+            return []
+
+    reg = SourceRegistry(clock=lambda: int(time.time()))
+    reg.register(_Source(), failure_threshold=3, base_cooldown_seconds=60)
+    jobs = FetchJobRegistry()
+    app, pool = _make_app(tmp_config, jobs=jobs, registry=reg)
+    try:
+        conn = connect(tmp_config.db_path)
+        try:
+            conn.execute("BEGIN")
+            conn.execute(
+                "INSERT INTO ohlc_gap_reports"
+                " (instrument, timeframe, gap_start, gap_end, first_seen_at,"
+                "  attempt_count, next_retry_at, state)"
+                " VALUES ('MNQ', '1m', 0, 600, 0, 3, 0, 'abandoned')"
+            )
+            conn.execute("COMMIT")
+            gap_id = conn.execute("SELECT id FROM ohlc_gap_reports").fetchone()["id"]
+        finally:
+            conn.close()
+
+        resp = app.test_client().post(f"/api/ohlc/gaps/{gap_id}/retry")
+        assert resp.status_code == 202
+        body = resp.get_json()
+        assert body["gap_id"] == gap_id
+        assert isinstance(body["job_id"], str)
+
+        for _ in range(500):
+            if jobs.status(body["job_id"])["state"] != "pending":
+                break
+            time.sleep(0.01)
+        assert jobs.status(body["job_id"])["state"] == "done"
+
+        conn = connect(tmp_config.db_path)
+        try:
+            row = conn.execute(
+                "SELECT trigger FROM fetch_attempts ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+        finally:
+            conn.close()
+        assert row is not None
+        assert row["trigger"] == "on_demand"
     finally:
         pool.shutdown(wait=True)
