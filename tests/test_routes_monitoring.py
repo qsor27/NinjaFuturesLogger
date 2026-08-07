@@ -375,28 +375,13 @@ def test_run_job_now_records_job_history(svc_config):
 
 
 @pytest.fixture
-def monitoring_app(tmp_path):
-    db_path = tmp_path / "t.db"
+def monitoring_app(tmp_config):
+    db_path = Path(tmp_config.db_path)
     conn = connect(db_path)
     run_migrations(conn, Path("migrations"))
     conn.close()
 
-    (tmp_path / "inbox").mkdir()
-    config = Config(
-        data_dir=str(tmp_path),
-        db_path=str(db_path),
-        inbox_dir=str(tmp_path / "inbox"),
-        archive_dir=str(tmp_path / "archive"),
-        log_dir=str(tmp_path / "logs"),
-        session=SessionConfig(
-            exchange_timezone="America/Chicago",
-            trade_date_rollover="16:00",
-            archive_job_time="18:00",
-        ),
-        thread_pool=ThreadPoolConfig(max_workers=2),
-        scheduler=SchedulerConfig(heartbeat_seconds=60),
-    )
-    svc = BackgroundServices(config)
+    svc = BackgroundServices(tmp_config)
 
     app = Flask(__name__)
     app.config["FTL_DB_PATH"] = str(db_path)

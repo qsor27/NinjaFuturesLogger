@@ -51,26 +51,10 @@ def test_tick_handler_swallows_pipeline_errors(tmp_path: Path):
     assert pipeline.ingest_tick.called
 
 
-def test_background_services_accepts_injected_handler(tmp_path: Path):
+def test_background_services_accepts_injected_handler(tmp_config):
     from background import BackgroundServices
-    from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 
-    cfg = Config(
-        data_dir=str(tmp_path),
-        db_path=str(tmp_path / "t.db"),
-        inbox_dir=str(tmp_path / "inbox"),
-        archive_dir=str(tmp_path / "archive"),
-        log_dir=str(tmp_path / "logs"),
-        session=SessionConfig(
-            exchange_timezone="America/Chicago",
-            trade_date_rollover="16:00",
-            archive_job_time="18:00",
-        ),
-        thread_pool=ThreadPoolConfig(max_workers=2),
-        scheduler=SchedulerConfig(heartbeat_seconds=60),
-    )
-    Path(cfg.inbox_dir).mkdir()
-    services = BackgroundServices(cfg)
+    services = BackgroundServices(tmp_config)
     pipeline = MagicMock()
     services.start(handler=TickHandler(pipeline))
     try:
