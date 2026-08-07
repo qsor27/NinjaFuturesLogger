@@ -201,3 +201,26 @@ def test_rollback_rejects_bad_body(app_and_pipeline):
     app, *_ = app_and_pipeline
     resp = app.test_client().post("/api/executions/rollback", json={})
     assert resp.status_code == 400
+
+
+def test_list_runs_rejects_negative_limit(app_and_pipeline):
+    app, *_ = app_and_pipeline
+    resp = app.test_client().get("/api/imports/runs?limit=-1")
+    assert resp.status_code == 400
+    assert "limit" in resp.get_json()["error"]
+
+
+def test_list_runs_rejects_non_integer_params(app_and_pipeline):
+    app, *_ = app_and_pipeline
+    client = app.test_client()
+    assert client.get("/api/imports/runs?limit=abc").status_code == 400
+    assert client.get("/api/imports/runs?offset=abc").status_code == 400
+    assert client.get("/api/imports/runs?start_ts=abc").status_code == 400
+    assert client.get("/api/imports/runs?end_ts=abc").status_code == 400
+
+
+def test_list_rejects_rejects_bad_limit(app_and_pipeline):
+    app, *_ = app_and_pipeline
+    client = app.test_client()
+    assert client.get("/api/imports/rejects?limit=-1").status_code == 400
+    assert client.get("/api/imports/rejects?limit=abc").status_code == 400

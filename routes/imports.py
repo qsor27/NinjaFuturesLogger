@@ -2,6 +2,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
+from routes._params import BadParam, int_arg
 
 log = get_logger("http.imports")
 
@@ -17,10 +18,13 @@ def build_imports_blueprint() -> Blueprint:
 
     @bp.get("/api/imports/runs")
     def list_runs():
-        limit = min(int(request.args.get("limit", "50")), 500)
-        offset = max(int(request.args.get("offset", "0")), 0)
-        start_ts = request.args.get("start_ts")
-        end_ts = request.args.get("end_ts")
+        try:
+            limit = int_arg(request.args, "limit", default=50, lo=1, hi=500)
+            offset = int_arg(request.args, "offset", default=0, lo=0)
+            start_ts = int_arg(request.args, "start_ts", default=None)
+            end_ts = int_arg(request.args, "end_ts", default=None)
+        except BadParam as e:
+            return jsonify({"error": str(e)}), 400
         filename = request.args.get("filename")
         status = request.args.get("status")
 
@@ -28,10 +32,10 @@ def build_imports_blueprint() -> Blueprint:
         params: list = []
         if start_ts is not None:
             clauses.append("started_at >= ?")
-            params.append(int(start_ts))
+            params.append(start_ts)
         if end_ts is not None:
             clauses.append("started_at <= ?")
-            params.append(int(end_ts))
+            params.append(end_ts)
         if filename:
             clauses.append("filename LIKE ?")
             params.append(f"%{filename}%")
@@ -117,8 +121,11 @@ def build_imports_blueprint() -> Blueprint:
 
     @bp.get("/api/imports/rejects")
     def list_rejects():
-        limit = min(int(request.args.get("limit", "100")), 500)
-        offset = max(int(request.args.get("offset", "0")), 0)
+        try:
+            limit = int_arg(request.args, "limit", default=100, lo=1, hi=500)
+            offset = int_arg(request.args, "offset", default=0, lo=0)
+        except BadParam as e:
+            return jsonify({"error": str(e)}), 400
         conn = _db()
         try:
             rows = conn.execute(
