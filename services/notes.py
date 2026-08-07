@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from db import connect
+from db import read_conn, sql_placeholders, transaction
 
 
 def strip_split_suffix(execution_id: str) -> str:
@@ -20,14 +20,11 @@ def strip_split_suffix(execution_id: str) -> str:
 def get_note(db_path: Path | str, execution_id: str) -> dict | None:
     """Return {'note', 'updated_at'} for the execution, or None."""
     real_id = strip_split_suffix(execution_id)
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         row = conn.execute(
             "SELECT note, updated_at FROM execution_notes WHERE execution_id = ?",
             (real_id,),
         ).fetchone()
-    finally:
-        conn.close()
     if row is None:
         return None
     return {"note": row["note"], "updated_at": int(row["updated_at"])}
@@ -43,42 +40,24 @@ def upsert_note(
     """Insert or update a note on a real execution. Raises if the execution
     does not exist (FK violation bubbles up)."""
     real_id = strip_split_suffix(execution_id)
-    conn = connect(db_path)
-    try:
-        conn.execute("BEGIN")
-        try:
-            conn.execute(
-                "INSERT INTO execution_notes (execution_id, note, updated_at) "
-                "VALUES (?, ?, ?) "
-                "ON CONFLICT(execution_id) DO UPDATE SET "
-                " note = excluded.note,"
-                " updated_at = excluded.updated_at",
-                (real_id, note, now),
-            )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
-    finally:
-        conn.close()
+    with transaction(db_path) as conn:
+        conn.execute(
+            "INSERT INTO execution_notes (execution_id, note, updated_at) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(execution_id) DO UPDATE SET "
+            " note = excluded.note,"
+            " updated_at = excluded.updated_at",
+            (real_id, note, now),
+        )
 
 
 def delete_note(db_path: Path | str, execution_id: str) -> None:
     real_id = strip_split_suffix(execution_id)
-    conn = connect(db_path)
-    try:
-        conn.execute("BEGIN")
-        try:
-            conn.execute(
-                "DELETE FROM execution_notes WHERE execution_id = ?",
-                (real_id,),
-            )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
-    finally:
-        conn.close()
+    with transaction(db_path) as conn:
+        conn.execute(
+            "DELETE FROM execution_notes WHERE execution_id = ?",
+            (real_id,),
+        )
 
 
 def list_notes_for_executions(
@@ -93,14 +72,10 @@ def list_notes_for_executions(
     if not execution_ids:
         return {}
     real_ids = sorted({strip_split_suffix(i) for i in execution_ids})
-    placeholders = ",".join("?" for _ in real_ids)
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         rows = conn.execute(
             f"SELECT execution_id, note FROM execution_notes "
-            f"WHERE execution_id IN ({placeholders})",
+            f"WHERE execution_id IN ({sql_placeholders(len(real_ids))})",
             tuple(real_ids),
         ).fetchall()
-    finally:
-        conn.close()
     return {r["execution_id"]: r["note"] for r in rows}
