@@ -3,6 +3,7 @@ import {
   filterToQueryString,
   renderFilterBar,
 } from "./stats_filter.js";
+import { fetchJSON } from "./api.js";
 import { mountCalendarHeatmap, mountLcHistogram } from "./stats_charts.js";
 
 const ENDPOINTS = ["by-day", "by-week", "by-month"];
@@ -10,7 +11,7 @@ const ENDPOINTS = ["by-day", "by-week", "by-month"];
 async function fetchAll(filter) {
   const qs = filterToQueryString(filter);
   const responses = await Promise.all(
-    ENDPOINTS.map((name) => fetch(`/api/stats/${name}${qs}`).then((r) => r.json())),
+    ENDPOINTS.map((name) => fetchJSON(`/api/stats/${name}${qs}`)),
   );
   return Object.fromEntries(ENDPOINTS.map((n, i) => [n, responses[i]]));
 }

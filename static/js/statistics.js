@@ -2,8 +2,11 @@ import {
   parseFilterFromUrl,
   filterToQueryString,
   renderFilterBar,
+  STATS_TO_POSITIONS_PARAMS,
 } from "./stats_filter.js";
 import { mountLineChart, mountSimpleCountHistogram } from "./stats_charts.js";
+import { fetchJSON } from "./api.js";
+import { browserTz, escHtml, fmtMoney, pnlClass } from "./format.js";
 
 const ENDPOINTS = [
   "summary",
@@ -17,25 +20,10 @@ const ENDPOINTS = [
   "efficiency-distribution",
 ];
 
-// Browser-local IANA timezone — forwarded to /api/stats/by-hour so hour
-// buckets reflect the viewer's clock, not the exchange (or a configured
-// default). Harmless for endpoints that ignore it.
-function browserTz() {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
-  } catch {
-    return null;
-  }
-}
-
 async function fetchAll(filter) {
-  let qs = filterToQueryString(filter);
-  const tz = browserTz();
-  if (tz) {
-    qs += qs ? `&display_tz=${encodeURIComponent(tz)}` : `?display_tz=${encodeURIComponent(tz)}`;
-  }
+  const qs = filterToQueryString(filter, { display_tz: browserTz() });
   const responses = await Promise.all(
-    ENDPOINTS.map((name) => fetch(`/api/stats/${name}${qs}`).then((r) => r.json())),
+    ENDPOINTS.map((name) => fetchJSON(`/api/stats/${name}${qs}`)),
   );
   return Object.fromEntries(ENDPOINTS.map((n, i) => [n, responses[i]]));
 }
@@ -45,9 +33,9 @@ function positionsUrl(filter, extras) {
   for (const a of filter.accounts || []) {
     params.append("account", a);
   }
-  if (filter.side) params.set("side", filter.side);
-  if (filter.from) params.set("session_date_from", filter.from);
-  if (filter.to) params.set("session_date_to", filter.to);
+  for (const [statsKey, posKey] of Object.entries(STATS_TO_POSITIONS_PARAMS)) {
+    if (filter[statsKey]) params.set(posKey, filter[statsKey]);
+  }
   for (const [k, v] of Object.entries(extras || {})) {
     if (v !== null && v !== undefined && v !== "") {
       params.set(k, String(v));
@@ -71,12 +59,6 @@ function wireDrilldownClicks(container) {
       }
     });
   });
-}
-
-function fmtMoney(v) {
-  if (v === null || v === undefined) return "—";
-  const sign = v >= 0 ? "+" : "-";
-  return `${sign}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
 function fmtPercent(v) {
@@ -103,7 +85,7 @@ function renderSummary(container, summary, dayBuckets) {
 
   container.innerHTML = `
     <p class="section-label">Summary</p>
-    <p class="big-number ${summary.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(summary.total_pnl)}</p>
+    <p class="big-number ${pnlClass(summary.total_pnl)}">${fmtMoney(summary.total_pnl)}</p>
     <div class="summary-grid">
       <div><div class="stat-label">Trades</div><div class="stat-value"></div></div>
       <div><div class="stat-label">Win Rate</div><div class="stat-value"></div></div>
@@ -162,7 +144,7 @@ function renderBySide(container, breakdown) {
         </div>
         <div class="side-stat">
           <span class="side-stat-label">Total P&L</span>
-          <span class="side-stat-value ${s.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(s.total_pnl)}</span>
+          <span class="side-stat-value ${pnlClass(s.total_pnl)}">${fmtMoney(s.total_pnl)}</span>
         </div>
         <div class="side-stat">
           <span class="side-stat-label">Win Rate</span>
@@ -202,11 +184,11 @@ function renderInstrumentTable(container, breakdown) {
     .map(
       (r) => `
     <tr>
-      <td>${r.instrument}</td>
+      <td>${escHtml(r.instrument)}</td>
       <td>${r.position_count}</td>
-      <td class="${r.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(r.total_pnl)}</td>
+      <td class="${pnlClass(r.total_pnl)}">${fmtMoney(r.total_pnl)}</td>
       <td>${fmtPercent(r.win_rate)}</td>
-      <td class="${r.avg_pnl_per_position >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(r.avg_pnl_per_position)}</td>
+      <td class="${pnlClass(r.avg_pnl_per_position)}">${fmtMoney(r.avg_pnl_per_position)}</td>
     </tr>
   `,
     )
@@ -231,7 +213,7 @@ function renderDayOfWeek(container, dowData, filter) {
       if (b.trades === 0) {
         return `
         <tr>
-          <td>${b.day_name}</td>
+          <td>${escHtml(b.day_name)}</td>
           <td>${b.trades}</td>
           <td>${fmtMoney(b.avg_pnl)}</td>
           <td>${fmtPercent(b.win_rate)}</td>
@@ -240,12 +222,12 @@ function renderDayOfWeek(container, dowData, filter) {
       }
       const href = positionsUrl(filter, { day_of_week: b.dow });
       return `
-      <tr data-drilldown data-href="${href}">
-        <td><a href="${href}">${b.day_name}</a></td>
+      <tr data-drilldown data-href="${escHtml(href)}">
+        <td><a href="${escHtml(href)}">${escHtml(b.day_name)}</a></td>
         <td>${b.trades}</td>
-        <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
+        <td class="${pnlClass(b.avg_pnl)}">${fmtMoney(b.avg_pnl)}</td>
         <td>${fmtPercent(b.win_rate)}</td>
-        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+        <td class="${pnlClass(b.total_pnl)}">${fmtMoney(b.total_pnl)}</td>
       </tr>`;
     })
     .join("");
@@ -261,7 +243,7 @@ function renderDayOfWeek(container, dowData, filter) {
 
 function renderByHour(container, hourData, filter) {
   const active = (hourData.buckets || []).filter((b) => b.position_count > 0);
-  const header = `<p class="section-label">By Hour (${hourData.timezone})</p>`;
+  const header = `<p class="section-label">By Hour (${escHtml(hourData.timezone)})</p>`;
   if (!active.length) {
     container.innerHTML = `${header}<div class="empty-state">No data for this filter</div>`;
     return;
@@ -274,12 +256,12 @@ function renderByHour(container, hourData, filter) {
         hour_tz: hourData.timezone,
       });
       return `
-      <tr data-drilldown data-href="${href}">
-        <td><a href="${href}">${String(b.hour).padStart(2, "0")}:00</a></td>
+      <tr data-drilldown data-href="${escHtml(href)}">
+        <td><a href="${escHtml(href)}">${String(b.hour).padStart(2, "0")}:00</a></td>
         <td>${b.position_count}</td>
-        <td class="${avgPnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(avgPnl)}</td>
+        <td class="${pnlClass(avgPnl)}">${fmtMoney(avgPnl)}</td>
         <td>${fmtPercent(b.win_rate)}</td>
-        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+        <td class="${pnlClass(b.total_pnl)}">${fmtMoney(b.total_pnl)}</td>
       </tr>`;
     })
     .join("");
@@ -303,12 +285,12 @@ function renderTradesPerDay(container, tpdData, filter) {
     .map((b) => {
       const href = positionsUrl(filter, { trades_per_day: b.trades_per_day });
       return `
-      <tr data-drilldown data-href="${href}">
-        <td><a href="${href}">${b.trades_per_day}</a></td>
+      <tr data-drilldown data-href="${escHtml(href)}">
+        <td><a href="${escHtml(href)}">${b.trades_per_day}</a></td>
         <td>${b.days}</td>
-        <td class="${b.avg_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.avg_pnl)}</td>
+        <td class="${pnlClass(b.avg_pnl)}">${fmtMoney(b.avg_pnl)}</td>
         <td>${fmtPercent(b.win_rate)}</td>
-        <td class="${b.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${fmtMoney(b.total_pnl)}</td>
+        <td class="${pnlClass(b.total_pnl)}">${fmtMoney(b.total_pnl)}</td>
       </tr>`;
     })
     .join("");
@@ -348,34 +330,36 @@ function renderExitEfficiency(container, data) {
 
 async function refresh(filter) {
   document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "0.5"));
-  const data = await fetchAll(filter);
+  try {
+    const data = await fetchAll(filter);
 
-  renderSummary(
-    document.getElementById("stats-summary"),
-    data["summary"],
-    data["by-day"].buckets,
-  );
-  renderBySide(document.getElementById("stats-by-side"), data["by-side"]);
-  renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);
-  renderDayOfWeek(document.getElementById("stats-by-dow"), data["by-day-of-week"], filter);
-  renderByHour(document.getElementById("stats-by-hour"), data["by-hour"], filter);
-  renderTradesPerDay(
-    document.getElementById("stats-trades-per-day"),
-    data["by-trades-per-day"],
-    filter,
-  );
-  renderExitEfficiency(
-    document.getElementById("stats-exit-efficiency"),
-    data["efficiency-distribution"],
-  );
+    renderSummary(
+      document.getElementById("stats-summary"),
+      data["summary"],
+      data["by-day"].buckets,
+    );
+    renderBySide(document.getElementById("stats-by-side"), data["by-side"]);
+    renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);
+    renderDayOfWeek(document.getElementById("stats-by-dow"), data["by-day-of-week"], filter);
+    renderByHour(document.getElementById("stats-by-hour"), data["by-hour"], filter);
+    renderTradesPerDay(
+      document.getElementById("stats-trades-per-day"),
+      data["by-trades-per-day"],
+      filter,
+    );
+    renderExitEfficiency(
+      document.getElementById("stats-exit-efficiency"),
+      data["efficiency-distribution"],
+    );
 
-  const equityCard = document.getElementById("stats-equity");
-  equityCard.innerHTML = '<p class="section-label">Equity Curve</p>';
-  const equityHost = document.createElement("div");
-  equityCard.appendChild(equityHost);
-  mountLineChart(equityHost, data["equity-curve"].series);
-
-  document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "1"));
+    const equityCard = document.getElementById("stats-equity");
+    equityCard.innerHTML = '<p class="section-label">Equity Curve</p>';
+    const equityHost = document.createElement("div");
+    equityCard.appendChild(equityHost);
+    mountLineChart(equityHost, data["equity-curve"].series);
+  } finally {
+    document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "1"));
+  }
 }
 
 const initial = parseFilterFromUrl();

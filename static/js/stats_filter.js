@@ -1,6 +1,7 @@
 // Plan 15 — shared filter bar module. URL query params are the source of truth.
 // Both /statistics and /calendar import this and pass onApply.
 
+import { buildQuery, fetchJSON } from "./api.js";
 import { renderPresetSelect } from "./date_presets.js";
 import { createMultiSelect } from "./MultiSelect.js";
 import {
@@ -32,15 +33,16 @@ export function writeFilterToUrl(filter) {
   window.history.pushState({}, "", url.toString());
 }
 
-export function filterToQueryString(filter) {
-  const parts = [];
-  for (const a of filter.accounts || []) {
-    parts.push(`account=${encodeURIComponent(a)}`);
-  }
-  if (filter.from) parts.push(`from=${encodeURIComponent(filter.from)}`);
-  if (filter.to) parts.push(`to=${encodeURIComponent(filter.to)}`);
-  if (filter.side) parts.push(`side=${encodeURIComponent(filter.side)}`);
-  return parts.length ? `?${parts.join("&")}` : "";
+// Serialize a stats filter (plus optional extra params) via the shared
+// buildQuery helper. extras win on key collisions.
+export function filterToQueryString(filter, extras = {}) {
+  return buildQuery({
+    account: filter.accounts || [],
+    from: filter.from,
+    to: filter.to,
+    side: filter.side,
+    ...extras,
+  });
 }
 
 export function isAnyFilterActive(filter, totalAccountCount) {
@@ -51,13 +53,25 @@ export function isAnyFilterActive(filter, totalAccountCount) {
 }
 
 export async function fetchAccountOptions() {
-  const resp = await fetch("/api/positions/filters");
-  if (!resp.ok) return [];
-  const body = await resp.json();
-  return body.accounts || [];
+  try {
+    const body = await fetchJSON("/api/positions/filters");
+    return body.accounts || [];
+  } catch {
+    return [];
+  }
 }
 
 const STATS_URL_KEYS = ["account", "side", "from", "to"];
+
+// Stats-filter key → /positions query param. The single source of truth for
+// the stats↔positions drilldown round-trip: statistics.js positionsUrl writes
+// with it, positions_list.js renderBackToStats reads with it. `account` is
+// handled separately (repeated param, same name on both pages).
+export const STATS_TO_POSITIONS_PARAMS = {
+  side: "side",
+  from: "session_date_from",
+  to: "session_date_to",
+};
 
 export function renderFilterBar(container, filter, onApply) {
   container.classList.add("filter-bar");

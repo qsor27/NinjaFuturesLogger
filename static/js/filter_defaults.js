@@ -1,3 +1,5 @@
+import { deleteJSON, fetchJSON, putJSON } from "./api.js";
+
 // filter_defaults — fetch / save / clear the user's saved filter defaults.
 // Pure helper at top is DOM- and fetch-free so a future JS runner can import
 // it standalone.
@@ -11,28 +13,36 @@ export function isUrlEmpty(url, keys) {
 }
 
 export async function fetchDefaults() {
-  const resp = await fetch("/api/filter-defaults");
-  if (!resp.ok) return { accounts: [], positions: null, stats: null };
-  return await resp.json();
+  try {
+    return await fetchJSON("/api/filter-defaults");
+  } catch {
+    return { accounts: [], positions: null, stats: null };
+  }
 }
 
 export async function saveDefault(scope, filter) {
-  const resp = await fetch(`/api/filter-defaults/${encodeURIComponent(scope)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(filter),
-  });
-  return resp.ok;
+  try {
+    await putJSON(`/api/filter-defaults/${encodeURIComponent(scope)}`, filter);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function clearDefault(scope) {
-  const resp = await fetch(`/api/filter-defaults/${encodeURIComponent(scope)}`, {
-    method: "DELETE",
-  });
-  return resp.ok;
+  try {
+    await deleteJSON(`/api/filter-defaults/${encodeURIComponent(scope)}`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function clearAllDefaults() {
-  const resp = await fetch("/api/filter-defaults", { method: "DELETE" });
-  return resp.ok;
+  try {
+    await deleteJSON("/api/filter-defaults");
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -2,6 +2,8 @@
 // Lightweight Charts global (loaded via <script src> in the page templates).
 // The third (mountCalendarHeatmap) is hand-rolled CSS Grid.
 
+import { fmtMoney, pnlClass } from "./format.js";
+
 function _cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
@@ -170,7 +172,7 @@ function _formatBucketValue(value, kind) {
     // carries total_pnl. Show whichever is non-zero meaningfully.
     return `${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   }
-  return _formatPnl(value);
+  return fmtMoney(value);
 }
 
 function _formatMoneyCompact(v) {
@@ -254,7 +256,7 @@ function _renderMonth(monthKey, days) {
       cell.classList.add(_levelClass(bucket.total_pnl, maxAbs));
       cell.innerHTML = `
         <span class="day-num">${d}</span>
-        <span class="pnl ${bucket.total_pnl >= 0 ? "pnl-pos" : "pnl-neg"}">${_formatPnl(bucket.total_pnl)}</span>
+        <span class="pnl ${pnlClass(bucket.total_pnl)}">${fmtMoney(bucket.total_pnl)}</span>
         <span class="count">${bucket.position_count} trade${bucket.position_count === 1 ? "" : "s"}</span>
       `;
       cell.addEventListener("click", () => {
@@ -279,12 +281,6 @@ function _levelClass(pnl, maxAbs) {
     if (frac > 0.33) return "loss-2";
     return "loss-1";
   }
-}
-
-function _formatPnl(pnl) {
-  const sign = pnl >= 0 ? "+" : "-";
-  const abs = Math.abs(pnl);
-  return `${sign}$${abs.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
 /**

@@ -2,6 +2,7 @@ import { buildQuery, fetchJSON } from "./api.js";
 import { browserTz, fmtMoney, formatTime, pnlClass, setText } from "./format.js";
 import { renderPresetSelect } from "./date_presets.js";
 import { createMultiSelect } from "./MultiSelect.js";
+import { STATS_TO_POSITIONS_PARAMS } from "./stats_filter.js";
 import {
   clearAllDefaults,
   fetchDefaults,
@@ -392,12 +393,10 @@ function renderBackToStats() {
   for (const a of params.getAll("account")) {
     if (a) statsParams.append("account", a);
   }
-  const side = params.get("side");
-  const from = params.get("session_date_from");
-  const to = params.get("session_date_to");
-  if (side) statsParams.set("side", side);
-  if (from) statsParams.set("from", from);
-  if (to) statsParams.set("to", to);
+  for (const [statsKey, posKey] of Object.entries(STATS_TO_POSITIONS_PARAMS)) {
+    const v = params.get(posKey);
+    if (v) statsParams.set(statsKey, v);
+  }
   const href = `/statistics${statsParams.toString() ? "?" + statsParams.toString() : ""}`;
   backToStats.hidden = false;
   backToStats.innerHTML = "";
