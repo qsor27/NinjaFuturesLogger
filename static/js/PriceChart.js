@@ -17,6 +17,7 @@
 // add one without rewriting).
 
 import { fetchJSON, postJSON } from "./api.js";
+import { displayTz } from "./format.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -149,17 +150,11 @@ export function nextPollDelay(elapsedMs) {
   return POLL_INTERVAL_MS;
 }
 
-// Timezone helper — reads `document.body.dataset.displayTz` (set by base.html).
-// Empty string = use the browser's local timezone.
-function _displayTz() {
-  return (typeof document !== "undefined" && document.body?.dataset?.displayTz) || undefined;
-}
-
 // Format a unix-seconds timestamp as "YYYY-MM-DD HH:mm" in the display tz.
 // Used for the chart crosshair overlay and the timeScale time formatter.
 function _formatChartDateTime(unixSeconds) {
   const parts = new Intl.DateTimeFormat(undefined, {
-    timeZone: _displayTz(),
+    timeZone: displayTz(),
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -177,7 +172,7 @@ function _formatChartDateTime(unixSeconds) {
 // in the display tz for each bucket.
 function _formatTickMark(unixSeconds, tickMarkType) {
   const d = new Date(unixSeconds * 1000);
-  const tz = _displayTz();
+  const tz = displayTz();
   if (tickMarkType === 0) {
     return new Intl.DateTimeFormat(undefined, { timeZone: tz, year: "numeric" }).format(d);
   }

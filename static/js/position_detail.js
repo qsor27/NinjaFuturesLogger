@@ -1,11 +1,5 @@
-import {
-  fetchJSON,
-  formatDollars,
-  formatTime,
-  patchJSON,
-  postJSON,
-  setText,
-} from "./api.js";
+import { fetchJSON, patchJSON, postJSON } from "./api.js";
+import { fmtMoney, formatTime, formatTimeOfDay, pnlClass, setText } from "./format.js";
 import { PriceChart } from "./PriceChart.js";
 import { mountCustomFields } from "./custom_fields_detail.js";
 
@@ -48,7 +42,7 @@ function renderHeader(detail) {
     ["Entry price", p.entry_price.toFixed(2), null],
     ["Exit price", p.exit_price !== null ? p.exit_price.toFixed(2) : "—", null],
     ["Points P&L", p.points_pnl !== null ? p.points_pnl.toFixed(2) : "—", p.points_pnl],
-    ["$ P&L", formatDollars(p.dollars_pnl).text, p.dollars_pnl],
+    ["$ P&L", fmtMoney(p.dollars_pnl, { decimals: 2 }), p.dollars_pnl],
     ["Commission", `$${p.commission.toFixed(2)}`, null],
     ["Duration", p.duration_minutes !== null ? p.duration_minutes.toFixed(1) + " m" : "—", null],
   ];
@@ -134,12 +128,6 @@ function renderExecutions(executions, detail) {
       if (cssClass) c.className = cssClass;
       return c;
     };
-    const pnlClass = (val) => {
-      if (val === null || val === undefined) return null;
-      if (val > 0) return "pnl-pos";
-      if (val < 0) return "pnl-neg";
-      return null;
-    };
     tr.appendChild(td(e.nt_execution_id));
     tr.appendChild(td(formatTime(e.timestamp)));
     tr.appendChild(td(e.side));
@@ -154,23 +142,6 @@ function renderExecutions(executions, detail) {
   }
   table.appendChild(tbody);
   executionsRoot.appendChild(table);
-}
-
-function formatSignedDollars(v) {
-  const sign = v >= 0 ? "+" : "−";
-  return `${sign}$${Math.abs(v).toFixed(2)}`;
-}
-
-function formatTimeOfDay(unixSec) {
-  const d = new Date(unixSec * 1000);
-  const tz = document.body?.dataset?.displayTz || undefined;
-  return d.toLocaleTimeString(undefined, {
-    timeZone: tz,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
 }
 
 const excursionCardEl = document.getElementById("excursion-card");
@@ -219,8 +190,8 @@ function renderExcursionCard(result, position) {
     effValue = `${Math.round(result.risk_efficiency * 100)}%`;
   }
   const entries = [
-    ["MFE", formatSignedDollars(result.mfe_dollars), formatTimeOfDay(result.mfe_time)],
-    ["MAE", formatSignedDollars(result.mae_dollars), formatTimeOfDay(result.mae_time)],
+    ["MFE", fmtMoney(result.mfe_dollars, { decimals: 2 }), formatTimeOfDay(result.mfe_time)],
+    ["MAE", fmtMoney(result.mae_dollars, { decimals: 2 }), formatTimeOfDay(result.mae_time)],
     ["Efficiency", effValue, effLabel],
   ];
   for (const [label, value, sub] of entries) {
@@ -257,14 +228,14 @@ function renderExcursionCard(result, position) {
           {
             price: result.mfe_price,
             color: posColor,
-            title: `MFE ${formatSignedDollars(result.mfe_dollars)}`,
+            title: `MFE ${fmtMoney(result.mfe_dollars, { decimals: 2 })}`,
             lineStyle: 2,
             lineWidth: 1,
           },
           {
             price: result.mae_price,
             color: negColor,
-            title: `MAE ${formatSignedDollars(result.mae_dollars)}`,
+            title: `MAE ${fmtMoney(result.mae_dollars, { decimals: 2 })}`,
             lineStyle: 2,
             lineWidth: 1,
           },

@@ -1,4 +1,5 @@
-import { buildQuery, fetchJSON, formatDollars, formatTime, setText } from "./api.js";
+import { buildQuery, fetchJSON } from "./api.js";
+import { browserTz, fmtMoney, formatTime, pnlClass, setText } from "./format.js";
 import { renderPresetSelect } from "./date_presets.js";
 import { createMultiSelect } from "./MultiSelect.js";
 import {
@@ -89,7 +90,7 @@ const COLUMNS = {
         setText(td, "—");
       } else {
         setText(td, p.points_pnl.toFixed(2));
-        td.className = p.points_pnl > 0 ? "pnl-pos" : p.points_pnl < 0 ? "pnl-neg" : "";
+        td.className = pnlClass(p.points_pnl);
       }
       return td;
     },
@@ -98,9 +99,9 @@ const COLUMNS = {
     label: "$ P&L",
     cell: (p) => {
       const td = document.createElement("td");
-      const d = formatDollars(p.dollars_pnl);
-      setText(td, d.text);
-      if (d.cls) td.className = d.cls;
+      setText(td, fmtMoney(p.dollars_pnl, { decimals: 2 }));
+      const cls = pnlClass(p.dollars_pnl);
+      if (cls) td.className = cls;
       return td;
     },
   },
@@ -213,11 +214,7 @@ function readFilters() {
   }
   out.account = accountMulti ? accountMulti.getSelected() : [];
   if (out.hour_of_day && !out.hour_tz) {
-    try {
-      out.hour_tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    } catch {
-      out.hour_tz = "";
-    }
+    out.hour_tz = browserTz() || "";
     const hidden = form.querySelector('input[name="hour_tz"]');
     if (hidden) hidden.value = out.hour_tz;
   }

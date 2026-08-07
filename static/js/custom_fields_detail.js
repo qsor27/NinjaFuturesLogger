@@ -1,3 +1,5 @@
+import { fetchJSON, putJSON } from "./api.js";
+
 export function mountCustomFields(container, detailPayload, entryExecutionId) {
   container.replaceChildren();
   const cf = detailPayload.custom_fields || {};
@@ -77,8 +79,7 @@ function buildInput(def, currentValue) {
     s.appendChild(blank);
     s.addEventListener("focus", async () => {
       if (s.dataset.loaded === "1") return;
-      const res = await fetch(`/api/custom-fields/${def.field_id}/options`);
-      const body = await res.json();
+      const body = await fetchJSON(`/api/custom-fields/${def.field_id}/options`);
       for (const o of body.options) {
         const opt = document.createElement("option");
         opt.value = o.value;
@@ -102,17 +103,13 @@ function extractValue(input, fieldType) {
 }
 
 async function saveValue(executionId, fieldId, value) {
-  const res = await fetch(
-    `/api/executions/${encodeURIComponent(executionId)}/custom-fields/${fieldId}`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value }),
-    }
-  );
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    alert(`Save failed: ${body.error || res.status}`);
+  try {
+    await putJSON(
+      `/api/executions/${encodeURIComponent(executionId)}/custom-fields/${fieldId}`,
+      { value },
+    );
+  } catch (e) {
+    alert(`Save failed: ${(e.body && e.body.error) || e.status || e.message}`);
   }
 }
 
