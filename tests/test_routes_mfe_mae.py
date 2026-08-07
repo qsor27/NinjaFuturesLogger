@@ -1,4 +1,3 @@
-from app import create_app
 from db import connect
 from models.bar import Bar
 from services.ohlc.store import insert_many
@@ -54,8 +53,7 @@ def _seed_position_and_bars(db_path):
         conn.close()
 
 
-def test_mfe_mae_endpoint_returns_result_for_closed_position(tmp_config):
-    app, _services = create_app(tmp_config, start_background=False)
+def test_mfe_mae_endpoint_returns_result_for_closed_position(app, tmp_config):
     _seed_position_and_bars(tmp_config.db_path)
     client = app.test_client()
     resp = client.get("/api/positions/A/TEST/E1/mfe-mae")
@@ -66,8 +64,7 @@ def test_mfe_mae_endpoint_returns_result_for_closed_position(tmp_config):
     assert body["result"]["mae_dollars"] == -1.0
 
 
-def test_mfe_mae_endpoint_404_for_unknown_position(tmp_config):
-    app, _services = create_app(tmp_config, start_background=False)
+def test_mfe_mae_endpoint_404_for_unknown_position(app):
     client = app.test_client()
     resp = client.get("/api/positions/A/TEST/DOES_NOT_EXIST/mfe-mae")
     assert resp.status_code == 404
@@ -82,8 +79,7 @@ def test_mfe_mae_endpoint_never_imports_fetch_range():
     )
 
 
-def test_efficiency_distribution_route_empty_dataset(tmp_config):
-    app, _services = create_app(tmp_config, start_background=False)
+def test_efficiency_distribution_route_empty_dataset(app):
     client = app.test_client()
     resp = client.get("/api/stats/efficiency-distribution")
     assert resp.status_code == 200

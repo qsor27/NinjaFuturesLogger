@@ -1,17 +1,3 @@
-import pytest
-
-from app import create_app
-
-
-@pytest.fixture
-def client(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        yield app.test_client()
-    finally:
-        services.stop()
-
-
 def test_get_defaults_empty(client):
     resp = client.get("/api/filter-defaults")
     assert resp.status_code == 200

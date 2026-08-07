@@ -7,12 +7,9 @@ correct active tab.
 
 import pytest
 
-from app import create_app
-
 
 @pytest.fixture
-def client(tmp_config):
-    app, _services = create_app(tmp_config, start_background=False)
+def client(app):
     with app.test_client() as c:
         yield c
 

@@ -4,7 +4,6 @@ and verify the mfe-mae endpoint reports the expected numbers."""
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from app import create_app
 from db import connect
 from models.bar import Bar
 from services.import_pipeline import ImportPipeline
@@ -22,9 +21,8 @@ CSV_BODY = (
 )
 
 
-def test_mfe_mae_integration_end_to_end(tmp_config, tmp_path):
+def test_mfe_mae_integration_end_to_end(app, tmp_config, tmp_path):
     # 1) Build the app (runs migrations).
-    app, _services = create_app(tmp_config, start_background=False)
 
     # 2) Drop a CSV into inbox and ingest it via the pipeline.
     csv_path = Path(tmp_config.inbox_dir) / "NinjaTrader_Executions_20250115.csv"
