@@ -1,8 +1,6 @@
 from datetime import date
-from pathlib import Path
 
 from db import connect
-from migrations import run_migrations
 from models.execution import Execution
 from models.statistics import StatsFilter
 from services.import_db import bulk_insert_executions
@@ -118,18 +116,8 @@ def _service(db_path) -> StatisticsService:
     return StatisticsService(cfg)
 
 
-def _migrated_db(tmp_path) -> Path:
-    db_path = tmp_path / "t.db"
-    conn = connect(db_path)
-    try:
-        run_migrations(conn, Path("migrations"))
-    finally:
-        conn.close()
-    return db_path
-
-
-def test_load_closed_positions_buckets(tmp_path):
-    db_path = _migrated_db(tmp_path)
+def test_load_closed_positions_buckets(migrated_db):
+    db_path = migrated_db
     _seed(db_path)
     svc = _service(db_path)
     result = svc._load_closed_positions(StatsFilter())
@@ -139,8 +127,8 @@ def test_load_closed_positions_buckets(tmp_path):
     assert result.closed_with_pnl[0].dollars_pnl is not None
 
 
-def test_load_closed_positions_filters_by_account(tmp_path):
-    db_path = _migrated_db(tmp_path)
+def test_load_closed_positions_filters_by_account(migrated_db):
+    db_path = migrated_db
     _seed(db_path, account="A")
     _seed_extra_account(db_path)
     svc = _service(db_path)
@@ -152,8 +140,8 @@ def test_load_closed_positions_filters_by_account(tmp_path):
     assert result_b.closed_with_pnl[0].account == "B"
 
 
-def test_load_closed_positions_filters_by_multiple_accounts(tmp_path):
-    db_path = _migrated_db(tmp_path)
+def test_load_closed_positions_filters_by_multiple_accounts(migrated_db):
+    db_path = migrated_db
     _seed(db_path, account="A")
     _seed_extra_account(db_path)
     svc = _service(db_path)
@@ -170,8 +158,8 @@ def test_load_closed_positions_filters_by_multiple_accounts(tmp_path):
     assert len(result_a.closed_with_pnl) == 1
 
 
-def test_load_closed_positions_filters_by_session_date_range(tmp_path):
-    db_path = _migrated_db(tmp_path)
+def test_load_closed_positions_filters_by_session_date_range(migrated_db):
+    db_path = migrated_db
     _seed(db_path)  # session date 2026-04-13
     svc = _service(db_path)
     in_range = svc._load_closed_positions(
@@ -184,14 +172,13 @@ def test_load_closed_positions_filters_by_session_date_range(tmp_path):
     assert len(out_of_range.closed_with_pnl) == 0
 
 
-def _fresh(tmp_path):
-    db_path = _migrated_db(tmp_path)
-    _seed(db_path)
-    return db_path
+def _fresh(migrated_db):
+    _seed(migrated_db)
+    return migrated_db
 
 
-def test_summary_returns_typed_response(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_summary_returns_typed_response(migrated_db):
+    svc = _service(_fresh(migrated_db))
     s = svc.summary(StatsFilter())
     assert s.total_positions == 1
     assert s.wins == 1
@@ -201,44 +188,44 @@ def test_summary_returns_typed_response(tmp_path):
     assert s.skipped_no_multiplier == 0
 
 
-def test_by_instrument(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_by_instrument(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.by_instrument(StatsFilter())
     assert len(r.rows) == 1
     assert r.rows[0].instrument == "MNQ"
 
 
-def test_by_day(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_by_day(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.by_day(StatsFilter())
     assert r.granularity == "day"
     assert any(b.position_count == 1 for b in r.buckets)
 
 
-def test_by_week(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_by_week(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.by_week(StatsFilter())
     assert r.granularity == "week"
     assert any(b.bucket.startswith("2026-W") for b in r.buckets)
 
 
-def test_by_month(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_by_month(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.by_month(StatsFilter())
     assert r.granularity == "month"
     assert any(b.bucket == "2026-04" for b in r.buckets)
 
 
-def test_by_hour_uses_display_timezone_default(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_by_hour_uses_display_timezone_default(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.by_hour(StatsFilter())
     assert r.timezone == "America/Chicago"
     assert len(r.buckets) == 24
     assert sum(b.position_count for b in r.buckets) == 1
 
 
-def test_by_hour_honors_display_timezone_override(tmp_path):
-    db_path = _fresh(tmp_path)
+def test_by_hour_honors_display_timezone_override(migrated_db):
+    db_path = _fresh(migrated_db)
     from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 
     cfg = Config(
@@ -261,15 +248,15 @@ def test_by_hour_honors_display_timezone_override(tmp_path):
     assert r.timezone == "Asia/Tokyo"
 
 
-def test_by_side(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_by_side(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.by_side(StatsFilter())
     assert r.long.position_count == 1
     assert r.short.position_count == 0
 
 
-def test_equity_curve(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_equity_curve(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.equity_curve(StatsFilter())
     assert len(r.series) == 1
     assert r.series[0].account == "Sim"
@@ -277,8 +264,8 @@ def test_equity_curve(tmp_path):
     assert r.series[0].points[0].cumulative_pnl > 0
 
 
-def test_equity_curve_multi_account(tmp_path):
-    db_path = _migrated_db(tmp_path)
+def test_equity_curve_multi_account(migrated_db):
+    db_path = migrated_db
     _seed(db_path, account="A")
     _seed_extra_account(db_path)
     svc = _service(db_path)
@@ -290,16 +277,16 @@ def test_equity_curve_multi_account(tmp_path):
         assert s.points[0].cumulative_pnl > 0
 
 
-def test_distribution(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_distribution(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.distribution(StatsFilter())
     assert r.bucket_count == 10
     assert len(r.buckets) == 10
 
 
-def test_by_day_of_week(tmp_path):
+def test_by_day_of_week(migrated_db):
     # Seeded position is on 2026-04-13 = Monday (dow 0)
-    svc = _service(_fresh(tmp_path))
+    svc = _service(_fresh(migrated_db))
     r = svc.by_day_of_week(StatsFilter())
     assert len(r.buckets) == 5
     assert r.buckets[0].day_name == "Mon"
@@ -309,11 +296,11 @@ def test_by_day_of_week(tmp_path):
     assert all(b.trades == 0 for b in r.buckets[1:])
 
 
-def test_by_hour_display_tz_override(tmp_path):
+def test_by_hour_display_tz_override(migrated_db):
     # Seed: entry_time 1776070800 = 2026-04-13 09:00 UTC
     #   → hour 4 in America/Chicago (default)
     #   → hour 5 in America/New_York
-    svc = _service(_fresh(tmp_path))
+    svc = _service(_fresh(migrated_db))
     r_default = svc.by_hour(StatsFilter())
     assert r_default.timezone == "America/Chicago"
     assert r_default.buckets[4].position_count == 1
@@ -324,25 +311,25 @@ def test_by_hour_display_tz_override(tmp_path):
     assert r_ny.buckets[4].position_count == 0
 
 
-def test_by_hour_invalid_tz_falls_back_to_default(tmp_path):
-    svc = _service(_fresh(tmp_path))
+def test_by_hour_invalid_tz_falls_back_to_default(migrated_db):
+    svc = _service(_fresh(migrated_db))
     r = svc.by_hour(StatsFilter(), display_tz_override="Not/A_RealZone")
     assert r.timezone == "America/Chicago"
     assert r.buckets[4].position_count == 1
 
 
-def test_by_hour_has_win_rate_field(tmp_path):
+def test_by_hour_has_win_rate_field(migrated_db):
     # The single seeded position is a winner (+$10 × multiplier, 0 commission)
-    svc = _service(_fresh(tmp_path))
+    svc = _service(_fresh(migrated_db))
     r = svc.by_hour(StatsFilter())
     assert r.buckets[4].win_rate == 1.0
     # Hours with no trades have None
     assert r.buckets[0].win_rate is None
 
 
-def test_by_trades_per_day(tmp_path):
+def test_by_trades_per_day(migrated_db):
     # Seeded: one session date (2026-04-13) with exactly 1 trade
-    svc = _service(_fresh(tmp_path))
+    svc = _service(_fresh(migrated_db))
     r = svc.by_trades_per_day(StatsFilter())
     assert len(r.buckets) == 1
     b = r.buckets[0]

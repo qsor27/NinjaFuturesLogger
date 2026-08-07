@@ -1,21 +1,10 @@
 import sqlite3
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from db import connect
-from migrations import run_migrations
 from services.custom_fields import CustomFieldsService, DuplicateFieldError
-
-
-def _fresh_db() -> Path:
-    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp.close()
-    conn = connect(Path(tmp.name))
-    run_migrations(conn, Path("migrations"))
-    conn.close()
-    return Path(tmp.name)
 
 
 def _seed_execution(db_path: Path, eid: str = "E1") -> None:
@@ -34,8 +23,8 @@ def _seed_execution(db_path: Path, eid: str = "E1") -> None:
         conn.close()
 
 
-def test_create_and_list_definitions():
-    db = _fresh_db()
+def test_create_and_list_definitions(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     svc.create_definition(name="setup", field_type="dropdown")
     svc.create_definition(name="confidence", field_type="number", display_order=1)
@@ -44,23 +33,23 @@ def test_create_and_list_definitions():
     assert defs[0].field_type == "dropdown"
 
 
-def test_create_definition_rejects_duplicate_name():
-    db = _fresh_db()
+def test_create_definition_rejects_duplicate_name(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     svc.create_definition(name="setup", field_type="text")
     with pytest.raises(ValueError):
         svc.create_definition(name="setup", field_type="text")
 
 
-def test_create_definition_rejects_bad_field_type():
-    db = _fresh_db()
+def test_create_definition_rejects_bad_field_type(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     with pytest.raises(ValueError):
         svc.create_definition(name="x", field_type="bogus")
 
 
-def test_update_definition_renames():
-    db = _fresh_db()
+def test_update_definition_renames(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     d = svc.create_definition(name="setup", field_type="text")
     svc.update_definition(d.field_id, name="Setup Type")
@@ -68,8 +57,8 @@ def test_update_definition_renames():
     assert defs[0].name == "Setup Type"
 
 
-def test_update_definition_changes_is_active():
-    db = _fresh_db()
+def test_update_definition_changes_is_active(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     d = svc.create_definition(name="setup", field_type="text")
     svc.update_definition(d.field_id, is_active=False)
@@ -79,8 +68,8 @@ def test_update_definition_changes_is_active():
     assert defs[0].is_active is False
 
 
-def test_update_definition_rejects_type_change_with_values():
-    db = _fresh_db()
+def test_update_definition_rejects_type_change_with_values(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="setup", field_type="text")
@@ -89,8 +78,8 @@ def test_update_definition_rejects_type_change_with_values():
         svc.update_definition(d.field_id, field_type="number")
 
 
-def test_delete_definition_two_step():
-    db = _fresh_db()
+def test_delete_definition_two_step(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="setup", field_type="text")
@@ -103,8 +92,8 @@ def test_delete_definition_two_step():
     assert svc.list_definitions(include_inactive=True) == []
 
 
-def test_delete_definition_cascades_values():
-    db = _fresh_db()
+def test_delete_definition_cascades_values(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="setup", field_type="text")
@@ -114,8 +103,8 @@ def test_delete_definition_cascades_values():
     assert values == {}
 
 
-def test_replace_options_preserves_option_id_for_unchanged_values():
-    db = _fresh_db()
+def test_replace_options_preserves_option_id_for_unchanged_values(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     d = svc.create_definition(name="setup", field_type="dropdown")
     svc.replace_options(
@@ -145,8 +134,8 @@ def test_replace_options_preserves_option_id_for_unchanged_values():
     assert [o.value for o in second] == ["Reversal", "Breakout", "Trend"]
 
 
-def test_replace_options_deletes_removed_values():
-    db = _fresh_db()
+def test_replace_options_deletes_removed_values(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     d = svc.create_definition(name="setup", field_type="dropdown")
     svc.replace_options(
@@ -161,8 +150,8 @@ def test_replace_options_deletes_removed_values():
     assert [o.value for o in options] == ["A"]
 
 
-def test_set_execution_value_text():
-    db = _fresh_db()
+def test_set_execution_value_text(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="setup", field_type="text")
@@ -171,8 +160,8 @@ def test_set_execution_value_text():
     assert values == {d.field_id: "A+ setup"}
 
 
-def test_set_execution_value_number_stores_as_json():
-    db = _fresh_db()
+def test_set_execution_value_number_stores_as_json(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="confidence", field_type="number")
@@ -181,8 +170,8 @@ def test_set_execution_value_number_stores_as_json():
     assert values == {d.field_id: 4.0}
 
 
-def test_set_execution_value_number_rejects_non_numeric():
-    db = _fresh_db()
+def test_set_execution_value_number_rejects_non_numeric(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="c", field_type="number")
@@ -190,8 +179,8 @@ def test_set_execution_value_number_rejects_non_numeric():
         svc.set_execution_value("E1", d.field_id, "not a number")
 
 
-def test_set_execution_value_date_iso_format():
-    db = _fresh_db()
+def test_set_execution_value_date_iso_format(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="plan_date", field_type="date")
@@ -200,8 +189,8 @@ def test_set_execution_value_date_iso_format():
     assert values == {d.field_id: "2026-04-13"}
 
 
-def test_set_execution_value_date_rejects_bad_format():
-    db = _fresh_db()
+def test_set_execution_value_date_rejects_bad_format(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="plan_date", field_type="date")
@@ -209,8 +198,8 @@ def test_set_execution_value_date_rejects_bad_format():
         svc.set_execution_value("E1", d.field_id, "04/13/2026")
 
 
-def test_set_execution_value_boolean():
-    db = _fresh_db()
+def test_set_execution_value_boolean(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="in_plan", field_type="boolean")
@@ -219,8 +208,8 @@ def test_set_execution_value_boolean():
     assert values == {d.field_id: True}
 
 
-def test_set_execution_value_dropdown_validates_against_options():
-    db = _fresh_db()
+def test_set_execution_value_dropdown_validates_against_options(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="setup", field_type="dropdown")
@@ -235,8 +224,8 @@ def test_set_execution_value_dropdown_validates_against_options():
         svc.set_execution_value("E1", d.field_id, "NotAnOption")
 
 
-def test_set_execution_value_strips_split_suffix():
-    db = _fresh_db()
+def test_set_execution_value_strips_split_suffix(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db, "E1")
     d = svc.create_definition(name="setup", field_type="text")
@@ -247,8 +236,8 @@ def test_set_execution_value_strips_split_suffix():
     assert values2 == {d.field_id: "A+"}
 
 
-def test_set_execution_value_empty_deletes_row():
-    db = _fresh_db()
+def test_set_execution_value_empty_deletes_row(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db)
     d = svc.create_definition(name="setup", field_type="text")
@@ -258,8 +247,8 @@ def test_set_execution_value_empty_deletes_row():
     assert values == {}
 
 
-def test_values_for_position_splits_entry_and_per_execution():
-    db = _fresh_db()
+def test_values_for_position_splits_entry_and_per_execution(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db, "E1")
     _seed_execution(db, "E2")
@@ -278,8 +267,8 @@ def test_values_for_position_splits_entry_and_per_execution():
     assert [d_["name"] for d_ in result["definitions"]] == ["setup"]
 
 
-def test_values_for_position_inactive_field_appears_in_values_not_definitions():
-    db = _fresh_db()
+def test_values_for_position_inactive_field_appears_in_values_not_definitions(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     _seed_execution(db, "E1")
     d = svc.create_definition(name="setup", field_type="text")
@@ -294,17 +283,17 @@ def test_values_for_position_inactive_field_appears_in_values_not_definitions():
     assert result["definitions"] == []
 
 
-def test_create_definition_duplicate_raises_typed_error():
-    db = _fresh_db()
+def test_create_definition_duplicate_raises_typed_error(migrated_db):
+    db = migrated_db
     svc = CustomFieldsService(db)
     svc.create_definition(name="setup", field_type="text")
     with pytest.raises(DuplicateFieldError):
         svc.create_definition(name="setup", field_type="text")
 
 
-def test_create_definition_non_integrity_failure_is_not_rebranded():
+def test_create_definition_non_integrity_failure_is_not_rebranded(migrated_db):
     """A broken DB must surface as its real error, not a bogus 'duplicate'."""
-    db = _fresh_db()
+    db = migrated_db
     svc = CustomFieldsService(db)
     conn = connect(db)
     try:

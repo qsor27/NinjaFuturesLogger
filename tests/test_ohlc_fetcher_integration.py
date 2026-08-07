@@ -1,9 +1,6 @@
-from pathlib import Path
-
 import pytest
 
 from db import connect
-from migrations import run_migrations
 from models.bar import Bar
 from services.ohlc.fetcher import fetch_range
 from services.ohlc.registry import SourceRegistry
@@ -64,16 +61,8 @@ def _make_registry(*sources, clock):
     return reg
 
 
-def _fresh_db(tmp_path):
-    db = tmp_path / "t.db"
-    conn = connect(db)
-    run_migrations(conn, Path("migrations"))
-    conn.close()
-    return db
-
-
-def test_fetch_range_writes_attempt_row(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_fetch_range_writes_attempt_row(migrated_db):
+    db = migrated_db
     bars = [i * 60 for i in range(10)]
     reg = _make_registry(_GoodSource(bars), clock=lambda: 10_000)
     result = fetch_range(
@@ -100,8 +89,8 @@ def test_fetch_range_writes_attempt_row(tmp_path):
     assert row["completed_at"] is not None
 
 
-def test_fetch_range_records_source_attempts_including_failures(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_fetch_range_records_source_attempts_including_failures(migrated_db):
+    db = migrated_db
     bars = [i * 60 for i in range(5)]
     reg = _make_registry(
         _BadSource(),
@@ -128,9 +117,9 @@ def test_fetch_range_records_source_attempts_including_failures(tmp_path):
     assert ("good", "ok") in [(r["source"], r["outcome"]) for r in rows]
 
 
-def test_fetch_range_creates_gap_report_when_unfilled(tmp_path):
+def test_fetch_range_creates_gap_report_when_unfilled(migrated_db):
     """A source that can't fill a > 1h old gap must leave a gap_reports row."""
-    db = _fresh_db(tmp_path)
+    db = migrated_db
     # Align now so start/end are 60s-aligned and sit inside the MNQ session
     # window (avoid the 22:00-23:00 UTC daily break).
     now = 97_800
@@ -171,10 +160,10 @@ def test_fetch_range_creates_gap_report_when_unfilled(tmp_path):
     assert rows[0]["gap_end"] == end
 
 
-def test_fetch_range_emits_per_source_log_line(tmp_path, caplog):
+def test_fetch_range_emits_per_source_log_line(migrated_db, caplog):
     import logging
 
-    db = _fresh_db(tmp_path)
+    db = migrated_db
     bars = [i * 60 for i in range(5)]
     reg = _make_registry(_GoodSource(bars), clock=lambda: 10_000)
     with caplog.at_level(logging.INFO, logger="ohlc.fetcher"):
@@ -195,8 +184,8 @@ def test_fetch_range_emits_per_source_log_line(tmp_path, caplog):
     assert getattr(line, "outcome", None) == "ok"
 
 
-def test_fetch_range_writes_attempt_even_when_cached(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_fetch_range_writes_attempt_even_when_cached(migrated_db):
+    db = migrated_db
     conn = connect(db)
     for i in range(5):
         conn.execute(
@@ -229,11 +218,11 @@ def test_fetch_range_writes_attempt_even_when_cached(tmp_path):
     assert row["bars_written"] == 0
 
 
-def test_trail_error_class_matches_breaker_classification(tmp_path):
+def test_trail_error_class_matches_breaker_classification(migrated_db):
     """B5: the forensic trail must record the same class the breaker acted
     on. A bare RuntimeError is 'other' to the breaker, so the trail must
     say 'other' too — not NULL."""
-    db = _fresh_db(tmp_path)
+    db = migrated_db
     reg = _make_registry(_BadSource(), clock=lambda: 10_000)
     result = fetch_range(
         db_path=db,

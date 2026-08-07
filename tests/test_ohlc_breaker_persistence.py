@@ -1,20 +1,9 @@
-from pathlib import Path
-
 from db import connect
-from migrations import run_migrations
 from services.ohlc.breaker_persistence import (
     load_breaker,
     persist_breaker,
 )
 from services.ohlc.circuit_breaker import CircuitBreaker
-
-
-def _fresh_db(tmp_path):
-    db = tmp_path / "t.db"
-    conn = connect(db)
-    run_migrations(conn, Path("migrations"))
-    conn.close()
-    return db
 
 
 def _breaker(name="yfinance", clock=lambda: 1000):
@@ -26,8 +15,8 @@ def _breaker(name="yfinance", clock=lambda: 1000):
     )
 
 
-def test_persist_then_load_roundtrip(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_persist_then_load_roundtrip(migrated_db):
+    db = migrated_db
     b = _breaker()
 
     class _E(Exception):
@@ -58,8 +47,8 @@ def test_persist_then_load_roundtrip(tmp_path):
     assert b2.next_retry_at == b.next_retry_at
 
 
-def test_load_breaker_no_row_leaves_state_unchanged(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_load_breaker_no_row_leaves_state_unchanged(migrated_db):
+    db = migrated_db
     b = _breaker(name="stooq")
     conn = connect(db)
     try:

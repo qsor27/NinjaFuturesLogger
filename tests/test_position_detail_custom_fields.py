@@ -1,19 +1,8 @@
-import tempfile
 from pathlib import Path
 
 from db import connect
-from migrations import run_migrations
 from services.custom_fields import CustomFieldsService
 from services.positions_service import attach_metadata
-
-
-def _fresh_db() -> Path:
-    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp.close()
-    conn = connect(Path(tmp.name))
-    run_migrations(conn, Path("migrations"))
-    conn.close()
-    return Path(tmp.name)
 
 
 def _seed_execution(db_path: Path, eid: str):
@@ -41,8 +30,8 @@ class _FakePosition:
         return {"entry_execution_id": self.entry_execution_id}
 
 
-def test_attach_metadata_custom_fields_populated():
-    db = _fresh_db()
+def test_attach_metadata_custom_fields_populated(migrated_db):
+    db = migrated_db
     _seed_execution(db, "E1")
     _seed_execution(db, "E2")
     svc = CustomFieldsService(db)
@@ -59,8 +48,8 @@ def test_attach_metadata_custom_fields_populated():
     assert [x["name"] for x in cf["definitions"]] == ["setup"]
 
 
-def test_attach_metadata_no_custom_fields():
-    db = _fresh_db()
+def test_attach_metadata_no_custom_fields(migrated_db):
+    db = migrated_db
     _seed_execution(db, "E1")
     result = attach_metadata(db, _FakePosition("E1", ["E1"]))
     cf = result["custom_fields"]

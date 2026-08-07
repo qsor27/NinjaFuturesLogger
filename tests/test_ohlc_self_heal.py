@@ -1,20 +1,9 @@
-from pathlib import Path
-
 from db import connect
-from migrations import run_migrations
 from services.ohlc.self_heal import self_heal_tick
 
 
-def _fresh_db(tmp_path):
-    db = tmp_path / "t.db"
-    conn = connect(db)
-    run_migrations(conn, Path("migrations"))
-    conn.close()
-    return db
-
-
-def test_self_heal_tick_retries_due_rows(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_self_heal_tick_retries_due_rows(migrated_db):
+    db = migrated_db
     now = 10 * 86400
     conn = connect(db)
     conn.execute(
@@ -44,8 +33,8 @@ def test_self_heal_tick_retries_due_rows(tmp_path):
     assert r["next_retry_at"] == now + 3600  # compute_backoff(1)
 
 
-def test_self_heal_tick_marks_resolved_when_gap_is_now_filled(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_self_heal_tick_marks_resolved_when_gap_is_now_filled(migrated_db):
+    db = migrated_db
     now = 10 * 86400
     conn = connect(db)
     conn.execute(
@@ -78,8 +67,8 @@ def test_self_heal_tick_marks_resolved_when_gap_is_now_filled(tmp_path):
     assert r["resolved_at"] == now
 
 
-def test_self_heal_tick_respects_limit(tmp_path):
-    db = _fresh_db(tmp_path)
+def test_self_heal_tick_respects_limit(migrated_db):
+    db = migrated_db
     now = 10 * 86400
     conn = connect(db)
     for i in range(5):

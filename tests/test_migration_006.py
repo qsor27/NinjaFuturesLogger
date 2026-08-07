@@ -1,21 +1,19 @@
 import sqlite3
-import tempfile
 from pathlib import Path
 
 from db import connect
 from migrations import run_migrations
 
 
-def _fresh_db() -> sqlite3.Connection:
-    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    tmp.close()
-    conn = connect(Path(tmp.name))
+def _fresh_db(tmp_path) -> sqlite3.Connection:
+    db_path = tmp_path / "t.db"
+    conn = connect(db_path)
     run_migrations(conn, Path("migrations"))
     return conn
 
 
-def test_chart_defaults_table_exists_with_seed_row():
-    conn = _fresh_db()
+def test_chart_defaults_table_exists_with_seed_row(tmp_path):
+    conn = _fresh_db(tmp_path)
     try:
         rows = conn.execute(
             "SELECT id, default_timeframe, volume_visible_default FROM chart_defaults"
@@ -28,8 +26,8 @@ def test_chart_defaults_table_exists_with_seed_row():
         conn.close()
 
 
-def test_chart_defaults_single_row_check_rejects_second_insert():
-    conn = _fresh_db()
+def test_chart_defaults_single_row_check_rejects_second_insert(tmp_path):
+    conn = _fresh_db(tmp_path)
     try:
         try:
             conn.execute("INSERT INTO chart_defaults (id, updated_at) VALUES (2, 0)")
@@ -40,8 +38,8 @@ def test_chart_defaults_single_row_check_rejects_second_insert():
         conn.close()
 
 
-def test_custom_fields_tables_exist_with_expected_columns():
-    conn = _fresh_db()
+def test_custom_fields_tables_exist_with_expected_columns(tmp_path):
+    conn = _fresh_db(tmp_path)
     try:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(custom_fields)").fetchall()}
         assert cols == {
@@ -67,8 +65,8 @@ def test_custom_fields_tables_exist_with_expected_columns():
         conn.close()
 
 
-def test_custom_fields_field_type_check_rejects_bad_type():
-    conn = _fresh_db()
+def test_custom_fields_field_type_check_rejects_bad_type(tmp_path):
+    conn = _fresh_db(tmp_path)
     try:
         try:
             conn.execute(
@@ -81,8 +79,8 @@ def test_custom_fields_field_type_check_rejects_bad_type():
         conn.close()
 
 
-def test_custom_field_options_unique_per_field():
-    conn = _fresh_db()
+def test_custom_field_options_unique_per_field(tmp_path):
+    conn = _fresh_db(tmp_path)
     try:
         conn.execute(
             "INSERT INTO custom_fields (name, field_type, created_at) VALUES ('setup', 'dropdown', 0)"
@@ -104,8 +102,8 @@ def test_custom_field_options_unique_per_field():
         conn.close()
 
 
-def test_execution_custom_field_values_cascade_on_execution_delete():
-    conn = _fresh_db()
+def test_execution_custom_field_values_cascade_on_execution_delete(tmp_path):
+    conn = _fresh_db(tmp_path)
     try:
         conn.execute("BEGIN")
         conn.execute(
@@ -137,8 +135,8 @@ def test_execution_custom_field_values_cascade_on_execution_delete():
         conn.close()
 
 
-def test_execution_custom_field_values_cascade_on_field_delete():
-    conn = _fresh_db()
+def test_execution_custom_field_values_cascade_on_field_delete(tmp_path):
+    conn = _fresh_db(tmp_path)
     try:
         conn.execute("BEGIN")
         conn.execute(
