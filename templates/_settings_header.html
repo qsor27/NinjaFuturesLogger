@@ -1,0 +1,13 @@
+{# Shared header for the three /settings/* tab pages: page title + tab nav.
+   `active` must be one of "instruments", "chart", "custom-fields". #}
+{% macro render(active) %}
+<div class="settings-page-header">
+  <h1>Settings</h1>
+</div>
+
+<nav class="settings-tabs">
+  <a href="/settings/instruments" class="settings-tab{% if active == 'instruments' %} active{% endif %}">Instruments</a>
+  <a href="/settings/chart" class="settings-tab{% if active == 'chart' %} active{% endif %}">Chart Defaults</a>
+  <a href="/settings/custom-fields" class="settings-tab{% if active == 'custom-fields' %} active{% endif %}">Custom Fields</a>
+</nav>
+{% endmacro %}

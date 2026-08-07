@@ -1,16 +1,9 @@
 {% extends "base.html" %}
+{% from "_settings_header.html" import render as settings_header %}
 {% block content %}
 <div class="settings-shell" id="settings-custom-fields">
 
-  <div class="settings-page-header">
-    <h1>Settings</h1>
-  </div>
-
-  <nav class="settings-tabs">
-    <a href="/settings/instruments" class="settings-tab">Instruments</a>
-    <a href="/settings/chart" class="settings-tab">Chart Defaults</a>
-    <a href="/settings/custom-fields" class="settings-tab active">Custom Fields</a>
-  </nav>
+  {{ settings_header("custom-fields") }}
 
   <div class="card">
     <div class="card-header">
