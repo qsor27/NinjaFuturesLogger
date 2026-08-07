@@ -3,12 +3,16 @@
 from pathlib import Path
 from typing import Protocol
 
+from models.bar import FetchResult
+
 
 class FetchFn(Protocol):
     """Scheduler-facing fetch callable (app.py's `_fetch` wrapper around
     fetch_range). Injected into the coverage-maintainer and self-heal
     ticks so tests can verify the call shape without network or DB
-    side effects."""
+    side effects. Returns fetch_range's FetchResult so self-heal can
+    thread result.attempt_id into gap-report rows; implementations
+    (test fakes) may return None."""
 
     def __call__(
         self,
@@ -19,4 +23,4 @@ class FetchFn(Protocol):
         start: int,
         end: int,
         trigger: str,
-    ) -> None: ...
+    ) -> FetchResult | None: ...

@@ -141,9 +141,9 @@ def record_retry_outcome(
 ) -> None:
     """Update a gap-report row after a self-heal fetch attempt.
 
-    `attempt_id` may be None if the caller doesn't have a matching
-    fetch_attempts row to correlate (e.g. self-heal, which delegates the
-    fetch and doesn't see the inner attempt_id).
+    `attempt_id` may be None when the caller has no matching
+    fetch_attempts row to correlate (fetch_fn raised, or a test fake
+    returned None); self-heal otherwise threads fetch_range's id here.
     """
     if resolved:
         conn.execute(

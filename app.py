@@ -98,7 +98,7 @@ def create_app(
     def _fetch(*, db_path, instrument, timeframe, start, end, trigger):
         from services.ohlc.fetcher import fetch_range  # deferred to allow tests to monkeypatch
 
-        fetch_range(
+        return fetch_range(
             db_path=db_path,
             registry=ohlc_registry,
             instrument=instrument,

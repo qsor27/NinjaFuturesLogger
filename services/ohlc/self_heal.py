@@ -38,7 +38,7 @@ def self_heal_tick(
         gap_start = row["gap_start"]
         gap_end = row["gap_end"]
         try:
-            fetch_fn(
+            result = fetch_fn(
                 db_path=db_path,
                 instrument=instrument,
                 timeframe=timeframe,
@@ -67,6 +67,10 @@ def self_heal_tick(
                 )
             continue
 
+        attempt_id = None
+        if result is not None and result.attempt_id:
+            attempt_id = result.attempt_id
+
         # Did the fetch actually close the gap?
         with read_conn(db_path) as conn:
             remaining = find_gaps(
@@ -81,7 +85,7 @@ def self_heal_tick(
             record_retry_outcome(
                 conn,
                 gap_id=gap_id,
-                attempt_id=None,
+                attempt_id=attempt_id,
                 resolved=not still_open,
                 now=now,
             )
