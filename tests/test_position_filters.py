@@ -1,5 +1,5 @@
-from models.position import Position
 from services.position_filters import PositionFilter, apply_filters, paginate
+from tests.conftest import make_position
 
 
 def _pos(
@@ -11,7 +11,7 @@ def _pos(
     dollars_pnl=5.0,
     commission=0.5,
 ):
-    return Position(
+    return make_position(
         account=account,
         instrument=instrument,
         entry_execution_id=entry_id,

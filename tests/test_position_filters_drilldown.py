@@ -3,25 +3,19 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from models.position import Position
 from services.position_filters import PositionFilter, apply_filters
+from tests.conftest import make_position
 
 
-def _pos(eid: str, entry_time: int, dollars_pnl: float = 10.0, side: str = "Long") -> Position:
-    return Position(
+def _pos(eid: str, entry_time: int, dollars_pnl: float = 10.0, side: str = "Long"):
+    return make_position(
         account="Sim",
-        instrument="MNQ",
         entry_execution_id=eid,
         side=side,
         entry_time=entry_time,
         exit_time=entry_time + 60,
-        quantity=1,
-        entry_price=100.0,
-        exit_price=101.0,
-        points_pnl=1.0,
         dollars_pnl=dollars_pnl,
         commission=0.0,
-        duration_minutes=1.0,
         execution_ids=[eid],
     )
 

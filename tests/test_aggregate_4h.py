@@ -1,9 +1,9 @@
-from models.bar import Bar
 from services.ohlc.aggregate import derive_4h
+from tests.conftest import make_bar
 
 
-def _bar(ts: int, o: float, h: float, lo: float, c: float, v: int) -> Bar:
-    return Bar(
+def _bar(ts: int, o: float, h: float, lo: float, c: float, v: int):
+    return make_bar(
         instrument="MNQ JUN26",
         timeframe="1h",
         time=ts,

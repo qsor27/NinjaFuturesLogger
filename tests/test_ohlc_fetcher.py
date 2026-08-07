@@ -3,6 +3,7 @@ from models.bar import Bar
 from services.ohlc.fetcher import fetch_range
 from services.ohlc.registry import SourceRegistry
 from services.ohlc.store import insert_many
+from tests.conftest import make_bar
 
 
 class _FakeSource:
@@ -21,7 +22,7 @@ class _FakeSource:
 
 
 def _bar(t, src="fake"):
-    return Bar(
+    return make_bar(
         instrument="MNQ",
         timeframe="1d",
         time=t,

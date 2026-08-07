@@ -1,12 +1,11 @@
 from db import connect
 from models.bar import Bar
 from services.ohlc.store import insert_many, list_times, read_range
+from tests.conftest import make_bar
 
 
-def _bar(t: int, *, close: float = 100.0, src: str = "yfinance") -> Bar:
-    return Bar(
-        instrument="MNQ",
-        timeframe="1m",
+def _bar(t: int, *, close: float = 100.0, src: str = "yfinance"):
+    return make_bar(
         time=t,
         open=close - 0.25,
         high=close + 0.50,

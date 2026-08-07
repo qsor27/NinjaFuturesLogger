@@ -6,6 +6,7 @@ from models.bar import Bar
 from models.position import Position
 from services.mfe_mae import compute_mfe_mae, load_and_compute
 from services.ohlc.store import insert_many
+from tests.conftest import make_bar, make_position
 
 
 def _pos(
@@ -23,7 +24,7 @@ def _pos(
     account="A",
     eid="E1",
 ):
-    return Position(
+    return make_position(
         account=account,
         instrument=instrument,
         entry_execution_id=eid,
@@ -41,8 +42,8 @@ def _pos(
     )
 
 
-def _bar(time: int, high: float, low: float, instrument: str = "TEST") -> Bar:
-    return Bar(
+def _bar(time: int, high: float, low: float, instrument: str = "TEST"):
+    return make_bar(
         instrument=instrument,
         timeframe="1m",
         time=time,

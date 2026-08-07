@@ -2,28 +2,20 @@ from models.browsing import (
     PageMeta,
     PositionListPage,
 )
-from models.position import Position
+from tests.conftest import make_position
 
 
 def _pos(**overrides):
     base = dict(
-        account="Sim101",
-        instrument="MNQ",
         entry_execution_id="a",
-        side="Long",
         entry_time=1,
         exit_time=2,
-        quantity=1,
-        entry_price=100.0,
-        exit_price=101.0,
-        points_pnl=1.0,
         dollars_pnl=2.0,
-        commission=0.5,
         duration_minutes=0.01,
         execution_ids=["a", "b"],
     )
     base.update(overrides)
-    return Position(**base)
+    return make_position(**base)
 
 
 def test_page_meta_shape():

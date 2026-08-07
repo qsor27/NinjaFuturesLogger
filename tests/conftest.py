@@ -10,7 +10,9 @@ from background import BackgroundServices
 from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 from db import connect
 from migrations import run_migrations
+from models.bar import Bar
 from models.execution import Execution
+from models.position import Position
 from services.import_db import bulk_insert_executions
 from services.instruments import set_registry_path
 
@@ -121,3 +123,42 @@ def seed_executions(db_path: Path | str, execs: Sequence[Execution]) -> None:
         bulk_insert_executions(conn, execs)
     finally:
         conn.close()
+
+
+def make_bar(**overrides) -> Bar:
+    """Build a Bar with sane defaults; override any field by keyword."""
+    base = dict(
+        instrument="MNQ",
+        timeframe="1m",
+        time=60,
+        open=100.0,
+        high=100.5,
+        low=99.5,
+        close=100.0,
+        volume=10,
+        source="test",
+    )
+    base.update(overrides)
+    return Bar(**base)
+
+
+def make_position(**overrides) -> Position:
+    """Build a Position with sane defaults; override any field by keyword."""
+    base = dict(
+        account="Sim101",
+        instrument="MNQ",
+        entry_execution_id="e",
+        side="Long",
+        entry_time=1000,
+        exit_time=1060,
+        quantity=1,
+        entry_price=100.0,
+        exit_price=101.0,
+        points_pnl=1.0,
+        dollars_pnl=5.0,
+        commission=0.5,
+        duration_minutes=1.0,
+        execution_ids=["e"],
+    )
+    base.update(overrides)
+    return Position(**base)

@@ -2,6 +2,7 @@ import pytest
 
 from models.position import Position
 from services.statistics_aggregations import compute_summary
+from tests.conftest import make_position
 
 
 def _pos(
@@ -14,18 +15,14 @@ def _pos(
     commission: float = 0.0,
     quantity: int = 1,
     duration_minutes: float | None = 1.0,
-) -> Position:
-    return Position(
+):
+    return make_position(
         account="Sim",
-        instrument="MNQ",
         entry_execution_id=eid,
         side=side,  # type: ignore[arg-type]
         entry_time=entry_time,
         exit_time=exit_time,
         quantity=quantity,
-        entry_price=100.0,
-        exit_price=101.0,
-        points_pnl=1.0,
         dollars_pnl=dollars_pnl,
         commission=commission,
         duration_minutes=duration_minutes,

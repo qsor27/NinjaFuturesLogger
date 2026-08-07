@@ -1,26 +1,11 @@
-from models.position import Position
 from services.outcomes import classify_outcome
+from tests.conftest import make_position
 
 
 def _pos(**overrides):
-    base = dict(
-        account="A",
-        instrument="MNQ",
-        entry_execution_id="e",
-        side="Long",
-        entry_time=0,
-        exit_time=1,
-        quantity=1,
-        entry_price=100.0,
-        exit_price=101.0,
-        points_pnl=1.0,
-        dollars_pnl=2.0,
-        commission=0.5,
-        duration_minutes=0.01,
-        execution_ids=["e"],
-    )
+    base = dict(account="A", entry_time=0, exit_time=1, dollars_pnl=2.0, duration_minutes=0.01)
     base.update(overrides)
-    return Position(**base)
+    return make_position(**base)
 
 
 def test_classify_winner_when_pnl_exceeds_commission():
