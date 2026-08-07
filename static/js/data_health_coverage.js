@@ -1,6 +1,9 @@
 // Data Health / Coverage tab: completeness matrix, per-cell detail panel,
 // delete-and-refetch, stuck-gaps panel.
 
+import { HttpError, postJSON } from "./api.js";
+import { pollJob, triggerFetch } from "./ohlc_jobs.js";
+
 initCoverage();
 
 async function initCoverage() {
@@ -147,28 +150,23 @@ async function openDetailPanel(instrument, timeframe, start, end) {
       const status = document.getElementById("delete-bars-status");
       delBtn.disabled = true;
       status.textContent = "Deleting…";
-      const delResp = await fetch("/api/ohlc/bars/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instrument: inst, timeframe: tf, start: s, end: e }),
-      });
-      const delBody = await delResp.json();
-      if (!delResp.ok) {
-        status.textContent = `Error: ${delBody.error || "unknown"}`;
+      let delBody;
+      try {
+        delBody = await postJSON("/api/ohlc/bars/delete", {
+          instrument: inst, timeframe: tf, start: s, end: e,
+        });
+      } catch (err) {
+        status.textContent = `Error: ${(err.body && err.body.error) || "unknown"}`;
         delBtn.disabled = false;
         return;
       }
       status.textContent = `Deleted ${delBody.deleted} bars. Refetching…`;
-      const fetchResp = await fetch(`/api/chart/${inst}/fetch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ timeframe: tf, start: s, end: e }),
-      });
-      const fetchBody = await fetchResp.json();
-      if (fetchResp.status === 202) {
-        status.textContent = `Deleted ${delBody.deleted} bars. Refetch job ${fetchBody.job_id} started.`;
-      } else {
-        status.textContent = `Deleted ${delBody.deleted} bars. Refetch error: ${fetchBody.error || fetchResp.status}`;
+      try {
+        const jobId = await triggerFetch(inst, tf, s, e);
+        status.textContent = `Deleted ${delBody.deleted} bars. Refetch job ${jobId} started.`;
+      } catch (err) {
+        const detail = (err.body && err.body.error) || err.status || err.message;
+        status.textContent = `Deleted ${delBody.deleted} bars. Refetch error: ${detail}`;
       }
     });
   }
@@ -180,52 +178,48 @@ async function openDetailPanel(instrument, timeframe, start, end) {
 async function fetchGap(instrument, timeframe, start, end, btn) {
   btn.textContent = "Fetching…";
   btn.disabled = true;
-  const resp = await fetch(`/api/chart/${instrument}/fetch`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ timeframe, start: parseInt(start), end: parseInt(end) }),
-  });
-  const body = await resp.json();
-  if (resp.status === 202) {
-    btn.textContent = `Job ${body.job_id} started`;
-    pollJob(body.job_id, btn);
-  } else if (resp.status === 409 && body.error === "out_of_reach") {
-    btn.textContent = "Out of reach";
-    btn.title = body.detail || "Provider does not serve this range";
-    btn.disabled = true;
-  } else {
+  let jobId;
+  try {
+    jobId = await triggerFetch(instrument, timeframe, parseInt(start), parseInt(end));
+  } catch (e) {
+    if (e instanceof HttpError && e.status === 409 && e.body?.error === "out_of_reach") {
+      btn.textContent = "Out of reach";
+      btn.title = e.body.detail || "Provider does not serve this range";
+      return; // stays disabled, matching the old behavior
+    }
     btn.textContent = "Error";
     btn.disabled = false;
+    return;
   }
-}
-
-async function pollJob(jobId, btn) {
-  const resp = await fetch(`/api/ohlc/jobs/${jobId}`);
-  const body = await resp.json();
-  if (body.state === "done") {
-    const result = body.result;
-    if (!result) {
-      btn.textContent = "Done — reload to see changes";
-    } else if (result.bars_added > 0) {
-      btn.textContent = `Done — ${result.bars_added} bars added (reload to see)`;
-    } else if (result.status === "all_sources_unavailable") {
-      btn.textContent = "Sources unavailable — retry later";
-      btn.title = "Every data source is skipped or failing (see System page for breaker state).";
-      btn.disabled = false;
-    } else if (result.status === "out_of_reach") {
-      btn.textContent = "Out of reach";
-      btn.title = "The provider no longer serves this range for this timeframe.";
-    } else if (result.status === "cached") {
-      btn.textContent = "Nothing missing";
-    } else {
-      btn.textContent = `Done (${result.status}) — 0 bars`;
-      btn.disabled = false;
-    }
-  } else if (body.state === "failed" || body.state === "error") {
+  btn.textContent = `Job ${jobId} started`;
+  const snap = await pollJob(jobId, { intervalMs: 1000 });
+  if (!snap) {
+    btn.textContent = "Timed out — check System page";
+    btn.disabled = false;
+    return;
+  }
+  if (snap.state === "failed" || snap.state === "error") {
     btn.textContent = "Fetch failed";
     btn.disabled = false;
+    return;
+  }
+  const result = snap.result;
+  if (!result) {
+    btn.textContent = "Done — reload to see changes";
+  } else if (result.bars_added > 0) {
+    btn.textContent = `Done — ${result.bars_added} bars added (reload to see)`;
+  } else if (result.status === "all_sources_unavailable") {
+    btn.textContent = "Sources unavailable — retry later";
+    btn.title = "Every data source is skipped or failing (see System page for breaker state).";
+    btn.disabled = false;
+  } else if (result.status === "out_of_reach") {
+    btn.textContent = "Out of reach";
+    btn.title = "The provider no longer serves this range for this timeframe.";
+  } else if (result.status === "cached") {
+    btn.textContent = "Nothing missing";
   } else {
-    setTimeout(() => pollJob(jobId, btn), 1000);
+    btn.textContent = `Done (${result.status}) — 0 bars`;
+    btn.disabled = false;
   }
 }
 

@@ -2,6 +2,7 @@ import { fetchJSON, patchJSON, postJSON } from "./api.js";
 import { fmtMoney, formatTime, formatTimeOfDay, pnlClass, setText } from "./format.js";
 import { PriceChart } from "./PriceChart.js";
 import { mountCustomFields } from "./custom_fields_detail.js";
+import { pollJob, triggerFetch } from "./ohlc_jobs.js";
 
 const root = document.getElementById("detail-root");
 const { account, instrument, entryExecutionId } = root.dataset;
@@ -255,18 +256,9 @@ async function triggerFetchBars(btn, position) {
     // entry/exit seconds (pad by 60s on each side for safety).
     const start = Math.max(0, position.entry_time - 60);
     const end = (position.exit_time ?? position.entry_time) + 60;
-    const resp = await postJSON(
-      `/api/chart/${encodeURIComponent(position.instrument)}/fetch`,
-      { timeframe: "1m", start, end },
-    );
+    const jobId = await triggerFetch(position.instrument, "1m", start, end);
     setText(btn, "Fetching...");
-    const jobId = resp.job_id;
-    const deadline = Date.now() + 120_000;
-    while (Date.now() < deadline) {
-      await new Promise((res) => setTimeout(res, 2000));
-      const poll = await fetchJSON(`/api/ohlc/jobs/${jobId}`);
-      if (poll.state === "done" || poll.state === "failed") break;
-    }
+    await pollJob(jobId);
     const refreshed = await fetchJSON(MFE_MAE_URL);
     renderExcursionCard(refreshed.result, position);
   } catch (e) {

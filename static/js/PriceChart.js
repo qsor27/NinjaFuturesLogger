@@ -16,8 +16,9 @@
 // testable in principle (Plan 13 ships no JS test runner; a future plan can
 // add one without rewriting).
 
-import { fetchJSON, postJSON } from "./api.js";
+import { fetchJSON } from "./api.js";
 import { displayTz } from "./format.js";
+import { pollJob, triggerFetch } from "./ohlc_jobs.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -314,12 +315,6 @@ export class PriceChart {
   }
   _sourcesUrl() {
     return "/api/ohlc/sources";
-  }
-  _fetchJobUrl() {
-    return `/api/chart/${encodeURIComponent(this.instrument)}/fetch`;
-  }
-  _jobUrl(jobId) {
-    return `/api/ohlc/jobs/${encodeURIComponent(jobId)}`;
   }
 
   _renderShell() {
@@ -681,13 +676,12 @@ export class PriceChart {
   async _fetchOnDemand(start, end) {
     this._setState("loading");
     try {
-      const job = await postJSON(this._fetchJobUrl(), {
-        timeframe: this.timeframe,
-        start,
-        end,
+      const jobId = await triggerFetch(this.instrument, this.timeframe, start, end);
+      const snap = await pollJob(jobId, {
+        intervalMs: POLL_INTERVAL_MS,
+        timeoutMs: POLL_TIMEOUT_MS,
       });
-      const snap = await this._pollJob(job.job_id);
-      if (!snap) {
+      if (!snap || snap.state !== "done") {
         this._renderPlaceholder({
           message: "Fetch did not complete. Try again later.",
           ctaLabel: "Retry",
@@ -722,27 +716,6 @@ export class PriceChart {
       await this._loadBars();
     } catch (e) {
       this._setError(e);
-    }
-  }
-
-  // Resolves with the final job snapshot ({state, meta, result?}) when the
-  // job reaches "done", or null on failure/timeout.
-  async _pollJob(jobId) {
-    const startedAt = Date.now();
-    while (true) {
-      const elapsed = Date.now() - startedAt;
-      const delay = nextPollDelay(elapsed);
-      if (delay === null) return null;
-      await new Promise((r) => setTimeout(r, delay));
-      let snap;
-      try {
-        snap = await fetchJSON(this._jobUrl(jobId));
-      } catch (_e) {
-        // transient error; keep polling within the timeout window
-        continue;
-      }
-      if (snap.state === "done") return snap;
-      if (snap.state === "failed") return null;
     }
   }
 
