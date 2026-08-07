@@ -570,7 +570,6 @@ export class PriceChart {
 
     // Marker click → custom event for the executions table (AC 16)
     this.canvasEl.addEventListener("click", (ev) => {
-      const param = this.lwChart && this.lwChart.timeScale && this._lastClickHit;
       // Lightweight Charts does not expose marker hit-tests directly. We
       // emulate it by mapping the click x-coordinate to the nearest marker
       // by time and dispatching the custom event.

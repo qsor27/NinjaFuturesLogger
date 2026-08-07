@@ -26,7 +26,6 @@
 }
 
 body:has(.stats-page),
-body:has(.reports-page),
 body:has(.calendar-page) {
   background: var(--bg-page);
   color: var(--text-primary);
@@ -34,8 +33,7 @@ body:has(.calendar-page) {
   font-variant-numeric: tabular-nums;
 }
 
-.stats-page,
-.reports-page {
+.stats-page {
   max-width: 1400px;
   margin: 0 auto;
   padding: 0;
@@ -81,10 +79,6 @@ body:has(.calendar-page) {
   font-size: 13px;
   cursor: pointer;
 }
-.filter-bar button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-}
 
 .bento-grid {
   display: grid;
@@ -102,7 +96,6 @@ body:has(.calendar-page) {
 .bento-2x1 { grid-column: span 2; }
 .bento-1x1 { grid-column: span 1; }
 
-.reports-page > section,
 .calendar-row-2col > section {
   background: var(--bg-card);
   border: 1px solid var(--border-card);

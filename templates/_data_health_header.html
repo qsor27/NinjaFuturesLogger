@@ -2,7 +2,7 @@
    Rendered verdict is populated client-side from /api/data-health/summary.
    `active_tab` must be either "coverage" or "system". #}
 {% macro render(active_tab) %}
-<div id="verdict-banner" data-active-tab="{{ active_tab }}"></div>
+<div id="verdict-banner"></div>
 <nav class="dh-tabs" style="margin:1em 0 1.5em 0;border-bottom:2px solid #2a2a2a;display:flex;gap:0">
   <a href="/data-health"
      class="dh-tab {% if active_tab == 'coverage' %}dh-tab-active{% endif %}"
