@@ -3,6 +3,16 @@
 var
   DataDir: string;
   DataDirPage: TInputDirWizardPage;
+  PortPage: TInputQueryWizardPage;
+  ChosenPort: Integer;
+
+// Single source for the default data directory. Referenced by the wizard
+// page default, GetDataDir, and the uninstall prompt — keep it the only
+// place this path literal appears.
+function DefaultDataDir(): string;
+begin
+  Result := ExpandConstant('{localappdata}\NinjaFuturesLogger\data');
+end;
 
 procedure InitializeWizard();
 begin
@@ -16,10 +26,24 @@ begin
     ''
   );
   DataDirPage.Add('Data directory:');
-  DataDirPage.Values[0] := ExpandConstant('{localappdata}\NinjaFuturesLogger\data');
+  DataDirPage.Values[0] := DefaultDataDir();
+
+  PortPage := CreateInputQueryPage(
+    DataDirPage.ID,
+    'Select Network Port',
+    'Which local TCP port should NinjaFuturesLogger listen on?',
+    'The app runs a local web server bound to 127.0.0.1 and opens it in a WebView2 window.' + #13#10 +
+    'Pick any free port between 1024 and 65535. Default: 8003.' + #13#10 +
+    'If the chosen port is busy at launch the app falls back to the next number.'
+  );
+  PortPage.Add('Port:', False);
+  PortPage.Values[0] := '8003';
+  ChosenPort := 8003;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Value: Integer;
 begin
   Result := True;
   if (CurPageID = DataDirPage.ID) then
@@ -37,13 +61,24 @@ begin
       ForceDirectories(DataDir + '\archive');
       ForceDirectories(DataDir + '\logs');
     end;
+  end
+  else if (CurPageID = PortPage.ID) then
+  begin
+    Value := StrToIntDef(Trim(PortPage.Values[0]), -1);
+    if (Value < 1024) or (Value > 65535) then
+    begin
+      MsgBox('Port must be a whole number between 1024 and 65535.', mbError, MB_OK);
+      Result := False;
+    end
+    else
+      ChosenPort := Value;
   end;
 end;
 
 function GetDataDir(Param: string): string;
 begin
   if DataDir = '' then
-    DataDir := ExpandConstant('{localappdata}\NinjaFuturesLogger\data');
+    DataDir := DefaultDataDir();
   Result := DataDir;
 end;
 
@@ -56,8 +91,7 @@ var
   Lines: TStringList;
   DirForward: String;
 begin
-  if DataDir = '' then
-    DataDir := ExpandConstant('{localappdata}\NinjaFuturesLogger\data');
+  DataDir := GetDataDir('');
   ConfigPath := DataDir + '\config\app.json';
   if FileExists(ConfigPath) then
     Exit;
@@ -87,7 +121,7 @@ begin
     Lines.Add('  "thread_pool": { "max_workers": 4 },');
     Lines.Add('  "scheduler": { "heartbeat_seconds": 60 },');
     Lines.Add('  "theme": "dark",');
-    Lines.Add('  "windows": { "port": 8000 }');
+    Lines.Add('  "windows": { "port": ' + IntToStr(ChosenPort) + ' }');
     Lines.Add('}');
     Lines.SaveToFile(ConfigPath);
   finally
@@ -130,7 +164,7 @@ begin
     // already removed by uninsdeletevalue). Prompt based on the default
     // location only. Users with custom paths will need to remove those
     // manually — documented in windows/README.md.
-    UserDataDir := ExpandConstant('{localappdata}\NinjaFuturesLogger\data');
+    UserDataDir := DefaultDataDir();
     if DirExists(UserDataDir) then
     begin
       if MsgBox(

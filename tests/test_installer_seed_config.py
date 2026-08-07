@@ -48,6 +48,7 @@ STATIC_FRAGMENTS = [
     '"thread_pool": { "max_workers": 4 }',
     '"scheduler": { "heartbeat_seconds": 60 }',
     '"theme": "dark"',
+    '"windows": { "port": ',
 ]
 
 PAGES_PAS = Path(__file__).resolve().parents[1] / "windows" / "installer" / "pages.pas"
