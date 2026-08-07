@@ -75,48 +75,43 @@ def _seed_run(db_path, filename, started_at=1000, finished_at=1001, status="ok")
 # --- import filter tests ---
 
 
-def test_runs_filter_by_status(imports_app):
+@pytest.mark.parametrize(
+    "seed, query, expected",
+    [
+        (
+            [("a.csv", 1000, "ok"), ("b.csv", 1000, "failed")],
+            "status=failed",
+            {"filename": "b.csv", "status": "failed"},
+        ),
+        (
+            [("ninja_20260414.csv", 1000, "ok"), ("other.csv", 1000, "ok")],
+            "filename=ninja",
+            {"filename": "ninja_20260414.csv"},
+        ),
+        (
+            [("old.csv", 100, "ok"), ("new.csv", 9000, "ok")],
+            "start_ts=5000",
+            {"filename": "new.csv"},
+        ),
+        (
+            [("old.csv", 100, "ok"), ("new.csv", 9000, "ok")],
+            "end_ts=5000",
+            {"filename": "old.csv"},
+        ),
+    ],
+    ids=["status", "filename", "start_ts", "end_ts"],
+)
+def test_runs_filter(imports_app, seed, query, expected):
     app, db_path = imports_app
-    _seed_run(db_path, "a.csv", status="ok")
-    _seed_run(db_path, "b.csv", status="failed")
-    resp = app.test_client().get("/api/imports/runs?status=failed")
+    for filename, started_at, status in seed:
+        _seed_run(db_path, filename, started_at=started_at, status=status)
+    resp = app.test_client().get(f"/api/imports/runs?{query}")
     assert resp.status_code == 200
     body = resp.get_json()
     assert len(body["runs"]) == 1
-    assert body["runs"][0]["status"] == "failed"
-
-
-def test_runs_filter_by_filename(imports_app):
-    app, db_path = imports_app
-    _seed_run(db_path, "ninja_20260414.csv")
-    _seed_run(db_path, "other.csv")
-    resp = app.test_client().get("/api/imports/runs?filename=ninja")
-    assert resp.status_code == 200
-    body = resp.get_json()
-    assert len(body["runs"]) == 1
-    assert "ninja" in body["runs"][0]["filename"]
-
-
-def test_runs_filter_by_start_ts(imports_app):
-    app, db_path = imports_app
-    _seed_run(db_path, "old.csv", started_at=100)
-    _seed_run(db_path, "new.csv", started_at=9000)
-    resp = app.test_client().get("/api/imports/runs?start_ts=5000")
-    assert resp.status_code == 200
-    body = resp.get_json()
-    assert len(body["runs"]) == 1
-    assert body["runs"][0]["filename"] == "new.csv"
-
-
-def test_runs_filter_by_end_ts(imports_app):
-    app, db_path = imports_app
-    _seed_run(db_path, "old.csv", started_at=100)
-    _seed_run(db_path, "new.csv", started_at=9000)
-    resp = app.test_client().get("/api/imports/runs?end_ts=5000")
-    assert resp.status_code == 200
-    body = resp.get_json()
-    assert len(body["runs"]) == 1
-    assert body["runs"][0]["filename"] == "old.csv"
+    row = body["runs"][0]
+    for key, value in expected.items():
+        assert row[key] == value
 
 
 def test_runs_includes_total(imports_app):

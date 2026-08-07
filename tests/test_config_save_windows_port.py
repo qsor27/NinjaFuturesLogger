@@ -24,29 +24,12 @@ def test_save_windows_port_preserves_other_fields(tmp_path: Path):
     assert after["windows"]["port"] == 9123
 
 
-def test_save_windows_port_rejects_below_1024(tmp_path: Path):
-    path = seed_app_json(tmp_path)
-    with pytest.raises(ValueError):
-        save_windows_port(path, 80)
-
-
-def test_save_windows_port_rejects_above_65535(tmp_path: Path):
-    path = seed_app_json(tmp_path)
-    with pytest.raises(ValueError):
-        save_windows_port(path, 70000)
-
-
-def test_save_windows_port_rejects_non_int(tmp_path: Path):
-    path = seed_app_json(tmp_path)
-    with pytest.raises(ValueError):
-        save_windows_port(path, "8002")  # type: ignore[arg-type]
-
-
-def test_save_windows_port_rejects_bool(tmp_path: Path):
-    path = seed_app_json(tmp_path)
+@pytest.mark.parametrize("bad", [80, 70000, "8002", True])
+def test_save_windows_port_rejects_invalid(tmp_path: Path, bad):
     # Booleans are a subclass of int in Python; save_windows_port must reject them.
+    path = seed_app_json(tmp_path)
     with pytest.raises(ValueError):
-        save_windows_port(path, True)  # type: ignore[arg-type]
+        save_windows_port(path, bad)  # type: ignore[arg-type]
 
 
 def test_default_when_windows_section_missing(tmp_path: Path):

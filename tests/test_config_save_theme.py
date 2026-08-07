@@ -32,16 +32,11 @@ def test_save_theme_preserves_other_fields(tmp_path: Path):
         assert after[k] == v, f"field {k} was mutated"
 
 
-def test_save_theme_rejects_invalid(tmp_path: Path):
+@pytest.mark.parametrize("bad", ["purple", None])
+def test_save_theme_rejects_invalid(tmp_path: Path, bad):
     path = seed_app_json(tmp_path)
     with pytest.raises(ValueError):
-        save_theme(path, "purple")
-
-
-def test_save_theme_rejects_none(tmp_path: Path):
-    path = seed_app_json(tmp_path)
-    with pytest.raises(ValueError):
-        save_theme(path, None)  # type: ignore[arg-type]
+        save_theme(path, bad)  # type: ignore[arg-type]
 
 
 def test_save_theme_leaves_no_tmp_file(tmp_path: Path):
