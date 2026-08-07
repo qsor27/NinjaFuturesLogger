@@ -29,7 +29,7 @@ async function renderCursorsBand() {
     return;
   }
   const rows = cursors.map((c) => {
-    const cursor = c.byte_offset;
+    const cursor = c.byte_offset.toLocaleString();
     const modified = formatTime(c.last_modified);
     return `<tr>
       <td>${escHtml(c.filename)}</td>
