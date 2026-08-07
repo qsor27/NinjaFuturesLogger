@@ -1,13 +1,23 @@
+import time as _time
 from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 from pydantic import ValidationError
 
-from config import load_config
+from config import (
+    load_config,
+    save_display_timezone,
+    save_source_timezone,
+    save_theme,
+    save_windows_port,
+)
 from db import connect
 from logging_config import get_logger
 from models.settings import VALID_TIMEFRAMES, InstrumentConfig
+from routes import db_path as _db_path
 from routes._params import BadParam, int_arg
+from services.chart_defaults import get_defaults, save_defaults
+from services.custom_fields import CustomFieldsService
 from services.execution_db import execution_exists
 from services.instruments import get_registry
 from services.ohlc.coverage_state import (
@@ -17,6 +27,7 @@ from services.ohlc.coverage_state import (
     retire_now,
     set_pinned,
 )
+from services.positions_service import get_position
 
 log = get_logger("http.settings")
 
@@ -51,13 +62,8 @@ def build_settings_blueprint() -> Blueprint:
 
     # ---- coverage state ----
 
-    def _db_path() -> str:
-        return current_app.config["FTL_DB_PATH"]
-
     @bp.get("/api/settings/coverage")
     def coverage_list():
-        import time as _time
-
         conn = connect(_db_path())
         try:
             refresh_instrument_coverage_state(conn, now=int(_time.time()))
@@ -81,8 +87,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.post("/api/settings/coverage/<instrument>/pin")
     def coverage_pin(instrument: str):
-        import time as _time
-
         data = request.get_json(silent=True) or {}
         pinned = bool(data.get("pinned", True))
         conn = connect(_db_path())
@@ -95,8 +99,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.post("/api/settings/coverage/<instrument>/retire")
     def coverage_retire(instrument: str):
-        import time as _time
-
         conn = connect(_db_path())
         try:
             retire_now(conn, instrument=instrument, now=int(_time.time()))
@@ -106,8 +108,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.post("/api/settings/coverage/<instrument>/reactivate")
     def coverage_reactivate(instrument: str):
-        import time as _time
-
         conn = connect(_db_path())
         try:
             reactivate(conn, instrument=instrument, now=int(_time.time()))
@@ -120,8 +120,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.get("/api/config/chart-defaults")
     def get_chart_defaults():
-        from services.chart_defaults import get_defaults
-
         d = get_defaults(current_app.config["FTL_DB_PATH"])
         cfg = current_app.config["FTL_CONFIG"]
         return jsonify(
@@ -135,9 +133,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.put("/api/config/chart-defaults")
     def put_chart_defaults():
-        from config import save_display_timezone, save_source_timezone
-        from services.chart_defaults import save_defaults
-
         body = request.get_json(silent=True) or {}
         tf = body.get("default_timeframe")
         vv = body.get("volume_visible_default")
@@ -183,8 +178,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.put("/api/config/theme")
     def put_theme():
-        from config import save_theme
-
         body = request.get_json(silent=True) or {}
         value = body.get("theme")
 
@@ -205,8 +198,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.put("/api/settings/windows-port")
     def put_windows_port():
-        from config import save_windows_port
-
         body = request.get_json(silent=True) or {}
         value = body.get("port")
 
@@ -221,8 +212,6 @@ def build_settings_blueprint() -> Blueprint:
     # ---- custom field definitions ----
 
     def _svc():
-        from services.custom_fields import CustomFieldsService
-
         return CustomFieldsService(current_app.config["FTL_DB_PATH"])
 
     @bp.get("/api/custom-fields")
@@ -323,8 +312,6 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.get("/api/positions/<account>/<instrument>/<entry_execution_id>/custom-fields")
     def get_position_custom_fields(account: str, instrument: str, entry_execution_id: str):
-        from services.positions_service import get_position
-
         p = get_position(
             current_app.config["FTL_DB_PATH"],
             account=account,

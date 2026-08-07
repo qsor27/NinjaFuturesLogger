@@ -2,6 +2,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
+from routes import db_path as _db_path
 from services.chart_defaults import get_defaults
 from services.ohlc.aggregate import derive_4h
 from services.ohlc.gap_detection import timeframe_seconds
@@ -13,9 +14,6 @@ CHART_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
 def build_ohlc_blueprint() -> Blueprint:
     bp = Blueprint("ohlc", __name__)
-
-    def _db_path():
-        return current_app.config["FTL_DB_PATH"]
 
     def _pool():
         return current_app.config["FTL_OHLC_POOL"]

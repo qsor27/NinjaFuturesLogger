@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
+from routes import db_path as _db_path
 from routes._params import BadParam, int_arg
 from services.ohlc.gap_detection import (
     classify_window,
@@ -23,9 +24,6 @@ ACTIVE_INSTRUMENTS_LOOKBACK_DAYS = 90
 
 def build_monitoring_blueprint() -> Blueprint:
     bp = Blueprint("monitoring", __name__)
-
-    def _db_path() -> str:
-        return current_app.config["FTL_DB_PATH"]
 
     def _services():
         return current_app.config["BACKGROUND_SERVICES"]

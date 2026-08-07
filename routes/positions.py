@@ -1,10 +1,11 @@
 import time
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
 from db import read_conn, sql_placeholders, transaction
 from logging_config import get_logger
 from models.execution import Execution
+from routes import db_path as _db_path
 from routes._params import BadParam, int_arg
 from services.execution_db import load_executions
 from services.instruments import effective_commission, get_multiplier
@@ -117,9 +118,6 @@ def _parse_filter_from_query(args) -> PositionFilter:
 
 def build_positions_blueprint() -> Blueprint:
     bp = Blueprint("positions", __name__)
-
-    def _db_path():
-        return current_app.config["FTL_DB_PATH"]
 
     @bp.get("/api/positions")
     def list_endpoint():

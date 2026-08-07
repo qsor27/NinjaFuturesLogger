@@ -1,8 +1,9 @@
 import time
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
 from logging_config import get_logger
+from routes import db_path as _db_path
 from services.execution_db import execution_exists
 from services.flags import set_reviewed
 from services.notes import upsert_note
@@ -12,9 +13,6 @@ log = get_logger("http.user_metadata")
 
 def build_user_metadata_blueprint() -> Blueprint:
     bp = Blueprint("user_metadata", __name__)
-
-    def _db_path():
-        return current_app.config["FTL_DB_PATH"]
 
     @bp.patch("/api/executions/<execution_id>/note")
     def patch_note(execution_id: str):
