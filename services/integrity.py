@@ -2,9 +2,10 @@ import time as _time
 from collections.abc import Sequence
 from pathlib import Path as _Path
 
-from db import connect as _connect
+from db import transaction
 from models.execution import Execution
 from models.position import IntegrityIssue
+from services.execution_db import load_executions
 from services.execution_ordering import (
     order_executions_for_walk,
 )
@@ -80,53 +81,18 @@ def run_integrity_diff(
     from services.positions import build_positions
 
     now = int(_time.time())
-    conn = _connect(db_path)
-    try:
-        rows = conn.execute(
-            "SELECT nt_execution_id, account, instrument, timestamp, side,"
-            " original_action, quantity, price, commission, entry_exit,"
-            " position_after, source_order_id, source_filename, imported_at "
-            "FROM executions WHERE account = ? AND instrument = ? "
-            "ORDER BY timestamp, nt_execution_id",
-            (account, instrument),
-        ).fetchall()
-        executions = [
-            Execution(
-                nt_execution_id=r["nt_execution_id"],
-                account=r["account"],
-                instrument=r["instrument"],
-                timestamp=r["timestamp"],
-                side=r["side"],
-                original_action=r["original_action"],
-                quantity=r["quantity"],
-                price=r["price"],
-                commission=r["commission"],
-                entry_exit=r["entry_exit"],
-                position_after=r["position_after"],
-                source_order_id=r["source_order_id"],
-                source_filename=r["source_filename"],
-                imported_at=r["imported_at"],
-            )
-            for r in rows
-        ]
-        _positions, issues = build_positions(executions)
+    executions = load_executions(db_path, account=account, instrument=instrument)
+    _positions, issues = build_positions(executions)
 
-        present: set[tuple[str, str]] = {(i.execution_id, i.type) for i in issues}
+    present: set[tuple[str, str]] = {(i.execution_id, i.type) for i in issues}
 
-        conn.execute("BEGIN")
-        try:
-            for issue in issues:
-                upsert_issue(conn, issue, now=now)
-            auto_resolve_missing(
-                conn,
-                account=account,
-                instrument=instrument,
-                present_keys=present,
-                now=now,
-            )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
-    finally:
-        conn.close()
+    with transaction(db_path) as conn:
+        for issue in issues:
+            upsert_issue(conn, issue, now=now)
+        auto_resolve_missing(
+            conn,
+            account=account,
+            instrument=instrument,
+            present_keys=present,
+            now=now,
+        )
