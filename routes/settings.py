@@ -234,6 +234,8 @@ def build_settings_blueprint() -> Blueprint:
 
     @bp.post("/api/custom-fields")
     def create_custom_field():
+        from services.custom_fields import DuplicateFieldError
+
         body = request.get_json(silent=True) or {}
         name = body.get("name")
         field_type = body.get("field_type")
@@ -246,11 +248,10 @@ def build_settings_blueprint() -> Blueprint:
                 field_type=field_type,
                 display_order=display_order,
             )
+        except DuplicateFieldError as e:
+            return jsonify({"error": str(e)}), 409
         except ValueError as e:
-            msg = str(e)
-            if "duplicate" in msg:
-                return jsonify({"error": msg}), 409
-            return jsonify({"error": msg}), 400
+            return jsonify({"error": str(e)}), 400
         return jsonify({"field": d.model_dump()})
 
     @bp.put("/api/custom-fields/<int:field_id>")

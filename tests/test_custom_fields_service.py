@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -5,7 +6,7 @@ import pytest
 
 from db import connect
 from migrations import run_migrations
-from services.custom_fields import CustomFieldsService
+from services.custom_fields import CustomFieldsService, DuplicateFieldError
 
 
 def _fresh_db() -> Path:
@@ -291,3 +292,24 @@ def test_values_for_position_inactive_field_appears_in_values_not_definitions():
     )
     assert result["entry"] == {d.field_id: "A+"}
     assert result["definitions"] == []
+
+
+def test_create_definition_duplicate_raises_typed_error():
+    db = _fresh_db()
+    svc = CustomFieldsService(db)
+    svc.create_definition(name="setup", field_type="text")
+    with pytest.raises(DuplicateFieldError):
+        svc.create_definition(name="setup", field_type="text")
+
+
+def test_create_definition_non_integrity_failure_is_not_rebranded():
+    """A broken DB must surface as its real error, not a bogus 'duplicate'."""
+    db = _fresh_db()
+    svc = CustomFieldsService(db)
+    conn = connect(db)
+    try:
+        conn.execute("DROP TABLE custom_fields")
+    finally:
+        conn.close()
+    with pytest.raises(sqlite3.OperationalError):
+        svc.create_definition(name="setup", field_type="text")

@@ -11,6 +11,7 @@ Rules enforced here:
 """
 
 import json
+import sqlite3
 import time
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,10 @@ from models.settings import (
 from services.notes import strip_split_suffix
 
 _FIELD_TYPES = ("text", "number", "dropdown", "date", "boolean")
+
+
+class DuplicateFieldError(ValueError):
+    """A custom-field insert collided with the UNIQUE constraint on name."""
 
 
 def _now() -> int:
@@ -102,9 +107,12 @@ class CustomFieldsService:
                     "display_order, created_at) VALUES (?, ?, 1, ?, ?)",
                     (name, field_type, display_order, _now()),
                 )
-            except Exception as e:
+            except sqlite3.IntegrityError as e:
                 conn.execute("ROLLBACK")
-                raise ValueError(f"duplicate name: {name!r}") from e
+                raise DuplicateFieldError(f"duplicate name: {name!r}") from e
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
             field_id = cur.lastrowid
             conn.execute("COMMIT")
         finally:
