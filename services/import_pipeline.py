@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from db import connect
+from db import connect, transaction
 from logging_config import get_logger
 from models.execution import Execution, RejectRecord, TickResult
 from services.csv_parser import ParseError, parse_execution_row
@@ -78,17 +78,8 @@ class ImportPipeline:
         return results
 
     def rollback(self, nt_execution_ids: Sequence[str]) -> int:
-        conn = connect(self.db_path)
-        try:
-            conn.execute("BEGIN")
-            try:
-                deleted = delete_executions(conn, nt_execution_ids)
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            conn.close()
+        with transaction(self.db_path) as conn:
+            deleted = delete_executions(conn, nt_execution_ids)
         return deleted
 
     def archive_completed_sessions(
@@ -114,17 +105,8 @@ class ImportPipeline:
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / path.name
             path.rename(dest)
-            conn = connect(self.db_path)
-            try:
-                conn.execute("BEGIN")
-                try:
-                    delete_cursor(conn, path.name)
-                    conn.execute("COMMIT")
-                except Exception:
-                    conn.execute("ROLLBACK")
-                    raise
-            finally:
-                conn.close()
+            with transaction(self.db_path) as conn:
+                delete_cursor(conn, path.name)
             moved.append(dest)
             log.info("archived", extra={"csv_name": path.name, "dest": str(dest)})
         return moved
@@ -281,6 +263,7 @@ class ImportPipeline:
         finally:
             conn.close()
 
+    # NOTE: _run_tick owns one connection for the whole tick; this explicit BEGIN/COMMIT stays (db.transaction would open a second connection mid-tick).
     def _finish(
         self,
         conn,

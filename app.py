@@ -10,7 +10,7 @@ from flask import Flask
 
 from background import BackgroundServices
 from config import Config
-from db import connect
+from db import connect, transaction
 from logging_config import configure_logging, get_logger
 from migrations import run_migrations
 from migrations_python import apply_json_migrations
@@ -192,13 +192,8 @@ def create_app(
 
     def _retention_trim():
         cutoff = int(_time.time()) - 30 * 86400
-        conn = connect(config.db_path)
-        try:
-            conn.execute("BEGIN")
+        with transaction(config.db_path) as conn:
             trim_older_than(conn, cutoff=cutoff)
-            conn.execute("COMMIT")
-        finally:
-            conn.close()
 
     services.scheduler.add_job(
         _retention_trim,

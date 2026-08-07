@@ -2,7 +2,7 @@ import time
 
 from flask import Blueprint, current_app, jsonify, request
 
-from db import connect
+from db import connect, read_conn, sql_placeholders, transaction
 from logging_config import get_logger
 from routes._params import BadParam, int_arg
 from services.instruments import effective_commission, get_multiplier
@@ -292,7 +292,7 @@ def build_positions_blueprint() -> Blueprint:
             clauses.append("severity = ?")
             params.append(severity)
         if accounts:
-            placeholders = ",".join("?" * len(accounts))
+            placeholders = sql_placeholders(len(accounts))
             clauses.append(f"account IN ({placeholders})")
             params.extend(accounts)
         if instrument:
@@ -305,11 +305,8 @@ def build_positions_blueprint() -> Blueprint:
             "ORDER BY CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,"
             " detected_at DESC LIMIT 500"
         )
-        conn = connect(_db_path())
-        try:
+        with read_conn(_db_path()) as conn:
             rows = conn.execute(sql, params).fetchall()
-        finally:
-            conn.close()
         return jsonify({"issues": [dict(r) for r in rows]})
 
     @bp.post("/api/integrity-issues/<int:issue_id>/resolve")
@@ -318,22 +315,13 @@ def build_positions_blueprint() -> Blueprint:
         note = body.get("note")
         if note is not None and not isinstance(note, str):
             return jsonify({"error": "note must be a string"}), 400
-        conn = connect(_db_path())
-        try:
-            conn.execute("BEGIN")
-            try:
-                mark_resolved_by_user(
-                    conn,
-                    issue_id=issue_id,
-                    now=int(time.time()),
-                    note=note,
-                )
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            conn.close()
+        with transaction(_db_path()) as conn:
+            mark_resolved_by_user(
+                conn,
+                issue_id=issue_id,
+                now=int(time.time()),
+                note=note,
+            )
         return jsonify({"ok": True})
 
     @bp.post("/api/integrity-issues/<int:issue_id>/ignore")
@@ -342,17 +330,8 @@ def build_positions_blueprint() -> Blueprint:
         note = body.get("note")
         if not isinstance(note, str) or not note:
             return jsonify({"error": "note is required"}), 400
-        conn = connect(_db_path())
-        try:
-            conn.execute("BEGIN")
-            try:
-                mark_ignored(conn, issue_id=issue_id, note=note)
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            conn.close()
+        with transaction(_db_path()) as conn:
+            mark_ignored(conn, issue_id=issue_id, note=note)
         return jsonify({"ok": True})
 
     return bp

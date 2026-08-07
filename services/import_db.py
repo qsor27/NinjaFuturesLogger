@@ -2,6 +2,7 @@ import sqlite3
 import time
 from collections.abc import Iterable, Sequence
 
+from db import sql_placeholders
 from models.execution import Execution, RejectRecord
 
 _INSERT_EXECUTION_SQL = (
@@ -141,7 +142,7 @@ def delete_executions(
 ) -> int:
     if not nt_execution_ids:
         return 0
-    placeholders = ",".join("?" for _ in nt_execution_ids)
+    placeholders = sql_placeholders(len(nt_execution_ids))
     cur = conn.execute(
         f"DELETE FROM executions WHERE nt_execution_id IN ({placeholders})",
         tuple(nt_execution_ids),

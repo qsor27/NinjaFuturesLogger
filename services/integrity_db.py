@@ -1,5 +1,6 @@
 import sqlite3
 
+from db import sql_placeholders
 from models.position import IntegrityIssue
 
 
@@ -52,7 +53,7 @@ def auto_resolve_missing(
     stale_ids = [r["issue_id"] for r in rows if (r["execution_id"], r["type"]) not in present_keys]
     if not stale_ids:
         return
-    placeholders = ",".join("?" for _ in stale_ids)
+    placeholders = sql_placeholders(len(stale_ids))
     conn.execute(
         f"UPDATE integrity_issues SET resolved_at = ?, resolved_by = 'system' "
         f"WHERE issue_id IN ({placeholders})",
