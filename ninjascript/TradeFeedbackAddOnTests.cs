@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using NUnit.Framework;
+using NinjaTrader.NinjaScript.NinjaFuturesLogger;
 
 namespace NinjaTrader.NinjaScript.AddOns.Tests
 {
@@ -96,8 +97,8 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
 
             // Assert
             Assert.AreEqual(1, unvalidated.Count);
-            Assert.IsTrue(unvalidated.ContainsKey(positionId1));
-            Assert.IsFalse(unvalidated.ContainsKey(positionId2));
+            Assert.IsTrue(unvalidated.Any(p => p.PositionId == positionId1));
+            Assert.IsFalse(unvalidated.Any(p => p.PositionId == positionId2));
         }
 
         [Test]
@@ -139,7 +140,7 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.AddPosition(positionId, DateTime.Now, "MNQH25", -50m, requiresValidation: true);
 
             // Act
-            TradeFeedbackAddOn.SaveState(tracker, testStateFilePath);
+            TradeValidationShared.SaveValidationState(tracker, testStateFilePath);
 
             // Assert
             Assert.IsTrue(File.Exists(testStateFilePath));
@@ -155,10 +156,10 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             var tracker1 = new PositionValidationTracker();
             var positionId = "2025-01-15T14:30:00_MNQH25_SimAccount";
             tracker1.AddPosition(positionId, DateTime.Now, "MNQH25", -50m, requiresValidation: true);
-            TradeFeedbackAddOn.SaveState(tracker1, testStateFilePath);
+            TradeValidationShared.SaveValidationState(tracker1, testStateFilePath);
 
             // Act
-            var tracker2 = TradeFeedbackAddOn.LoadState(testStateFilePath);
+            var tracker2 = TradeValidationShared.LoadValidationState(testStateFilePath);
 
             // Assert
             Assert.IsNotNull(tracker2);
@@ -174,7 +175,7 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             var nonExistentPath = Path.Combine(Path.GetTempPath(), "nonexistent_state.json");
 
             // Act
-            var tracker = TradeFeedbackAddOn.LoadState(nonExistentPath);
+            var tracker = TradeValidationShared.LoadValidationState(nonExistentPath);
 
             // Assert - Should return new empty tracker
             Assert.IsNotNull(tracker);
@@ -194,10 +195,10 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker1.AddPosition(positionId2, DateTime.Now, "MNQH25", 100m, requiresValidation: true);
             tracker1.MarkValidated(positionId1, "Valid");
 
-            TradeFeedbackAddOn.SaveState(tracker1, testStateFilePath);
+            TradeValidationShared.SaveValidationState(tracker1, testStateFilePath);
 
             // Act
-            var tracker2 = TradeFeedbackAddOn.LoadState(testStateFilePath);
+            var tracker2 = TradeValidationShared.LoadValidationState(testStateFilePath);
 
             // Assert
             Assert.IsFalse(tracker2.RequiresValidation(positionId1)); // Was validated
@@ -217,7 +218,7 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             var account = "SimAccount";
 
             // Act
-            var positionId = TradeFeedbackAddOn.GeneratePositionId(entryTime, instrument, account);
+            var positionId = TradeValidationShared.GeneratePositionId(entryTime, instrument, account);
 
             // Assert
             Assert.IsNotEmpty(positionId);
@@ -236,8 +237,8 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             var account = "SimAccount";
 
             // Act
-            var positionId1 = TradeFeedbackAddOn.GeneratePositionId(entryTime, instrument1, account);
-            var positionId2 = TradeFeedbackAddOn.GeneratePositionId(entryTime, instrument2, account);
+            var positionId1 = TradeValidationShared.GeneratePositionId(entryTime, instrument1, account);
+            var positionId2 = TradeValidationShared.GeneratePositionId(entryTime, instrument2, account);
 
             // Assert
             Assert.AreNotEqual(positionId1, positionId2);
@@ -300,11 +301,10 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             // Assert - Should have 3 positions
             Assert.AreEqual(3, unvalidated.Count);
 
-            // Verify ordering (most recent first)
-            var orderedPositions = unvalidated.OrderByDescending(p => p.Value.CloseTimestamp).ToList();
-            Assert.AreEqual("pos3", orderedPositions[0].Key);
-            Assert.AreEqual("pos2", orderedPositions[1].Key);
-            Assert.AreEqual("pos1", orderedPositions[2].Key);
+            // GetUnvalidated is ordered most-recent-first by contract
+            Assert.AreEqual("pos3", unvalidated[0].PositionId);
+            Assert.AreEqual("pos2", unvalidated[1].PositionId);
+            Assert.AreEqual("pos1", unvalidated[2].PositionId);
         }
 
         [Test]
@@ -326,8 +326,8 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             // Assert - Only second position should remain
             var remaining = tracker.GetUnvalidated();
             Assert.AreEqual(1, remaining.Count);
-            Assert.IsTrue(remaining.ContainsKey(positionId2));
-            Assert.IsFalse(remaining.ContainsKey(positionId1));
+            Assert.IsTrue(remaining.Any(p => p.PositionId == positionId2));
+            Assert.IsFalse(remaining.Any(p => p.PositionId == positionId1));
         }
 
         [Test]
@@ -347,7 +347,7 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             var unvalidated = tracker.GetUnvalidated();
             Assert.AreEqual(1, unvalidated.Count);
 
-            var position = unvalidated[positionId];
+            var position = unvalidated.First(p => p.PositionId == positionId);
             Assert.AreEqual(instrument, position.Instrument);
             Assert.AreEqual(pnl, position.PnL);
             Assert.AreEqual(entryTime, position.CloseTimestamp);
@@ -369,8 +369,8 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             var positions = tracker.GetUnvalidated();
             Assert.AreEqual(2, positions.Count);
 
-            Assert.IsTrue(positions[profitPosition].PnL >= 0); // Green
-            Assert.IsTrue(positions[lossPosition].PnL < 0);    // Red
+            Assert.IsTrue(positions.First(p => p.PositionId == profitPosition).PnL >= 0); // Green
+            Assert.IsTrue(positions.First(p => p.PositionId == lossPosition).PnL < 0);    // Red
         }
 
         [Test]
@@ -398,10 +398,10 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
 
         /// <summary>
         /// Task 7.1: Test 1 - Order blocking filters positions by instrument correctly
-        /// Tests that GetUnvalidatedForInstrument returns only positions matching the instrument
+        /// Tests that GetUnvalidatedPositionsForInstrument returns only positions matching the instrument
         /// </summary>
         [Test]
-        public void OrderBlocking_GetUnvalidatedForInstrument_ReturnsOnlyMatchingInstrument()
+        public void OrderBlocking_GetUnvalidatedPositionsForInstrument_ReturnsOnlyMatchingInstrument()
         {
             // Arrange
             var tracker = new PositionValidationTracker();
@@ -414,15 +414,15 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.AddPosition(positionId3, DateTime.Now, "MNQH25", -100m, requiresValidation: true);
 
             // Act
-            var mnqPositions = tracker.GetUnvalidatedForInstrument("MNQH25");
-            var esPositions = tracker.GetUnvalidatedForInstrument("ESH25");
+            var mnqPositions = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
+            var esPositions = tracker.GetUnvalidatedPositionsForInstrument("ESH25", 0);
 
             // Assert
             Assert.AreEqual(2, mnqPositions.Count);
             Assert.AreEqual(1, esPositions.Count);
-            Assert.IsTrue(mnqPositions.ContainsKey(positionId1));
-            Assert.IsTrue(mnqPositions.ContainsKey(positionId3));
-            Assert.IsTrue(esPositions.ContainsKey(positionId2));
+            Assert.IsTrue(mnqPositions.Any(p => p.PositionId == positionId1));
+            Assert.IsTrue(mnqPositions.Any(p => p.PositionId == positionId3));
+            Assert.IsTrue(esPositions.Any(p => p.PositionId == positionId2));
         }
 
         /// <summary>
@@ -438,14 +438,14 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.AddPosition(positionId, DateTime.Now, "MNQH25", -50m, requiresValidation: true);
 
             // Verify position requires validation initially
-            var unvalidatedBefore = tracker.GetUnvalidatedForInstrument("MNQH25");
+            var unvalidatedBefore = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
             Assert.AreEqual(1, unvalidatedBefore.Count);
 
             // Act - Mark position as validated
             tracker.MarkValidated(positionId, "Valid");
 
             // Assert - No longer requires validation
-            var unvalidatedAfter = tracker.GetUnvalidatedForInstrument("MNQH25");
+            var unvalidatedAfter = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
             Assert.AreEqual(0, unvalidatedAfter.Count);
         }
 
@@ -468,8 +468,8 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.MarkValidated(mnqPosition, "Valid");
 
             // Assert - MNQ should be clear, ES should still block
-            var mnqUnvalidated = tracker.GetUnvalidatedForInstrument("MNQH25");
-            var esUnvalidated = tracker.GetUnvalidatedForInstrument("ESH25");
+            var mnqUnvalidated = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
+            var esUnvalidated = tracker.GetUnvalidatedPositionsForInstrument("ESH25", 0);
 
             Assert.AreEqual(0, mnqUnvalidated.Count);
             Assert.AreEqual(1, esUnvalidated.Count);
@@ -496,7 +496,7 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.MarkValidated(positionId2, "Invalid");
 
             // Act
-            var unvalidated = tracker.GetUnvalidatedForInstrument("MNQH25");
+            var unvalidated = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
 
             // Assert - No unvalidated positions should block new orders
             Assert.AreEqual(0, unvalidated.Count);
@@ -518,12 +518,12 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.AddPosition(positionId, closeTime, "MNQH25", -50m, requiresValidation: true);
 
             // Assert - Position exists with correct timestamp for grace period filtering
-            var unvalidated = tracker.GetUnvalidatedForInstrument("MNQH25");
+            var unvalidated = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
             Assert.AreEqual(1, unvalidated.Count);
-            Assert.AreEqual(closeTime, unvalidated[positionId].CloseTimestamp);
+            Assert.AreEqual(closeTime, unvalidated.First(p => p.PositionId == positionId).CloseTimestamp);
 
             // Verify timestamp can be used for grace period calculations
-            var timeSinceClose = (DateTime.Now - unvalidated[positionId].CloseTimestamp).TotalSeconds;
+            var timeSinceClose = (DateTime.Now - unvalidated.First(p => p.PositionId == positionId).CloseTimestamp).TotalSeconds;
             Assert.GreaterOrEqual(timeSinceClose, 30);
             Assert.Less(timeSinceClose, 35); // Account for test execution time
         }
@@ -547,11 +547,11 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.AddPosition(positionId3, DateTime.Now, "MNQH25", -100m, requiresValidation: true);
 
             // Assert - All three positions should block new orders
-            var unvalidated = tracker.GetUnvalidatedForInstrument("MNQH25");
+            var unvalidated = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
             Assert.AreEqual(3, unvalidated.Count);
-            Assert.IsTrue(unvalidated.ContainsKey(positionId1));
-            Assert.IsTrue(unvalidated.ContainsKey(positionId2));
-            Assert.IsTrue(unvalidated.ContainsKey(positionId3));
+            Assert.IsTrue(unvalidated.Any(p => p.PositionId == positionId1));
+            Assert.IsTrue(unvalidated.Any(p => p.PositionId == positionId2));
+            Assert.IsTrue(unvalidated.Any(p => p.PositionId == positionId3));
         }
 
         /// <summary>
@@ -576,11 +576,11 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.MarkValidated(positionId2, "Invalid");
 
             // Assert - Third position should still block
-            var unvalidated = tracker.GetUnvalidatedForInstrument("MNQH25");
+            var unvalidated = tracker.GetUnvalidatedPositionsForInstrument("MNQH25", 0);
             Assert.AreEqual(1, unvalidated.Count);
-            Assert.IsTrue(unvalidated.ContainsKey(positionId3));
-            Assert.IsFalse(unvalidated.ContainsKey(positionId1));
-            Assert.IsFalse(unvalidated.ContainsKey(positionId2));
+            Assert.IsTrue(unvalidated.Any(p => p.PositionId == positionId3));
+            Assert.IsFalse(unvalidated.Any(p => p.PositionId == positionId1));
+            Assert.IsFalse(unvalidated.Any(p => p.PositionId == positionId2));
         }
 
         /// <summary>
@@ -596,7 +596,7 @@ namespace NinjaTrader.NinjaScript.AddOns.Tests
             tracker.AddPosition(positionId, DateTime.Now, "MNQH25", -50m, requiresValidation: true);
 
             // Act - Query for different instrument
-            var unvalidated = tracker.GetUnvalidatedForInstrument("CLH25");
+            var unvalidated = tracker.GetUnvalidatedPositionsForInstrument("CLH25", 0);
 
             // Assert - Should return empty list (no blocking for CLH25)
             Assert.AreEqual(0, unvalidated.Count);
