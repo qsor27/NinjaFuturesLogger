@@ -26,6 +26,11 @@ def build_ohlc_blueprint() -> Blueprint:
     def _registry():
         return current_app.config["FTL_OHLC_REGISTRY"]
 
+    def _token_bucket():
+        # None-tolerant: blueprint-level tests build the app without a
+        # bucket; fetch_range treats None as "no throttle".
+        return current_app.config.get("FTL_OHLC_TOKEN_BUCKET")
+
     @bp.get("/api/chart/<instrument>")
     def get_chart(instrument: str):
         timeframe = request.args.get("timeframe", "1m")
@@ -157,6 +162,7 @@ def build_ohlc_blueprint() -> Blueprint:
         jobs = _jobs()
         registry = _registry()
         db_path = _db_path()
+        token_bucket = _token_bucket()
 
         def _run():
             return fetch_range(
@@ -167,6 +173,7 @@ def build_ohlc_blueprint() -> Blueprint:
                 start=start,
                 end=end,
                 trigger="on_demand",
+                token_bucket=token_bucket,
             )
 
         job_id = jobs.submit(
@@ -281,6 +288,7 @@ def build_ohlc_blueprint() -> Blueprint:
         pool = _pool()
         registry = _registry()
         db_path = _db_path()
+        token_bucket = _token_bucket()
 
         def _run():
             return fetch_range(
@@ -291,6 +299,7 @@ def build_ohlc_blueprint() -> Blueprint:
                 start=row["gap_start"],
                 end=row["gap_end"],
                 trigger="self_heal",
+                token_bucket=token_bucket,
             )
 
         pool.submit(_run)
