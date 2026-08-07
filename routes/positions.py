@@ -2,12 +2,15 @@ import time
 
 from flask import Blueprint, current_app, jsonify, request
 
-from db import connect, read_conn, sql_placeholders, transaction
+from db import read_conn, sql_placeholders, transaction
 from logging_config import get_logger
+from models.execution import Execution
 from routes._params import BadParam, int_arg
+from services.execution_db import load_executions
 from services.instruments import effective_commission, get_multiplier
 from services.integrity_db import mark_ignored, mark_resolved_by_user
 from services.markers import build_markers
+from services.notes import strip_split_suffix
 from services.position_filters import PositionFilter
 from services.positions_service import (
     attach_metadata,
@@ -17,6 +20,20 @@ from services.positions_service import (
 )
 
 log = get_logger("http.positions")
+
+
+def _position_executions(db_path, position) -> list[Execution]:
+    """All real executions belonging to a position, in walk order.
+
+    Split-fill suffixes in position.execution_ids are stripped so the
+    synthesized #close/#open halves match their parent row.
+    """
+    wanted = {strip_split_suffix(eid) for eid in position.execution_ids}
+    return [
+        e
+        for e in load_executions(db_path, account=position.account, instrument=position.instrument)
+        if e.nt_execution_id in wanted
+    ]
 
 
 def _parse_filter_from_query(args) -> PositionFilter:
@@ -161,31 +178,11 @@ def build_positions_blueprint() -> Blueprint:
         )
         if p is None:
             return jsonify({"error": "not found"}), 404
-        # Load the raw executions for the (account, instrument) pair and
-        # return only the ones whose nt_execution_id (with split suffix
-        # stripped) appears in p.execution_ids.
-        from services.notes import strip_split_suffix
-
-        wanted = {strip_split_suffix(eid) for eid in p.execution_ids}
-        conn = connect(_db_path())
-        try:
-            rows = conn.execute(
-                "SELECT nt_execution_id, account, instrument, timestamp, side,"
-                " original_action, quantity, price, commission, entry_exit,"
-                " position_after, source_order_id, source_filename, imported_at "
-                "FROM executions WHERE account = ? AND instrument = ? "
-                "ORDER BY timestamp, nt_execution_id",
-                (account, instrument),
-            ).fetchall()
-        finally:
-            conn.close()
         sign = 1 if p.side == "Long" else -1
         multiplier = get_multiplier(p.instrument)
         executions = []
-        for r in rows:
-            if r["nt_execution_id"] not in wanted:
-                continue
-            e = dict(r)
+        for ex in _position_executions(_db_path(), p):
+            e = ex.model_dump()
             if e["entry_exit"] == "Exit":
                 eff_comm = effective_commission(p.instrument, e["commission"], e["quantity"])
                 pnl_points = (e["price"] - p.entry_price) * e["quantity"] * sign
@@ -209,50 +206,7 @@ def build_positions_blueprint() -> Blueprint:
         )
         if p is None:
             return jsonify({"error": "not found"}), 404
-
-        # Same lookup pattern as get_executions: load all (account, instrument)
-        # executions, filter to the ones whose un-suffixed nt_execution_id
-        # appears in the position's execution_ids, then build markers from
-        # those real rows.
-        from services.notes import strip_split_suffix
-
-        wanted = {strip_split_suffix(eid) for eid in p.execution_ids}
-        conn = connect(_db_path())
-        try:
-            rows = conn.execute(
-                "SELECT nt_execution_id, account, instrument, timestamp, side,"
-                " original_action, quantity, price, commission, entry_exit,"
-                " position_after, source_order_id, source_filename, imported_at "
-                "FROM executions WHERE account = ? AND instrument = ? "
-                "ORDER BY timestamp, nt_execution_id",
-                (account, instrument),
-            ).fetchall()
-        finally:
-            conn.close()
-
-        from models.execution import Execution
-
-        executions = [
-            Execution(
-                nt_execution_id=r["nt_execution_id"],
-                account=r["account"],
-                instrument=r["instrument"],
-                timestamp=r["timestamp"],
-                side=r["side"],
-                original_action=r["original_action"],
-                quantity=r["quantity"],
-                price=r["price"],
-                commission=r["commission"],
-                entry_exit=r["entry_exit"],
-                position_after=r["position_after"],
-                source_order_id=r["source_order_id"],
-                source_filename=r["source_filename"],
-                imported_at=r["imported_at"],
-            )
-            for r in rows
-            if r["nt_execution_id"] in wanted
-        ]
-        markers = build_markers(executions)
+        markers = build_markers(_position_executions(_db_path(), p))
         return jsonify({"markers": [m.model_dump() for m in markers]})
 
     @bp.get("/api/positions/<account>/<instrument>/<entry_execution_id>/mfe-mae")
