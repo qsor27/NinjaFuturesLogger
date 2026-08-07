@@ -38,7 +38,7 @@ Run on a clean Windows 10 22H2+ or Windows 11 machine (or VM with a fresh user p
 
 - [ ] Double-click `NinjaFuturesLogger-Setup-<version>.exe`.
 - [ ] **No UAC prompt** appears (per-user install).
-- [ ] Wizard shows Welcome → License → Destination (default `%LOCALAPPDATA%\Programs\NinjaFuturesLogger`) → Data dir page (default `%LOCALAPPDATA%\NinjaFuturesLogger\data`) → Start Menu → Tasks → Ready → Installing.
+- [ ] Wizard shows Welcome → License → Destination (default `%LOCALAPPDATA%\Programs\NinjaFuturesLogger`) → Data dir page (default `%LOCALAPPDATA%\NinjaFuturesLogger\data`) → Port page (default `8003`, accepts 1024–65535) → Start Menu → Tasks → Ready → Installing.
 - [ ] If WebView2 runtime is missing, the installer silently runs the bootstrapper during Installing.
 - [ ] Completes in under 2 minutes on a modern SSD.
 - [ ] Final page offers "Launch NinjaFuturesLogger" checked by default.
@@ -60,9 +60,11 @@ Run on a clean Windows 10 22H2+ or Windows 11 machine (or VM with a fresh user p
 
 ### Port conflict
 
-- [ ] Close the app. Start another process on port 8000 (e.g., `python -m http.server 8000`).
-- [ ] Launch NinjaFuturesLogger. Launcher falls back to 8001 and persists it to `%LOCALAPPDATA%\NinjaFuturesLogger\data\config\app.json`.
-- [ ] WebView2 window loads `http://127.0.0.1:8001/`.
+- [ ] Close the app. Start another process on the configured port (e.g., `python -m http.server 8003` if you accepted the default).
+- [ ] Launch NinjaFuturesLogger. Launcher falls back to the next port (`8004`) and persists it to `%LOCALAPPDATA%\NinjaFuturesLogger\data\config\app.json`.
+- [ ] WebView2 window loads `http://127.0.0.1:8004/`.
+
+To pick a non-default port at install time, change the value on the installer's **Select Network Port** page. The choice is written to the seeded `app.json` on first install only — re-installs preserve the existing `windows.port` value (edit `app.json` directly to change it after install).
 
 ### Data persistence
 
