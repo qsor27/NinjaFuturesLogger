@@ -32,7 +32,6 @@ from models.statistics import (
 from services.execution_db import load_executions
 from services.positions import build_positions
 from services.statistics_aggregations import (
-    _session_date_of,
     bucket_by_day_of_week,
     bucket_by_hour,
     bucket_by_session_date,
@@ -43,6 +42,7 @@ from services.statistics_aggregations import (
     pnl_histogram,
     split_by_side,
 )
+from services.time_utils import session_date_of
 
 
 @dataclass(frozen=True)
@@ -107,7 +107,7 @@ class StatisticsService:
 
     @staticmethod
     def _in_session_range(p: Position, from_date, to_date) -> bool:
-        sd = _session_date_of(p)
+        sd = session_date_of(p)
         if from_date is not None and sd < from_date:
             return False
         if to_date is not None and sd > to_date:

@@ -25,11 +25,7 @@ from models.statistics import (
     TradesPerDayBucket,
 )
 from services.outcomes import classify_outcome
-from services.time_utils import compute_session_date
-
-
-def _session_date_of(p: Position) -> date:
-    return compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
+from services.time_utils import session_date_of
 
 
 def compute_summary(positions: list[Position]) -> StatsSummary:
@@ -178,7 +174,7 @@ def bucket_by_session_date(
     by_key: dict[str, tuple[int, float]] = {}
     session_dates: list[date] = []
     for p in positions:
-        sd = _session_date_of(p)
+        sd = session_date_of(p)
         session_dates.append(sd)
         key = _format_bucket_key(sd, granularity)
         cnt, pnl_sum = by_key.get(key, (0, 0.0))
@@ -374,7 +370,7 @@ def bucket_by_day_of_week(positions: list[Position]) -> list[DayOfWeekBucket]:
     trading_day_sets: list[set] = [set() for _ in range(5)]
 
     for p in positions:
-        sd = _session_date_of(p)
+        sd = session_date_of(p)
         dow = sd.weekday()  # 0=Mon … 6=Sun
         if dow > 4:  # skip weekend session dates (rare but possible)
             continue
@@ -415,7 +411,7 @@ def bucket_by_trades_per_day(positions: list[Position]) -> list[TradesPerDayBuck
     """
     per_day: dict[date, list[Position]] = {}
     for p in positions:
-        per_day.setdefault(_session_date_of(p), []).append(p)
+        per_day.setdefault(session_date_of(p), []).append(p)
 
     agg: dict[int, dict] = {}
     for _sd, day_positions in per_day.items():

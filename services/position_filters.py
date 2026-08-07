@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from models.browsing import Outcome
 from models.position import Position
 from services.outcomes import classify_outcome
-from services.time_utils import compute_session_date
+from services.time_utils import session_date_of
 
 
 @dataclass(frozen=True)
@@ -44,15 +44,17 @@ def apply_filters(
             return False
         if filter_.entry_time_max is not None and p.entry_time > filter_.entry_time_max:
             return False
-        if filter_.session_date_from is not None or filter_.session_date_to is not None:
-            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
+        if (
+            filter_.session_date_from is not None
+            or filter_.session_date_to is not None
+            or filter_.day_of_week is not None
+        ):
+            sd = session_date_of(p)
             if filter_.session_date_from is not None and sd < filter_.session_date_from:
                 return False
             if filter_.session_date_to is not None and sd > filter_.session_date_to:
                 return False
-        if filter_.day_of_week is not None:
-            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
-            if sd.weekday() != filter_.day_of_week:
+            if filter_.day_of_week is not None and sd.weekday() != filter_.day_of_week:
                 return False
         if filter_.hour_of_day is not None:
             if filter_.hour_tz is None:
@@ -65,16 +67,12 @@ def apply_filters(
     survivors = [p for p in positions if _keep(p)]
 
     if filter_.trades_per_day is not None:
+        dated = [(p, session_date_of(p)) for p in survivors]
         counts: dict[date, int] = {}
-        for p in survivors:
-            sd = compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
+        for _p, sd in dated:
             counts[sd] = counts.get(sd, 0) + 1
         target = filter_.trades_per_day
-        survivors = [
-            p
-            for p in survivors
-            if counts[compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))] == target
-        ]
+        survivors = [p for p, sd in dated if counts[sd] == target]
 
     return survivors
 

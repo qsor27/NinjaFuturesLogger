@@ -37,3 +37,35 @@ def test_naive_datetime_is_rejected():
     except ValueError:
         return
     raise AssertionError("expected ValueError for naive datetime")
+
+
+def test_session_date_of_position_uses_entry_time():
+    from datetime import UTC, date, datetime
+
+    from models.position import Position
+    from services.time_utils import session_date_of
+
+    def _pos(entry_time: int) -> Position:
+        return Position(
+            account="Sim101",
+            instrument="MNQ",
+            entry_execution_id="e1",
+            side="Long",
+            entry_time=entry_time,
+            exit_time=None,
+            quantity=1,
+            entry_price=100.0,
+            exit_price=None,
+            points_pnl=None,
+            dollars_pnl=None,
+            commission=0.0,
+            duration_minutes=None,
+            execution_ids=["e1"],
+        )
+
+    # 15:00 Chicago (CST) -> same session date
+    before_rollover = int(datetime(2026, 1, 5, 21, 0, tzinfo=UTC).timestamp())
+    assert session_date_of(_pos(before_rollover)) == date(2026, 1, 5)
+    # 16:30 Chicago -> next day's session
+    after_rollover = int(datetime(2026, 1, 5, 22, 30, tzinfo=UTC).timestamp())
+    assert session_date_of(_pos(after_rollover)) == date(2026, 1, 6)

@@ -1,5 +1,7 @@
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
+
+from models.position import Position
 
 EXCHANGE_TZ = ZoneInfo("America/Chicago")
 ROLLOVER = time(16, 0)
@@ -35,3 +37,8 @@ def resolve_current_trade_date(now_local: datetime) -> date:
     if now_local.time() >= ROLLOVER:
         return (now_local + timedelta(days=1)).date()
     return now_local.date()
+
+
+def session_date_of(p: Position) -> date:
+    """CME session date a position's entry belongs to (16:00 Chicago rollover)."""
+    return compute_session_date(datetime.fromtimestamp(p.entry_time, tz=UTC))
