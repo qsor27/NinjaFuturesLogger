@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from db import connect
+from db import read_conn, transaction
 from logging_config import get_logger
 from services.ohlc.gap_detection import find_gaps
 from services.ohlc.gap_reports import (
@@ -28,11 +28,8 @@ def self_heal_tick(
     now: int,
     limit: int = 20,
 ) -> None:
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         rows = select_due(conn, now=now, limit=limit)
-    finally:
-        conn.close()
 
     for row in rows:
         gap_id = row["id"]
@@ -60,9 +57,7 @@ def self_heal_tick(
                 },
             )
             # Treat as a failed attempt — back off.
-            conn = connect(db_path)
-            try:
-                conn.execute("BEGIN")
+            with transaction(db_path) as conn:
                 record_retry_outcome(
                     conn,
                     gap_id=gap_id,
@@ -70,14 +65,10 @@ def self_heal_tick(
                     resolved=False,
                     now=now,
                 )
-                conn.execute("COMMIT")
-            finally:
-                conn.close()
             continue
 
         # Did the fetch actually close the gap?
-        conn = connect(db_path)
-        try:
+        with read_conn(db_path) as conn:
             remaining = find_gaps(
                 conn,
                 instrument=instrument,
@@ -85,8 +76,8 @@ def self_heal_tick(
                 start=gap_start,
                 end=gap_end,
             )
-            still_open = any(g[0] == gap_start and g[1] == gap_end for g in remaining)
-            conn.execute("BEGIN")
+        still_open = any(g[0] == gap_start and g[1] == gap_end for g in remaining)
+        with transaction(db_path) as conn:
             record_retry_outcome(
                 conn,
                 gap_id=gap_id,
@@ -94,6 +85,3 @@ def self_heal_tick(
                 resolved=not still_open,
                 now=now,
             )
-            conn.execute("COMMIT")
-        finally:
-            conn.close()

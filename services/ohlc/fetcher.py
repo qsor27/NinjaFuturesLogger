@@ -1,7 +1,7 @@
 import time
 from pathlib import Path
 
-from db import connect
+from db import read_conn, transaction
 from logging_config import get_logger
 from models.bar import AttemptRecord, Bar, FetchResult
 from services.ohlc._classify import classify_exception, http_status
@@ -70,9 +70,7 @@ def fetch_range(
     attempt_id = new_attempt_id()
     now = _now()
 
-    conn = connect(db_path)
-    try:
-        conn.execute("BEGIN")
+    with transaction(db_path) as conn:
         begin_attempt(
             conn,
             attempt_id=attempt_id,
@@ -83,9 +81,6 @@ def fetch_range(
             range_end=end,
             now=now,
         )
-        conn.execute("COMMIT")
-    finally:
-        conn.close()
 
     # Short-circuit: empty range.
     if start >= end:
@@ -118,8 +113,7 @@ def fetch_range(
             attempt_id=attempt_id,
         )
 
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         gaps = find_gaps(
             conn,
             instrument=instrument,
@@ -127,8 +121,6 @@ def fetch_range(
             start=start,
             end=end,
         )
-    finally:
-        conn.close()
 
     if not gaps:
         _finalize(db_path, attempt_id, 0, 0, "cached", None, instrument, timeframe, start, end)
@@ -342,16 +334,8 @@ def fetch_range(
             all_gaps_filled = False
 
     if bars_collected:
-        conn = connect(db_path)
-        try:
-            conn.execute("BEGIN")
+        with transaction(db_path) as conn:
             insert_many(conn, bars_collected)
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
-        finally:
-            conn.close()
 
     if not any_gap_filled:
         status = "all_sources_unavailable"
@@ -395,13 +379,8 @@ def fetch_range(
 def _persist_breaker(db_path, breaker: CircuitBreaker) -> None:
     """Best-effort persistence of breaker state. Errors are non-fatal."""
     try:
-        conn = connect(db_path)
-        try:
-            conn.execute("BEGIN")
+        with transaction(db_path) as conn:
             persist_breaker(conn, breaker, now=_now())
-            conn.execute("COMMIT")
-        finally:
-            conn.close()
     except Exception:
         log.exception("breaker persist failed", extra={"source": breaker.name})
 
@@ -419,9 +398,7 @@ def _record_source(
     error_class,
     error,
 ):
-    conn = connect(db_path)
-    try:
-        conn.execute("BEGIN")
+    with transaction(db_path) as conn:
         record_source_attempt(
             conn,
             attempt_id=attempt_id,
@@ -435,9 +412,6 @@ def _record_source(
             error_class=error_class,
             error=error,
         )
-        conn.execute("COMMIT")
-    finally:
-        conn.close()
 
 
 def _finalize(
@@ -453,9 +427,7 @@ def _finalize(
     end,
 ):
     now = _now()
-    conn = connect(db_path)
-    try:
-        conn.execute("BEGIN")
+    with transaction(db_path) as conn:
         complete_attempt(
             conn,
             attempt_id=attempt_id,
@@ -474,9 +446,3 @@ def _finalize(
             attempt_id=attempt_id,
             now=now,
         )
-        conn.execute("COMMIT")
-    except Exception:
-        conn.execute("ROLLBACK")
-        raise
-    finally:
-        conn.close()
