@@ -4,7 +4,7 @@ from datetime import UTC, datetime, time
 from zoneinfo import ZoneInfo
 
 from services.instruments import default_session, is_full_closure
-from services.ohlc.reach import PROVIDER_REACH
+from services.ohlc.reach import reach_floor
 from services.ohlc.store import list_times
 
 _TIMEFRAME_SECONDS: dict[str, int] = {
@@ -195,9 +195,11 @@ def classify_window(
     if start >= end:
         return {"expected": 0, "present": 0, "missing": 0, "out_of_reach": 0}
     slots = expected_session_slots(instrument, timeframe, start, end)
-    reach = PROVIDER_REACH.get(timeframe, PROVIDER_REACH["1d"])
-    reach_cutoff = now - reach
-    reachable = [s for s in slots if s >= reach_cutoff]
+    # Same floor formula as the fetcher clamp, /api/data-health/missing,
+    # and the gap-report writer. Margin 0: this classifies capability,
+    # it is not a fetch about to happen. None = unlimited reach.
+    floor = reach_floor(timeframe, now=now)
+    reachable = slots if floor is None else [s for s in slots if s >= floor]
     out_of_reach = len(slots) - len(reachable)
     present_times = list_times(
         conn, instrument=instrument, timeframe=timeframe, start=start, end=end

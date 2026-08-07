@@ -194,3 +194,35 @@ def test_classify_window_matches_1d_bars_at_utc_midnight(tmp_path):
     # stamped bars *do* get matched — not the weekday count itself.
     assert summary["present"] == 3
     assert summary["missing"] == 0
+
+
+def test_classify_window_uses_reach_floor_so_1h_is_never_out_of_reach(tmp_path):
+    """classify_window must share reach.reach_floor instead of its own
+    PROVIDER_REACH lookup. reach_floor treats 1h (and daily+) as unlimited
+    reach, matching /api/data-health/missing, which already uses it —
+    grid cells and their drill-down must agree. Slots older than 730d are
+    therefore 'missing', not 'out_of_reach'."""
+    from pathlib import Path
+
+    from db import connect
+    from migrations import run_migrations
+    from services.ohlc.gap_detection import classify_window
+
+    db = tmp_path / "ftl.db"
+    conn = connect(db)
+    run_migrations(conn, Path("migrations"))
+    now = 1_800_000_000  # 2027-01-15
+    start = now - 800 * 86400  # ~70 days beyond the 730-day 1h reach
+    end = start + 7 * 86400
+    summary = classify_window(
+        conn,
+        instrument="MNQ",
+        timeframe="1h",
+        start=start,
+        end=end,
+        now=now,
+    )
+    conn.close()
+    assert summary["expected"] > 0
+    assert summary["out_of_reach"] == 0
+    assert summary["missing"] == summary["expected"]
