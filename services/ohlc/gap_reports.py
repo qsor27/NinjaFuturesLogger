@@ -49,7 +49,9 @@ def update_gap_reports(
     Called as the final step inside fetch_range (and by self_heal when re-checking).
     - Any gap older than 1h and inside provider reach → upsert an open row.
     - Any existing open row whose gap is now covered → mark resolved.
-    - Rows whose gap has drifted out of reach are left to the self-heal abandonment path.
+    - Open rows whose gap has drifted out of reach are auto-resolved on the next
+      update covering their window; rows outside any rescanned window fall to
+      self-heal abandonment.
     """
     current_gaps = find_gaps(
         conn,

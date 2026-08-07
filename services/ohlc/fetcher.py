@@ -183,7 +183,7 @@ def fetch_range(
         outcome: str,
         bars_returned: int,
         duration_ms: int | None,
-        http_status: int | None,
+        http_status_code: int | None,
         error_class: str | None,
         error: str | None,
     ) -> None:
@@ -196,7 +196,7 @@ def fetch_range(
             outcome,
             bars_returned,
             duration_ms,
-            http_status,
+            http_status_code,
             error_class,
             error,
         )
@@ -229,7 +229,7 @@ def fetch_range(
                     outcome="skipped_no_timeframe",
                     bars_returned=0,
                     duration_ms=None,
-                    http_status=None,
+                    http_status_code=None,
                     error_class=None,
                     error=None,
                 )
@@ -242,7 +242,7 @@ def fetch_range(
                     outcome="skipped_breaker",
                     bars_returned=0,
                     duration_ms=None,
-                    http_status=None,
+                    http_status_code=None,
                     error_class=None,
                     error=None,
                 )
@@ -272,7 +272,7 @@ def fetch_range(
                     outcome="skipped_rate_limit",
                     bars_returned=0,
                     duration_ms=dur_ms,
-                    http_status=None,
+                    http_status_code=None,
                     error_class="rate_limit_token_bucket",
                     error=repr(te),
                 )
@@ -296,7 +296,7 @@ def fetch_range(
                     outcome="failed",
                     bars_returned=0,
                     duration_ms=dur_ms,
-                    http_status=http_status(e),
+                    http_status_code=http_status(e),
                     error_class=classify_exception(e)[0],
                     error=repr(e),
                 )
@@ -322,7 +322,7 @@ def fetch_range(
                 outcome=outcome,
                 bars_returned=len(bars),
                 duration_ms=dur_ms,
-                http_status=None,
+                http_status_code=None,
                 error_class=None,
                 error=None,
             )

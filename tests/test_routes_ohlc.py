@@ -160,7 +160,6 @@ def test_get_sources_returns_per_source_breaker_state(tmp_config):
 def test_post_chart_fetch_acquires_from_token_bucket(tmp_config):
     """B7: on-demand fetches must go through the global token bucket."""
     from services.ohlc.rate_limiter import TokenBucket
-    from services.ohlc.registry import SourceRegistry
 
     class _Source:
         name = "fake"
