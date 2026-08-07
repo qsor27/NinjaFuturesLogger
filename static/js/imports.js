@@ -1,3 +1,6 @@
+import { buildQuery, fetchJSON, postJSON } from "./api.js";
+import { dateInputToEpoch, epochToDateInput, escHtml, formatTime } from "./format.js";
+
 const isDetail = document.getElementById("tick-detail") !== null;
 
 if (isDetail) {
@@ -20,17 +23,14 @@ async function initList() {
 async function renderCursorsBand() {
   const band = document.getElementById("cursors-band");
   if (!band) return;
-  const resp = await fetch("/api/imports/cursors");
-  const { cursors } = await resp.json();
+  const { cursors } = await fetchJSON("/api/imports/cursors");
   if (!cursors.length) {
     band.innerHTML = "<p style='color:#94a3b8'>No active inbox files.</p>";
     return;
   }
   const rows = cursors.map((c) => {
-    const cursor = c.byte_offset.toLocaleString();
-    const modified = c.last_modified
-      ? new Date(c.last_modified * 1000).toLocaleString()
-      : "—";
+    const cursor = c.byte_offset;
+    const modified = formatTime(c.last_modified);
     return `<tr>
       <td>${escHtml(c.filename)}</td>
       <td>${cursor} bytes</td>
@@ -78,14 +78,17 @@ async function loadRuns() {
   const filename = document.getElementById("f-filename")?.value || "";
   const status = document.getElementById("f-status")?.value || "";
 
-  const params = new URLSearchParams({ limit: PAGE_SIZE, offset: currentOffset });
-  if (start) params.set("start_ts", dateInputToEpoch(start));
-  if (end) params.set("end_ts", dateInputToEpoch(end) + 86399);
-  if (filename) params.set("filename", filename);
-  if (status) params.set("status", status);
-
-  const resp = await fetch(`/api/imports/runs?${params}`);
-  const body = await resp.json();
+  const body = await fetchJSON(
+    "/api/imports/runs" +
+      buildQuery({
+        limit: PAGE_SIZE,
+        offset: currentOffset,
+        start_ts: start ? dateInputToEpoch(start) : null,
+        end_ts: end ? dateInputToEpoch(end) + 86399 : null,
+        filename,
+        status,
+      }),
+  );
   renderRunsTable(body.runs, body.total);
 }
 
@@ -96,7 +99,7 @@ function renderRunsTable(runs, total) {
     return;
   }
   const rows = runs.map((r) => {
-    const started = new Date(r.started_at * 1000).toLocaleString();
+    const started = formatTime(r.started_at);
     const duration = r.finished_at && r.started_at
       ? ((r.finished_at - r.started_at) * 1000).toFixed(0) + " ms"
       : "—";
@@ -150,8 +153,7 @@ async function onScanNow() {
   btn.textContent = "Scanning…";
   btn.disabled = true;
   try {
-    const resp = await fetch("/api/imports/scan", { method: "POST" });
-    const body = await resp.json();
+    const body = await postJSON("/api/imports/scan", {});
     alert(`Scan complete: ${body.ticked} file(s) ticked.`);
     await renderCursorsBand();
     await loadRuns();
@@ -173,12 +175,13 @@ async function initDetail() {
   const el = document.getElementById("tick-detail");
   const tickId = parseInt(el.dataset.tickId, 10);
 
-  const resp = await fetch(`/api/imports/runs/${tickId}`);
-  if (!resp.ok) {
+  let tick;
+  try {
+    tick = await fetchJSON(`/api/imports/runs/${tickId}`);
+  } catch {
     el.textContent = "Tick not found.";
     return;
   }
-  const tick = await resp.json();
   renderTickDetail(tick);
   renderRejectsTable(tick.rejects || []);
   await renderRollbackSection(tickId, tick);
@@ -186,8 +189,8 @@ async function initDetail() {
 
 function renderTickDetail(tick) {
   const el = document.getElementById("tick-detail");
-  const started = new Date(tick.started_at * 1000).toLocaleString();
-  const finished = tick.finished_at ? new Date(tick.finished_at * 1000).toLocaleString() : "—";
+  const started = formatTime(tick.started_at);
+  const finished = formatTime(tick.finished_at);
   const duration = tick.finished_at
     ? ((tick.finished_at - tick.started_at) * 1000).toFixed(0) + " ms"
     : "—";
@@ -229,12 +232,13 @@ function renderRejectsTable(rejects) {
 
 async function renderRollbackSection(tickId, tick) {
   const el = document.getElementById("rollback-section");
-  const resp = await fetch(`/api/imports/runs/${tickId}/executions`);
-  if (!resp.ok) {
+  let ids;
+  try {
+    ({ execution_ids: ids } = await fetchJSON(`/api/imports/runs/${tickId}/executions`));
+  } catch {
     el.innerHTML = "";
     return;
   }
-  const { execution_ids: ids } = await resp.json();
   if (!ids.length) {
     el.innerHTML = "<p>No executions found for this tick (already rolled back or nothing was inserted).</p>";
     return;
@@ -246,32 +250,8 @@ async function renderRollbackSection(tickId, tick) {
   document.getElementById("rollback-btn").addEventListener("click", async () => {
     const preview = ids.slice(0, 5).join(", ") + (ids.length > 5 ? ` … +${ids.length - 5} more` : "");
     if (!confirm(`Delete ${ids.length} execution(s)?\n\n${preview}`)) return;
-    const r = await fetch("/api/executions/rollback", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ execution_ids: ids }),
-    });
-    const body = await r.json();
+    const body = await postJSON("/api/executions/rollback", { execution_ids: ids });
     alert(`Rolled back ${body.deleted} execution(s).`);
     window.location.href = "/imports";
   });
-}
-
-// ------------------------------------------------------------------ //
-// Helpers                                                             //
-// ------------------------------------------------------------------ //
-
-function escHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function epochToDateInput(ts) {
-  return new Date(ts * 1000).toISOString().slice(0, 10);
-}
-
-function dateInputToEpoch(s) {
-  return Math.floor(new Date(s).getTime() / 1000);
 }
