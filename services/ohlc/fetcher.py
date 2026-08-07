@@ -415,7 +415,7 @@ def _record_source(
     outcome,
     bars_returned,
     duration_ms,
-    http_status,
+    http_status_code,
     error_class,
     error,
 ):
@@ -431,7 +431,7 @@ def _record_source(
             outcome=outcome,
             bars_returned=bars_returned,
             duration_ms=duration_ms,
-            http_status=http_status,
+            http_status=http_status_code,
             error_class=error_class,
             error=error,
         )
