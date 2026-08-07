@@ -40,10 +40,70 @@ def test_ties_broken_by_execution_id():
     assert p[0].execution_ids == ["a", "b"]
 
 
-def test_different_accounts_and_instruments_are_not_caller_grouped():
+def test_build_positions_does_not_group_by_account_or_instrument():
+    """build_positions walks whatever sequence it is given: splitting by
+    (account, instrument) is the caller's job (services/positions_service.py
+    groups before calling). Handing it two accounts collapses them into one walk.
+    """
     exs = [
-        _ex("x", "Buy", 1, 4000.0, 100, position_after="1 L"),
-        _ex("y", "Sell", 1, 4010.0, 200, entry_exit="Exit", position_after="-"),
+        make_execution(
+            "x",
+            account="A",
+            instrument="MNQ",
+            side="Buy",
+            original_action="Buy",
+            price=4000.0,
+            timestamp=100,
+            imported_at=100,
+            position_after="1 L",
+        ),
+        make_execution(
+            "y",
+            account="B",
+            instrument="ES",
+            side="Sell",
+            original_action="Sell",
+            price=4010.0,
+            timestamp=200,
+            imported_at=200,
+            entry_exit="Exit",
+            position_after="1 S",
+        ),
     ]
     p, _ = build_positions(exs)
     assert len(p) == 1
+
+
+def test_caller_grouping_yields_one_position_per_account_and_instrument():
+    exs = [
+        make_execution(
+            "x",
+            account="A",
+            instrument="MNQ",
+            side="Buy",
+            original_action="Buy",
+            price=4000.0,
+            timestamp=100,
+            imported_at=100,
+            position_after="1 L",
+        ),
+        make_execution(
+            "y",
+            account="B",
+            instrument="ES",
+            side="Sell",
+            original_action="Sell",
+            price=4010.0,
+            timestamp=200,
+            imported_at=200,
+            position_after="1 S",
+        ),
+    ]
+    groups: dict[tuple[str, str], list] = {}
+    for e in exs:
+        groups.setdefault((e.account, e.instrument), []).append(e)
+
+    positions = [p for group in groups.values() for p in build_positions(group)[0]]
+    assert len(positions) == 2
+    assert {(p.account, p.instrument) for p in positions} == {("A", "MNQ"), ("B", "ES")}
+    assert {p.side for p in positions} == {"Long", "Short"}
