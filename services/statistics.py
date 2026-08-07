@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
 from config import Config
-from db import connect
 from models.execution import Execution
 from models.position import Position
 from models.statistics import (
@@ -30,6 +29,7 @@ from models.statistics import (
     TimeBucketResponse,
     TradesPerDayResponse,
 )
+from services.execution_db import load_executions
 from services.positions import build_positions
 from services.statistics_aggregations import (
     _session_date_of,
@@ -114,43 +114,8 @@ class StatisticsService:
             return False
         return True
 
-    def _load_executions(self, *, accounts: tuple[str, ...]) -> list[Execution]:
-        sql = (
-            "SELECT nt_execution_id, account, instrument, timestamp, side,"
-            " original_action, quantity, price, commission, entry_exit,"
-            " position_after, source_order_id, source_filename, imported_at "
-            "FROM executions"
-        )
-        params: tuple = ()
-        if accounts:
-            placeholders = ",".join("?" * len(accounts))
-            sql += f" WHERE account IN ({placeholders})"
-            params = tuple(accounts)
-        sql += " ORDER BY account, instrument, timestamp, nt_execution_id"
-        conn = connect(self._config.db_path)
-        try:
-            rows = conn.execute(sql, params).fetchall()
-        finally:
-            conn.close()
-        return [
-            Execution(
-                nt_execution_id=r["nt_execution_id"],
-                account=r["account"],
-                instrument=r["instrument"],
-                timestamp=r["timestamp"],
-                side=r["side"],
-                original_action=r["original_action"],
-                quantity=r["quantity"],
-                price=r["price"],
-                commission=r["commission"],
-                entry_exit=r["entry_exit"],
-                position_after=r["position_after"],
-                source_order_id=r["source_order_id"],
-                source_filename=r["source_filename"],
-                imported_at=r["imported_at"],
-            )
-            for r in rows
-        ]
+    def _load_executions(self, *, accounts: tuple[str, ...]) -> list:
+        return load_executions(self._config.db_path, accounts=accounts)
 
     # -- Public methods ---------------------------------------------------
 

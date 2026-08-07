@@ -1,63 +1,14 @@
 from pathlib import Path
 
-from db import connect
+from db import read_conn
 from models.browsing import PageMeta, PositionListPage
 from models.execution import Execution
 from models.position import Position
+from services.execution_db import load_executions
 from services.flags import list_flags_for_executions
 from services.notes import list_notes_for_executions
 from services.position_filters import PositionFilter, apply_filters, paginate
 from services.positions import build_positions
-
-
-def _load_executions(
-    db_path: Path | str,
-    *,
-    account: str | None = None,
-    instrument: str | None = None,
-) -> list[Execution]:
-    sql = (
-        "SELECT nt_execution_id, account, instrument, timestamp, side,"
-        " original_action, quantity, price, commission, entry_exit,"
-        " position_after, source_order_id, source_filename, imported_at "
-        "FROM executions"
-    )
-    clauses: list[str] = []
-    params: list[object] = []
-    if account is not None:
-        clauses.append("account = ?")
-        params.append(account)
-    if instrument is not None:
-        clauses.append("instrument = ?")
-        params.append(instrument)
-    if clauses:
-        sql += " WHERE " + " AND ".join(clauses)
-    sql += " ORDER BY account, instrument, timestamp, nt_execution_id"
-
-    conn = connect(db_path)
-    try:
-        rows = conn.execute(sql, tuple(params)).fetchall()
-    finally:
-        conn.close()
-    return [
-        Execution(
-            nt_execution_id=r["nt_execution_id"],
-            account=r["account"],
-            instrument=r["instrument"],
-            timestamp=r["timestamp"],
-            side=r["side"],
-            original_action=r["original_action"],
-            quantity=r["quantity"],
-            price=r["price"],
-            commission=r["commission"],
-            entry_exit=r["entry_exit"],
-            position_after=r["position_after"],
-            source_order_id=r["source_order_id"],
-            source_filename=r["source_filename"],
-            imported_at=r["imported_at"],
-        )
-        for r in rows
-    ]
 
 
 def list_positions(
@@ -67,7 +18,7 @@ def list_positions(
     instrument: str | None = None,
 ) -> list[Position]:
     """Load executions per filters, group by (account, instrument), build positions."""
-    executions = _load_executions(db_path, account=account, instrument=instrument)
+    executions = load_executions(db_path, account=account, instrument=instrument)
     groups: dict[tuple[str, str], list[Execution]] = {}
     for e in executions:
         groups.setdefault((e.account, e.instrument), []).append(e)
@@ -110,7 +61,7 @@ def list_positions_page(
     # For zero or multiple accounts, load the superset and let apply_filters
     # narrow in Python — executions is a small table (one user).
     pushdown_account = filter_.accounts[0] if len(filter_.accounts) == 1 else None
-    executions = _load_executions(
+    executions = load_executions(
         db_path,
         account=pushdown_account,
         instrument=filter_.instrument,
@@ -136,8 +87,7 @@ def list_positions_page(
 def get_filter_options(db_path: Path | str) -> dict:
     """Return the set of accounts and instruments that currently have any
     execution in the database."""
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         accounts = [
             r[0]
             for r in conn.execute(
@@ -150,8 +100,6 @@ def get_filter_options(db_path: Path | str) -> dict:
                 "SELECT DISTINCT instrument FROM executions ORDER BY instrument"
             ).fetchall()
         ]
-    finally:
-        conn.close()
     return {"accounts": accounts, "instruments": instruments}
 
 
