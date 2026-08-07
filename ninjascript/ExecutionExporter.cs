@@ -20,6 +20,7 @@ using NinjaTrader.Gui.Chart;
 using NinjaTrader.Data;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.DrawingTools;
+using NinjaTrader.NinjaScript.NinjaFuturesLogger;
 #endregion
 
 //This namespace holds Indicators in this folder and is required. Do not change it.
@@ -44,10 +45,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         // Trade Validation Tracking (optional feature)
         private PositionValidationTracker validationTracker;
-        private string validationStateFilePath;
         private ValidationPanel validationPanel;
         private System.Windows.Controls.Grid chartGrid;
-        public static ConcurrentDictionary<string, string> SharedValidationMap = new ConcurrentDictionary<string, string>();
 
         // Position closure tracking - maps (Date_Instrument_Account) to closure time
         private static ConcurrentDictionary<string, DateTime> PositionClosureMap = new ConcurrentDictionary<string, DateTime>();
@@ -116,27 +115,12 @@ namespace NinjaTrader.NinjaScript.Indicators
                 {
                     try
                     {
-                        var myDocuments = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-                        var baseDirectory = Path.Combine(myDocuments, "FuturesTradingLog");
-                        Directory.CreateDirectory(baseDirectory);
-                        validationStateFilePath = Path.Combine(baseDirectory, "trade_validation_state.txt");
+                        // Shared lazy singleton: loads canonical state (migrating legacy files
+                        // on first ever touch) and populates TradeValidationShared.SharedValidationMap.
+                        validationTracker = TradeValidationShared.Tracker;
 
-                        // Load validation state
-                        validationTracker = LoadValidationState(validationStateFilePath);
-
-                        // Populate SharedValidationMap from loaded validation data
-                        var validatedPositions = validationTracker.GetValidatedPositions();
-                        foreach (var entry in validatedPositions)
-                        {
-                            SharedValidationMap.AddOrUpdate(
-                                entry.PositionId,
-                                entry.ValidationStatus,
-                                (key, oldValue) => entry.ValidationStatus
-                            );
-                        }
-
-                        LogMessage($"Validation tracking enabled. State file: {validationStateFilePath}");
-                        LogMessage($"Loaded {validatedPositions.Count} validated positions into SharedValidationMap");
+                        LogMessage($"Validation tracking enabled. State file: {TradeValidationShared.StateFilePath}");
+                        LogMessage($"Loaded {validationTracker.GetValidatedPositions().Count} validated positions into SharedValidationMap");
                         LogMessage($"Order blocking: {(EnableOrderBlocking ? "ENABLED" : "DISABLED")}, Grace period: {GracePeriodSeconds}s");
                     }
                     catch (Exception ex)
@@ -257,7 +241,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 // Save validation state before cleanup
                 if (EnableValidationTracking && validationTracker != null)
                 {
-                    SaveValidationState(validationTracker, validationStateFilePath);
+                    TradeValidationShared.SaveState();
                     LogMessage("Validation state saved");
                 }
 
@@ -878,8 +862,8 @@ namespace NinjaTrader.NinjaScript.Indicators
                 var executionTime = execution.Time;
 
                 // Strategy 1: Try exact timestamp match (for closing execution)
-                var positionId = GeneratePositionId(executionTime, instrument, accountName);
-                if (SharedValidationMap.TryGetValue(positionId, out string validationStatus))
+                var positionId = TradeValidationShared.GeneratePositionId(executionTime, instrument, accountName);
+                if (TradeValidationShared.SharedValidationMap.TryGetValue(positionId, out string validationStatus))
                 {
                     return validationStatus;
                 }
@@ -893,8 +877,8 @@ namespace NinjaTrader.NinjaScript.Indicators
                     if (timeDiff <= 60)
                     {
                         // Use the closure time to look up validation
-                        var closurePositionId = GeneratePositionId(closureTime, instrument, accountName);
-                        if (SharedValidationMap.TryGetValue(closurePositionId, out validationStatus))
+                        var closurePositionId = TradeValidationShared.GeneratePositionId(closureTime, instrument, accountName);
+                        if (TradeValidationShared.SharedValidationMap.TryGetValue(closurePositionId, out validationStatus))
                         {
                             return validationStatus;
                         }
@@ -907,9 +891,9 @@ namespace NinjaTrader.NinjaScript.Indicators
                     if (secondsOffset == 0) continue; // Already checked exact match
 
                     var searchTime = executionTime.AddSeconds(secondsOffset);
-                    var searchPositionId = GeneratePositionId(searchTime, instrument, accountName);
+                    var searchPositionId = TradeValidationShared.GeneratePositionId(searchTime, instrument, accountName);
 
-                    if (SharedValidationMap.TryGetValue(searchPositionId, out validationStatus))
+                    if (TradeValidationShared.SharedValidationMap.TryGetValue(searchPositionId, out validationStatus))
                     {
                         LogMessage($"Found validation via time window search (offset: {secondsOffset}s): {validationStatus}");
                         return validationStatus;
@@ -1062,7 +1046,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 var closeTime = execution.Time;
 
                 // Generate position ID
-                var positionId = GeneratePositionId(closeTime, instrument, accountName);
+                var positionId = TradeValidationShared.GeneratePositionId(closeTime, instrument, accountName);
 
                 // Update position closure map for lookup optimization
                 var dateKey = $"{closeTime:yyyy-MM-dd}_{instrument}_{accountName}";
@@ -1085,7 +1069,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                     LogMessage($"✓ Unvalidated positions: {unvalidatedCount}");
 
                     // Save state after adding position
-                    SaveValidationState(validationTracker, validationStateFilePath);
+                    TradeValidationShared.SaveState();
 
                     // Refresh validation panel to show new position
                     if (validationPanel != null)
@@ -1129,14 +1113,14 @@ namespace NinjaTrader.NinjaScript.Indicators
                     return;
 
                 // Bypass automated strategy orders if configured
-                if (BypassAutomatedStrategies && IsAutomatedOrder(e.Order))
+                if (BypassAutomatedStrategies && TradeValidationShared.IsAutomatedOrder(e.Order))
                 {
                     LogMessage($"Order bypassed validation (automated): {e.Order.Instrument?.FullName}");
                     return;
                 }
 
                 // Check for emergency override
-                if (EnableEmergencyOverride && IsEmergencyOverride())
+                if (EnableEmergencyOverride && TradeValidationShared.IsEmergencyOverride())
                 {
                     LogMessage($"⚠ EMERGENCY OVERRIDE: Validation bypassed (Ctrl+Shift)");
                     return;
@@ -1189,79 +1173,6 @@ namespace NinjaTrader.NinjaScript.Indicators
             {
                 LogError($"Error in OnOrderUpdate: {ex.Message}");
             }
-        }
-
-
-        /// <summary>
-        /// Generates a unique position ID
-        /// </summary>
-        private string GeneratePositionId(DateTime timestamp, string instrument, string account)
-        {
-            return $"{timestamp:yyyy-MM-ddTHH:mm:ss}_{instrument}_{account}";
-        }
-
-        /// <summary>
-        /// Checks if order is from automated strategy
-        /// </summary>
-        private bool IsAutomatedOrder(Order order)
-        {
-            if (order == null) return false;
-            if (order.IsBacktestOrder) return true;
-            if (!string.IsNullOrEmpty(order.Name) && order.Name.Contains("Strategy")) return true;
-            return false;
-        }
-
-        /// <summary>
-        /// Checks if emergency override is active (Ctrl+Shift)
-        /// </summary>
-        private bool IsEmergencyOverride()
-        {
-            try
-            {
-                return (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) == System.Windows.Input.ModifierKeys.Control &&
-                       (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == System.Windows.Input.ModifierKeys.Shift;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Saves validation state to file
-        /// </summary>
-        private static void SaveValidationState(PositionValidationTracker tracker, string filePath)
-        {
-            try
-            {
-                var state = tracker.SerializeToText();
-                File.WriteAllText(filePath, state, Encoding.UTF8);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error saving validation state: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Loads validation state from file
-        /// </summary>
-        private static PositionValidationTracker LoadValidationState(string filePath)
-        {
-            try
-            {
-                if (File.Exists(filePath))
-                {
-                    var text = File.ReadAllText(filePath, Encoding.UTF8);
-                    return PositionValidationTracker.DeserializeFromText(text);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Error loading validation state: {ex.Message}");
-            }
-
-            return new PositionValidationTracker();
         }
 
         #endregion
@@ -1384,168 +1295,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         #endregion
     }
 
-    #region PositionValidationTracker Class
-
-    /// <summary>
-    /// Thread-safe tracker for position validation status
-    /// Manages validation state for closed positions
-    /// </summary>
-    public class PositionValidationTracker
-    {
-        private Dictionary<string, PositionValidationEntry> positions;
-        private readonly object lockObject = new object();
-
-        public PositionValidationTracker()
-        {
-            positions = new Dictionary<string, PositionValidationEntry>();
-        }
-
-        /// <summary>
-        /// Adds a position to the tracker
-        /// </summary>
-        public void AddPosition(string positionId, DateTime closeTimestamp, string instrument, decimal pnl, bool requiresValidation)
-        {
-            lock (lockObject)
-            {
-                if (!positions.ContainsKey(positionId))
-                {
-                    positions[positionId] = new PositionValidationEntry
-                    {
-                        PositionId = positionId,
-                        CloseTimestamp = closeTimestamp,
-                        Instrument = instrument,
-                        PnL = pnl,
-                        RequiresValidation = requiresValidation,
-                        ValidationStatus = null
-                    };
-                }
-            }
-        }
-
-        /// <summary>
-        /// Marks a position as validated with the given status
-        /// </summary>
-        public void MarkValidated(string positionId, string validationStatus)
-        {
-            lock (lockObject)
-            {
-                if (positions.ContainsKey(positionId))
-                {
-                    positions[positionId].ValidationStatus = validationStatus;
-                    positions[positionId].RequiresValidation = false;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Gets all positions that require validation
-        /// </summary>
-        public List<PositionValidationEntry> GetUnvalidated()
-        {
-            lock (lockObject)
-            {
-                return positions.Values
-                    .Where(p => p.RequiresValidation)
-                    .OrderByDescending(p => p.CloseTimestamp)
-                    .ToList();
-            }
-        }
-
-        /// <summary>
-        /// Gets unvalidated positions for a specific instrument with grace period
-        /// </summary>
-        public List<PositionValidationEntry> GetUnvalidatedPositionsForInstrument(string instrument, int gracePeriodSeconds)
-        {
-            lock (lockObject)
-            {
-                DateTime now = DateTime.Now;
-                return positions.Values
-                    .Where(p => p.RequiresValidation)
-                    .Where(p => p.Instrument == instrument)
-                    .Where(p => (now - p.CloseTimestamp).TotalSeconds >= gracePeriodSeconds)
-                    .OrderByDescending(p => p.CloseTimestamp)
-                    .ToList();
-            }
-        }
-
-        /// <summary>
-        /// Gets all positions that have been validated (have a non-null ValidationStatus)
-        /// </summary>
-        public List<PositionValidationEntry> GetValidatedPositions()
-        {
-            lock (lockObject)
-            {
-                return positions.Values
-                    .Where(p => !string.IsNullOrEmpty(p.ValidationStatus))
-                    .ToList();
-            }
-        }
-
-        /// <summary>
-        /// Serializes tracker state to simple text format
-        /// </summary>
-        public string SerializeToText()
-        {
-            lock (lockObject)
-            {
-                StringBuilder sb = new StringBuilder();
-                foreach (var entry in positions.Values)
-                {
-                    sb.AppendLine($"{entry.PositionId}|{entry.CloseTimestamp:o}|{entry.Instrument}|{entry.PnL}|{entry.ValidationStatus ?? "None"}|{entry.RequiresValidation}");
-                }
-                return sb.ToString();
-            }
-        }
-
-        /// <summary>
-        /// Deserializes tracker state from simple text format
-        /// </summary>
-        public static PositionValidationTracker DeserializeFromText(string text)
-        {
-            var tracker = new PositionValidationTracker();
-
-            if (string.IsNullOrWhiteSpace(text))
-                return tracker;
-
-            string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (string line in lines)
-            {
-                string[] parts = line.Split('|');
-                if (parts.Length == 6)
-                {
-                    string positionId = parts[0];
-                    DateTime closeTimestamp = DateTime.Parse(parts[1]);
-                    string instrument = parts[2];
-                    decimal pnl = (decimal)double.Parse(parts[3]);
-                    bool requiresValidation = bool.Parse(parts[5]);
-
-                    tracker.AddPosition(positionId, closeTimestamp, instrument, pnl, requiresValidation);
-
-                    string validationStatus = parts[4];
-                    if (!string.IsNullOrEmpty(validationStatus) && validationStatus != "None")
-                    {
-                        tracker.MarkValidated(positionId, validationStatus);
-                    }
-                }
-            }
-
-            return tracker;
-        }
-    }
-
-    /// <summary>
-    /// Represents a single position validation entry
-    /// </summary>
-    public class PositionValidationEntry
-    {
-        public string PositionId { get; set; }
-        public DateTime CloseTimestamp { get; set; }
-        public string Instrument { get; set; }
-        public decimal PnL { get; set; }
-        public bool RequiresValidation { get; set; }
-        public string ValidationStatus { get; set; } // "Valid", "Invalid", or null
-    }
+    #region Validation UI
 
     /// <summary>
     /// WPF panel for displaying and validating positions on the chart
@@ -1731,7 +1481,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         private void OnValidButtonClick(string positionId)
         {
             tracker.MarkValidated(positionId, "Valid");
-            ExecutionExporter.SharedValidationMap.AddOrUpdate(positionId, "Valid", (key, oldValue) => "Valid");
+            TradeValidationShared.SharedValidationMap.AddOrUpdate(positionId, "Valid", (key, oldValue) => "Valid");
 
             // Remove from queued positions if present
             if (ExecutionExporter.QueuedPositionsMap.TryRemove(positionId, out int queuedCount))
@@ -1749,7 +1499,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         private void OnInvalidButtonClick(string positionId)
         {
             tracker.MarkValidated(positionId, "Invalid");
-            ExecutionExporter.SharedValidationMap.AddOrUpdate(positionId, "Invalid", (key, oldValue) => "Invalid");
+            TradeValidationShared.SharedValidationMap.AddOrUpdate(positionId, "Invalid", (key, oldValue) => "Invalid");
 
             // Remove from queued positions if present
             if (ExecutionExporter.QueuedPositionsMap.TryRemove(positionId, out int queuedCount))
