@@ -187,3 +187,26 @@ def make_position(**overrides) -> Position:
     )
     base.update(overrides)
     return Position(**base)
+
+
+def seed_app_json(tmp_path: Path, extra: dict | None = None) -> Path:
+    """Seed a minimal app.json in tmp_path. `extra` is merged at the top level."""
+    body = {
+        "data_dir": str(tmp_path),
+        "db_path": str(tmp_path / "t.db"),
+        "inbox_dir": str(tmp_path / "inbox"),
+        "archive_dir": str(tmp_path / "archive"),
+        "log_dir": str(tmp_path / "log"),
+        "session": {
+            "exchange_timezone": "America/Chicago",
+            "trade_date_rollover": "17:00",
+            "archive_job_time": "18:00",
+        },
+        "thread_pool": {"max_workers": 4},
+        "scheduler": {"heartbeat_seconds": 30},
+    }
+    if extra:
+        body.update(extra)
+    path = tmp_path / "app.json"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return path
