@@ -5,7 +5,7 @@ def _seed(db_path):
     seed_executions(
         db_path,
         [
-            make_execution("abc"),
+            make_execution("abc", account="Sim"),
         ],
     )
 

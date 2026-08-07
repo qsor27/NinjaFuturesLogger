@@ -10,6 +10,7 @@ def _seed_one_position(db_path):
                 account="Sim",
                 timestamp=100,
                 price=100.0,
+                imported_at=100,
             ),
             make_execution(
                 "b",

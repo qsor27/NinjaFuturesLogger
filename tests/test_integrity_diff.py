@@ -1,11 +1,10 @@
 from pathlib import Path
 
 from db import connect
-from models.execution import Execution
 from services.import_db import bulk_insert_executions
 from services.integrity import run_integrity_diff
 from services.integrity_db import list_open_for_pair
-from tests.conftest import make_execution
+from tests.conftest import make_execution, seed_executions
 
 
 def _ex(eid, side, qty, ts, *, position_after, entry_exit="Entry"):
@@ -106,47 +105,27 @@ def test_diff_is_idempotent_when_issue_persists(migrated_db: Path):
 
 
 def test_diff_leaves_other_pairs_alone(migrated_db: Path):
-    conn = connect(migrated_db)
-    try:
-        bulk_insert_executions(
-            conn,
-            [
-                Execution(
-                    nt_execution_id="e1",
-                    account="Sim101",
-                    instrument="MNQ",
-                    timestamp=100,
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=4000.0,
-                    commission=0.0,
-                    entry_exit="Entry",
-                    position_after="5 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=100,
-                ),
-                Execution(
-                    nt_execution_id="e2",
-                    account="APEX-1",
-                    instrument="ES",
-                    timestamp=100,
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=4000.0,
-                    commission=0.0,
-                    entry_exit="Entry",
-                    position_after="5 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=100,
-                ),
-            ],
-        )
-    finally:
-        conn.close()
+    seed_executions(
+        migrated_db,
+        [
+            make_execution(
+                "e1",
+                timestamp=100,
+                price=4000.0,
+                position_after="5 L",
+                imported_at=100,
+            ),
+            make_execution(
+                "e2",
+                account="APEX-1",
+                instrument="ES",
+                timestamp=100,
+                price=4000.0,
+                position_after="5 L",
+                imported_at=100,
+            ),
+        ],
+    )
     run_integrity_diff(migrated_db, "Sim101", "MNQ")
     conn = connect(migrated_db)
     try:

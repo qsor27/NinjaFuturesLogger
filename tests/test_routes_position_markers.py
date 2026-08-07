@@ -1,6 +1,3 @@
-from db import connect
-from models.execution import Execution
-from services.import_db import bulk_insert_executions
 from tests.conftest import make_execution, seed_executions
 
 
@@ -15,6 +12,7 @@ def _seed(db_path):
                 quantity=2,
                 price=100.0,
                 position_after="2 L",
+                imported_at=100,
             ),
             make_execution(
                 "b",
@@ -66,31 +64,19 @@ def test_markers_only_include_position_executions_not_other_pairs(app, tmp_confi
     _seed(tmp_config.db_path)
     # Add an unrelated execution on a different instrument; it must not
     # appear in the MNQ position's markers.
-    conn = connect(tmp_config.db_path)
-    try:
-        bulk_insert_executions(
-            conn,
-            [
-                Execution(
-                    nt_execution_id="z",
-                    account="Sim",
-                    instrument="ES",
-                    timestamp=150,
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=4500.0,
-                    commission=0.0,
-                    entry_exit="Entry",
-                    position_after="1 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=150,
-                ),
-            ],
-        )
-    finally:
-        conn.close()
+    seed_executions(
+        tmp_config.db_path,
+        [
+            make_execution(
+                "z",
+                account="Sim",
+                instrument="ES",
+                timestamp=150,
+                price=4500.0,
+                imported_at=150,
+            ),
+        ],
+    )
     resp = app.test_client().get("/api/positions/Sim/MNQ/a/markers")
     labels = {m["label"] for m in resp.get_json()["markers"]}
     assert labels == {"a", "b"}
