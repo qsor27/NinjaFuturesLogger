@@ -548,13 +548,13 @@ def test_imports_detail_page_returns_200(tmp_path):
     assert resp.status_code == 200
 
 
-def test_canonical_timeframes_drop_4h_add_weekly_monthly():
-    from routes.monitoring import CANONICAL_TIMEFRAMES
+def test_health_timeframes_drop_4h_add_weekly_monthly():
+    from routes.monitoring import HEALTH_TIMEFRAMES
 
-    assert "4h" not in CANONICAL_TIMEFRAMES
-    assert "1wk" in CANONICAL_TIMEFRAMES
-    assert "1mo" in CANONICAL_TIMEFRAMES
-    assert CANONICAL_TIMEFRAMES == ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"]
+    assert "4h" not in HEALTH_TIMEFRAMES
+    assert "1wk" in HEALTH_TIMEFRAMES
+    assert "1mo" in HEALTH_TIMEFRAMES
+    assert HEALTH_TIMEFRAMES == ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"]
 
 
 def test_data_health_maintainer_endpoint(tmp_path):

@@ -8,7 +8,7 @@ from services.ohlc.gap_detection import timeframe_seconds
 from services.ohlc.store import read_range
 
 log = get_logger("http.ohlc")
-CANONICAL_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"]
+CHART_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
 
 def build_ohlc_blueprint() -> Blueprint:
@@ -93,7 +93,7 @@ def build_ohlc_blueprint() -> Blueprint:
                 "available": counts.get(tf, 0) > 0,
                 "count": counts.get(tf, 0),
             }
-            for tf in CANONICAL_TIMEFRAMES
+            for tf in CHART_TIMEFRAMES
         ]
         defaults = get_defaults(_db_path())
         return jsonify(

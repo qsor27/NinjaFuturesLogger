@@ -16,7 +16,7 @@ from services.ohlc.store import list_times
 
 log = get_logger("http.monitoring")
 
-CANONICAL_TIMEFRAMES = ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"]
+HEALTH_TIMEFRAMES = ["1m", "5m", "15m", "1h", "1d", "1wk", "1mo"]
 DATA_HEALTH_LOOKBACK_DAYS = 7
 ACTIVE_INSTRUMENTS_LOOKBACK_DAYS = 90
 
@@ -55,7 +55,7 @@ def build_monitoring_blueprint() -> Blueprint:
             cells: dict[str, dict[str, str]] = {}
             for instrument in instruments:
                 cells[instrument] = {}
-                for tf in CANONICAL_TIMEFRAMES:
+                for tf in HEALTH_TIMEFRAMES:
                     cells[instrument][tf] = _cell_status(
                         conn,
                         instrument=instrument,
@@ -70,7 +70,7 @@ def build_monitoring_blueprint() -> Blueprint:
         return jsonify(
             {
                 "instruments": instruments,
-                "timeframes": CANONICAL_TIMEFRAMES,
+                "timeframes": HEALTH_TIMEFRAMES,
                 "cells": cells,
                 "window_start": start,
                 "window_end": now,
