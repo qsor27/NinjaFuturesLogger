@@ -16,17 +16,11 @@ from services.ohlc.circuit_breaker import CircuitBreaker
 from services.ohlc.gap_detection import find_gaps
 from services.ohlc.gap_reports import update_gap_reports
 from services.ohlc.rate_limiter import TokenBucket
-from services.ohlc.reach import PROVIDER_REACH
+from services.ohlc.reach import REACH_MARGIN_SECONDS, reach_floor
 from services.ohlc.registry import SourceRegistry
 from services.ohlc.store import insert_many
 
 log = get_logger("ohlc.fetcher")
-
-# Requests that start exactly at the provider's reach boundary get rejected
-# ("requested range must be within the last N days") because time advances
-# between gap computation and the provider's check. Keep this far inside
-# the boundary.
-REACH_MARGIN_SECONDS = 3600
 
 
 def _clamp_gaps_to_reach(
@@ -34,15 +28,12 @@ def _clamp_gaps_to_reach(
 ) -> tuple[list[tuple[int, int]], int]:
     """Drop or trim gaps the provider can no longer serve.
 
-    Only intraday timeframes with a hard lookback cap (< 1 year) are
-    clamped — daily and above are effectively unlimited, and tests use
-    1970-era timestamps that must not be silently dropped. Returns
-    (clamped_gaps, dropped_count).
+    Delegates the floor formula to reach.reach_floor (None = unlimited,
+    never clamped). Returns (clamped_gaps, dropped_count).
     """
-    reach = PROVIDER_REACH.get(timeframe)
-    if reach is None or reach >= 365 * 86400:
+    floor = reach_floor(timeframe, now=now, margin=REACH_MARGIN_SECONDS)
+    if floor is None:
         return gaps, 0
-    floor = now - reach + REACH_MARGIN_SECONDS
     clamped: list[tuple[int, int]] = []
     dropped = 0
     for g_start, g_end in gaps:

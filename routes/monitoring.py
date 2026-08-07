@@ -11,7 +11,7 @@ from services.ohlc.gap_detection import (
     find_gaps,
     timeframe_seconds,
 )
-from services.ohlc.reach import PROVIDER_REACH
+from services.ohlc.reach import reach_floor
 from services.ohlc.store import list_times
 
 log = get_logger("http.monitoring")
@@ -93,19 +93,13 @@ def build_monitoring_blueprint() -> Blueprint:
             return jsonify({"error": str(e)}), 400
 
         # Clamp the gap-listing window to the provider reach for this
-        # timeframe — listing gaps that no source can ever serve only
-        # invites the user to click "Fetch Missing" on something that
-        # will fail. Callers (chart + data-health) both expect the
-        # returned `start` / `end` to reflect what was actually scanned.
-        reach = PROVIDER_REACH.get(timeframe)
-        # Only clamp intraday timeframes — daily/weekly/monthly reach is
-        # effectively unlimited at the provider, and unit tests pass
-        # 1970-era timestamps that shouldn't be silently dropped.
-        if reach is not None and reach < 365 * 86400:
-            reach_floor = now - reach
-            scan_start = max(start, reach_floor)
-        else:
-            scan_start = start
+        # timeframe — listing gaps no source can serve only invites the
+        # user to click "Fetch Missing" on something that will fail.
+        # Callers (chart + data-health) expect the returned `start`/`end`
+        # to reflect what was actually scanned. Margin 0: this is a
+        # display of provider capability, not a fetch about to happen.
+        floor = reach_floor(timeframe, now=now)
+        scan_start = start if floor is None else max(start, floor)
 
         conn = connect(_db_path())
         try:

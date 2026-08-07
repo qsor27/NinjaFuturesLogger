@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 
 from services.ohlc.gap_detection import find_gaps
-from services.ohlc.reach import PROVIDER_REACH
+from services.ohlc.reach import REACH_MARGIN_SECONDS, reach_floor
 
 GRACE_SECONDS = 3600  # "ignore gaps younger than 1 hour"
 BACKOFF_BASE_SECONDS = 3600
@@ -49,7 +49,7 @@ def update_gap_reports(
     Called as the final step inside fetch_range (and by self_heal when re-checking).
     - Any gap older than 1h and inside provider reach → upsert an open row.
     - Any existing open row whose gap is now covered → mark resolved.
-    - Any existing open row whose gap is now out of reach → mark abandoned.
+    - Rows whose gap has drifted out of reach are left to the self-heal abandonment path.
     """
     current_gaps = find_gaps(
         conn,
@@ -58,8 +58,9 @@ def update_gap_reports(
         start=range_start,
         end=range_end,
     )
-    reach = PROVIDER_REACH.get(timeframe)
-    reach_floor = (now - reach) if reach is not None else None
+    # Same floor the fetcher clamps with (margin included): never record
+    # a gap the fetcher would drop as out of reach.
+    floor = reach_floor(timeframe, now=now, margin=REACH_MARGIN_SECONDS)
 
     still_missing: set[tuple[int, int]] = set()
     for g_start, g_end in current_gaps:
@@ -67,7 +68,7 @@ def update_gap_reports(
         if now - g_end < GRACE_SECONDS:
             continue
         # Reach filter: skip gaps entirely before provider reach floor.
-        if reach_floor is not None and g_end <= reach_floor:
+        if floor is not None and g_end <= floor:
             continue
         still_missing.add((g_start, g_end))
         conn.execute(
