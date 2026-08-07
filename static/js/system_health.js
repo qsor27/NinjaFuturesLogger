@@ -1,3 +1,6 @@
+import { HttpError, fetchJSON, postJSON } from "./api.js";
+import { escHtml, formatDuration, formatTime } from "./format.js";
+
 let autoRefreshInterval = null;
 
 initSystemHealth();
@@ -18,9 +21,14 @@ async function renderHealthz() {
   document.getElementById("healthz-btn").addEventListener("click", async () => {
     const result = document.getElementById("healthz-result");
     result.textContent = "Checking…";
-    const resp = await fetch("/healthz");
-    const body = await resp.json();
-    const ok = resp.status === 200;
+    let ok = true;
+    let body = {};
+    try {
+      await fetchJSON("/healthz");
+    } catch (e) {
+      ok = false;
+      body = e instanceof HttpError && e.body && typeof e.body === "object" ? e.body : {};
+    }
     result.style.color = ok ? "#10b981" : "#f43f5e";
     result.textContent = ok
       ? "✓ Healthy"
@@ -29,8 +37,7 @@ async function renderHealthz() {
 }
 
 async function renderHealth() {
-  const resp = await fetch("/api/system/health");
-  const body = await resp.json();
+  const body = await fetchJSON("/api/system/health");
   renderJobs(body.jobs);
   renderPool(body.pool);
   renderWatchdog(body.watchdog);
@@ -44,8 +51,8 @@ function renderJobs(jobs) {
     return;
   }
   const rows = jobs.map((j) => {
-    const next = j.next_run_time ? new Date(j.next_run_time * 1000).toLocaleString() : "—";
-    const last = j.last_run_at ? new Date(j.last_run_at * 1000).toLocaleString() : "—";
+    const next = formatTime(j.next_run_time);
+    const last = formatTime(j.last_run_at);
     const statusColor = j.last_run_status === "error" ? "#f43f5e" : j.last_run_status === "success" ? "#10b981" : "#94a3b8";
     const avgMs = j.avg_duration_ms != null ? `${j.avg_duration_ms} ms` : "—";
     return `<tr>
@@ -73,11 +80,11 @@ function renderJobs(jobs) {
     btn.addEventListener("click", async () => {
       btn.textContent = "Running…";
       btn.disabled = true;
-      const resp = await fetch(`/api/system/run-job/${btn.dataset.jobId}`, { method: "POST" });
-      if (resp.ok) {
+      try {
+        await postJSON(`/api/system/run-job/${btn.dataset.jobId}`, {});
         btn.textContent = "Done";
         setTimeout(() => renderHealth(), 500);
-      } else {
+      } catch {
         btn.textContent = "Error";
         btn.disabled = false;
       }
@@ -110,7 +117,7 @@ function renderWatchdog(watchdog) {
 function renderUptime(body) {
   const el = document.getElementById("uptime-section");
   if (!el) return;
-  const startedAt = body.started_at ? new Date(body.started_at * 1000).toLocaleString() : "—";
+  const startedAt = formatTime(body.started_at);
   const uptime = formatDuration(body.uptime_seconds ?? 0);
   el.innerHTML = `
     <dl class="detail-header">
@@ -135,20 +142,6 @@ function setupAutoRefresh() {
       autoRefreshInterval = null;
     }
   });
-}
-
-function formatDuration(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return [h && `${h}h`, m && `${m}m`, `${s}s`].filter(Boolean).join(" ");
-}
-
-function escHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 function initSupportBundle() {
