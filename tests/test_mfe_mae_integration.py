@@ -8,13 +8,10 @@ from db import connect
 from models.bar import Bar
 from services.import_pipeline import ImportPipeline
 from services.ohlc.store import insert_many
+from tests.conftest import write_ninja_csv
 
 TZ = ZoneInfo("America/Chicago")
 
-CSV_HEADER = (
-    "Instrument,Action,Quantity,Price,Time,ID,E/X,Position,Order ID,Name,"
-    "Commission,Rate,Account,Connection,TradeValidation\n"
-)
 CSV_BODY = (
     "MNQ,Buy,1,100.00,1/15/2025 2:45:30 PM,E1,Entry,1 L,12345,Manual Entry,$0.00,1,Sim101,Apex Trader Funding ,\n"
     "MNQ,Sell,1,102.00,1/15/2025 3:00:00 PM,E2,Exit,-,12346,Manual Exit,$0.00,1,Sim101,Apex Trader Funding ,\n"
@@ -26,7 +23,7 @@ def test_mfe_mae_integration_end_to_end(app, tmp_config, tmp_path):
 
     # 2) Drop a CSV into inbox and ingest it via the pipeline.
     csv_path = Path(tmp_config.inbox_dir) / "NinjaTrader_Executions_20250115.csv"
-    csv_path.write_text(CSV_HEADER + CSV_BODY, encoding="utf-8")
+    write_ninja_csv(csv_path, [CSV_BODY])
     pipeline = ImportPipeline(
         db_path=tmp_config.db_path,
         trader_tz=TZ,

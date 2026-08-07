@@ -10,6 +10,7 @@ from models.execution import Execution
 from routes.imports import build_imports_blueprint
 from services.import_db import bulk_insert_executions, record_run, save_cursor
 from services.import_pipeline import ImportPipeline
+from tests.conftest import write_ninja_csv
 
 TZ = ZoneInfo("America/Chicago")
 
@@ -120,15 +121,11 @@ def test_get_rejects(app_and_pipeline):
 
 def test_scan_triggers_ingest(app_and_pipeline):
     app, pipeline, db_path, inbox = app_and_pipeline
-    header = (
-        "Instrument,Action,Quantity,Price,Time,ID,E/X,Position,Order ID,Name,"
-        "Commission,Rate,Account,Connection,TradeValidation\n"
-    )
     row = (
         "MNQ,Buy,1,4000.00,1/15/2025 9:00:00 AM,scanid,Entry,1 L,"
         "1,n,$0.00,1,Sim101,Apex Trader Funding ,\n"
     )
-    (Path(inbox) / "NinjaTrader_Executions_20260413.csv").write_text(header + row, encoding="utf-8")
+    write_ninja_csv(Path(inbox) / "NinjaTrader_Executions_20260413.csv", [row])
     resp = app.test_client().post("/api/imports/scan")
     assert resp.status_code == 200
     body = resp.get_json()

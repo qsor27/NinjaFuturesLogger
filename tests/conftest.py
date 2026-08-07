@@ -1,5 +1,6 @@
 import json
-from collections.abc import Iterator, Sequence
+import time
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,32 @@ from models.position import Position
 from services.import_db import bulk_insert_executions
 from services.instruments import set_registry_path
 from services.ohlc.registry import SourceRegistry
+
+# The NinjaTrader executions CSV header — must match ninjascript/ExecutionExporter.cs
+# (doc 90). This column order is immutable; if it ever changes, it changes here once.
+NINJA_CSV_HEADER = (
+    "Instrument,Action,Quantity,Price,Time,ID,E/X,Position,Order ID,Name,"
+    "Commission,Rate,Account,Connection,TradeValidation\n"
+)
+
+
+def write_ninja_csv(path: Path, rows: Sequence[str]) -> Path:
+    """Write NINJA_CSV_HEADER followed by `rows` (each already newline-terminated,
+    except a deliberately truncated final row)."""
+    path.write_text(NINJA_CSV_HEADER + "".join(rows), encoding="utf-8")
+    return path
+
+
+def wait_until(
+    predicate: Callable[[], bool], *, timeout: float = 3.0, interval: float = 0.05
+) -> bool:
+    """Poll `predicate` until it is true or `timeout` seconds elapse."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return predicate()
 
 
 class FakeOhlcSource:

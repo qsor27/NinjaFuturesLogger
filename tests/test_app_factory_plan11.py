@@ -1,37 +1,30 @@
-import time
 from pathlib import Path
 
 from db import connect
+from tests.conftest import wait_until, write_ninja_csv
 
 
 def test_integrity_hook_runs_after_tick_and_records_issues(started_app_and_services, tmp_config):
     app, services = started_app_and_services
-    header = (
-        "Instrument,Action,Quantity,Price,Time,ID,E/X,Position,Order ID,Name,"
-        "Commission,Rate,Account,Connection,TradeValidation\n"
-    )
     bad_row = (
         "MNQ,Buy,1,4000.00,1/15/2025 9:00:00 AM,badpos1,Entry,99 L,"
         "1,n,$0.00,1,Sim101,Apex Trader Funding ,\n"
     )
     path = Path(tmp_config.inbox_dir) / "NinjaTrader_Executions_20260413.csv"
-    path.write_text(header + bad_row, encoding="utf-8")
+    write_ninja_csv(path, [bad_row])
 
-    deadline = time.time() + 3.0
-    issue_count = 0
-    while time.time() < deadline:
+    def _issues_detected() -> bool:
         conn = connect(tmp_config.db_path)
         try:
             issue_count = conn.execute(
                 "SELECT COUNT(*) FROM integrity_issues "
                 "WHERE execution_id = 'badpos1' AND resolved_at IS NULL"
             ).fetchone()[0]
+            return issue_count >= 1
         finally:
             conn.close()
-        if issue_count >= 1:
-            break
-        time.sleep(0.05)
-    assert issue_count == 1
+
+    assert wait_until(_issues_detected)
 
 
 def test_positions_route_returns_computed_positions(app, tmp_config):

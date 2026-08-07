@@ -2,13 +2,9 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from services.import_pipeline import ImportPipeline
+from tests.conftest import write_ninja_csv
 
 TZ = ZoneInfo("America/Chicago")
-
-HEADER = (
-    "Instrument,Action,Quantity,Price,Time,ID,E/X,Position,Order ID,Name,"
-    "Commission,Rate,Account,Connection,TradeValidation\n"
-)
 ROW = (
     "MNQ,Buy,1,4000.00,1/15/2025 9:00:00 AM,swid,Entry,1 L,"
     "1,n,$0.00,1,Sim101,Apex Trader Funding ,\n"
@@ -18,10 +14,8 @@ ROW = (
 def test_scan_inbox_ticks_every_matching_file(tmp_path: Path, migrated_db: Path):
     inbox = tmp_path / "inbox"
     inbox.mkdir()
-    (inbox / "NinjaTrader_Executions_20260413.csv").write_text(HEADER + ROW, encoding="utf-8")
-    (inbox / "NinjaTrader_Executions_20260412.csv").write_text(
-        HEADER + ROW.replace("swid", "swid2"), encoding="utf-8"
-    )
+    write_ninja_csv(inbox / "NinjaTrader_Executions_20260413.csv", [ROW])
+    write_ninja_csv(inbox / "NinjaTrader_Executions_20260412.csv", [ROW.replace("swid", "swid2")])
     (inbox / "unrelated.txt").write_text("ignored", encoding="utf-8")
 
     pipeline = ImportPipeline(db_path=migrated_db, trader_tz=TZ)

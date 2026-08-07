@@ -1,8 +1,8 @@
-import time
 from pathlib import Path
 
 from db import connect as _connect
 from services.import_pipeline import ImportPipeline
+from tests.conftest import wait_until, write_ninja_csv
 
 
 def test_pipeline_is_registered_in_app_config(app):
@@ -38,28 +38,23 @@ def test_watchdog_uses_tick_handler_when_started(started_app_and_services):
 
 def test_watchdog_drop_reaches_executions(started_app_and_services, tmp_config):
     app, services = started_app_and_services
-    header = (
-        "Instrument,Action,Quantity,Price,Time,ID,E/X,Position,Order ID,Name,"
-        "Commission,Rate,Account,Connection,TradeValidation\n"
-    )
     row = (
         "MNQ,Buy,1,4000.00,1/15/2025 9:00:00 AM,watchid,Entry,1 L,"
         "1,n,$0.00,1,Sim101,Apex Trader Funding ,\n"
     )
     path = Path(tmp_config.inbox_dir) / "NinjaTrader_Executions_20260413.csv"
-    path.write_text(header + row, encoding="utf-8")
+    write_ninja_csv(path, [row])
 
-    deadline = time.time() + 3.0
-    inserted = 0
-    while time.time() < deadline:
+    def _row_landed() -> bool:
         conn = _connect(tmp_config.db_path)
         try:
-            inserted = conn.execute(
-                "SELECT COUNT(*) FROM executions WHERE nt_execution_id = 'watchid'"
-            ).fetchone()[0]
+            return (
+                conn.execute(
+                    "SELECT COUNT(*) FROM executions WHERE nt_execution_id = 'watchid'"
+                ).fetchone()[0]
+                == 1
+            )
         finally:
             conn.close()
-        if inserted == 1:
-            break
-        time.sleep(0.05)
-    assert inserted == 1
+
+    assert wait_until(_row_landed)
