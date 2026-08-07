@@ -1,4 +1,6 @@
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -24,3 +26,39 @@ def connect(path: Path | str) -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
     return conn
+
+
+@contextmanager
+def transaction(path: Path | str) -> Iterator[sqlite3.Connection]:
+    """connect -> BEGIN -> yield -> COMMIT; ROLLBACK on any BaseException; always close.
+
+    The one canonical write-transaction shape for the whole app. Opens its
+    own connection, so it must not be used for work that has to share a
+    connection already held by the caller (e.g. ImportPipeline._run_tick).
+    """
+    conn = connect(path)
+    try:
+        conn.execute("BEGIN")
+        try:
+            yield conn
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+
+
+@contextmanager
+def read_conn(path: Path | str) -> Iterator[sqlite3.Connection]:
+    """connect -> yield -> close. For read-only access; no transaction."""
+    conn = connect(path)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def sql_placeholders(n: int) -> str:
+    """Return "?,?,...,?" with n placeholders, for IN (...) clauses."""
+    return ",".join("?" * n)
