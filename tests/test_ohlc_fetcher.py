@@ -19,6 +19,22 @@ def _bar(t, src="fake"):
     )
 
 
+def _recent_in_session_minute() -> int:
+    """Most recent Wednesday 10:00 America/Chicago — always inside the CME
+    session and well inside the 30-day 1m provider reach."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    chicago = ZoneInfo("America/Chicago")
+    d = datetime.now(tz=chicago)
+    while d.weekday() != 2:  # Wednesday
+        d -= timedelta(days=1)
+    pinned = d.replace(hour=10, minute=0, second=0, microsecond=0)
+    if pinned > datetime.now(tz=chicago):  # today is Wed before 10:00
+        pinned -= timedelta(days=7)
+    return int(pinned.timestamp())
+
+
 def test_fully_cached_returns_cached_status(migrated_db):
     primary = FakeOhlcSource("primary", supported={"1d"}, bars=[])
     reg = make_source_registry([primary])
@@ -197,7 +213,8 @@ def test_fetcher_acquires_token_before_source_call(tmp_path):
                 )
             ]
 
-    clock = [int(time.time())]
+    anchor = _recent_in_session_minute()
+    clock = [anchor]
     reg = SourceRegistry(clock=lambda: clock[0])
     src = RecordingSource()
     reg.entries.append(
@@ -212,8 +229,8 @@ def test_fetcher_acquires_token_before_source_call(tmp_path):
         )
     )
     bucket = TokenBucket(capacity=2, refill_per_sec=0.0, clock=time.monotonic)
-    start_ts = clock[0] - 120
-    end_ts = start_ts + 60
+    start_ts = anchor - 120
+    end_ts = anchor - 60
     res = fetch_range(
         db_path=db,
         registry=reg,
