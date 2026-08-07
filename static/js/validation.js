@@ -1,3 +1,6 @@
+import { buildQuery, fetchJSON, postJSON } from "./api.js";
+import { escHtml, formatTime } from "./format.js";
+
 initValidation();
 
 async function initValidation() {
@@ -38,22 +41,18 @@ async function loadIssues() {
   const account = document.getElementById("f-account")?.value || "";
   const instrument = document.getElementById("f-instrument")?.value || "";
 
-  const params = new URLSearchParams({ status });
-  if (severity) params.set("severity", severity);
-  if (account) params.set("account", account);
-  if (instrument) params.set("instrument", instrument);
-
-  const resp = await fetch(`/api/integrity-issues?${params}`);
-  const { issues } = await resp.json();
+  const { issues } = await fetchJSON(
+    "/api/integrity-issues" + buildQuery({ status, severity, account, instrument }),
+  );
 
   // Build execution_id → position detail URL map
   const posUrlMap = {};
   const pairs = [...new Set(issues.filter(i => i.execution_id).map(i => `${i.account}\t${i.instrument}`))];
   await Promise.all(pairs.map(async (pair) => {
     const [acct, inst] = pair.split("\t");
-    const p = new URLSearchParams({ account: acct, instrument: inst });
-    const r = await fetch(`/api/positions?${p}`);
-    const { positions } = await r.json();
+    const { positions } = await fetchJSON(
+      "/api/positions" + buildQuery({ account: acct, instrument: inst }),
+    );
     for (const pos of (positions || [])) {
       const url = `/positions/${encodeURIComponent(pos.account)}/${encodeURIComponent(pos.instrument)}/${encodeURIComponent(pos.entry_execution_id)}`;
       for (const eid of (pos.execution_ids || [])) {
@@ -73,7 +72,7 @@ function renderIssues(issues, status, posUrlMap = {}) {
   }
   const rows = issues.map((i) => {
     const age = Math.floor((Date.now() / 1000 - i.detected_at) / 3600);
-    const detected = new Date(i.detected_at * 1000).toLocaleString();
+    const detected = formatTime(i.detected_at);
     const posUrl = i.execution_id && posUrlMap[i.execution_id];
     const execLink = i.execution_id
       ? `<a href="${posUrl || `/positions?q=${encodeURIComponent(i.execution_id)}`}">${escHtml(i.execution_id)}</a>`
@@ -122,30 +121,21 @@ function renderIssues(issues, status, posUrlMap = {}) {
 
 async function resolveIssue(id) {
   const note = prompt("Resolution note (optional):") ?? "";
-  const resp = await fetch(`/api/integrity-issues/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ note: note || null }),
-  });
-  if (resp.ok) await loadIssues();
-  else alert("Failed to resolve issue.");
+  try {
+    await postJSON(`/api/integrity-issues/${id}/resolve`, { note: note || null });
+    await loadIssues();
+  } catch {
+    alert("Failed to resolve issue.");
+  }
 }
 
 async function ignoreIssue(id) {
   const note = prompt("Why are you ignoring this issue? (required):");
   if (!note) return;
-  const resp = await fetch(`/api/integrity-issues/${id}/ignore`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ note }),
-  });
-  if (resp.ok) await loadIssues();
-  else alert("Failed to ignore issue.");
-}
-
-function escHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  try {
+    await postJSON(`/api/integrity-issues/${id}/ignore`, { note });
+    await loadIssues();
+  } catch {
+    alert("Failed to ignore issue.");
+  }
 }
