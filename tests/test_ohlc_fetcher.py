@@ -1,24 +1,8 @@
 from db import connect
 from models.bar import Bar
 from services.ohlc.fetcher import fetch_range
-from services.ohlc.registry import SourceRegistry
 from services.ohlc.store import insert_many
-from tests.conftest import make_bar
-
-
-class _FakeSource:
-    def __init__(self, name, *, supported, bars=None, error=None):
-        self.name = name
-        self.supported_timeframes = frozenset(supported)
-        self._bars = bars or []
-        self._error = error
-        self.calls: list[tuple[str, str, int, int]] = []
-
-    def fetch(self, instrument, timeframe, start, end):
-        self.calls.append((instrument, timeframe, start, end))
-        if self._error is not None:
-            raise self._error
-        return [b for b in self._bars if start <= b.time < end]
+from tests.conftest import FakeOhlcSource, make_bar, make_source_registry
 
 
 def _bar(t, src="fake"):
@@ -35,19 +19,9 @@ def _bar(t, src="fake"):
     )
 
 
-def _registry_with(sources, *, threshold=3, cooldown=10):
-    def clock() -> int:
-        return 0
-
-    reg = SourceRegistry(clock=clock)
-    for s in sources:
-        reg.register(s, failure_threshold=threshold, base_cooldown_seconds=cooldown)
-    return reg
-
-
 def test_fully_cached_returns_cached_status(migrated_db):
-    primary = _FakeSource("primary", supported={"1d"}, bars=[])
-    reg = _registry_with([primary])
+    primary = FakeOhlcSource("primary", supported={"1d"}, bars=[])
+    reg = make_source_registry([primary])
     # Pre-populate the store with two daily bars
     conn = connect(migrated_db)
     try:
@@ -99,8 +73,8 @@ def test_fully_cached_returns_cached_status(migrated_db):
 
 def test_primary_returns_bars(migrated_db):
     bars = [_bar(86400 * i, src="primary") for i in range(1, 4)]
-    primary = _FakeSource("primary", supported={"1d"}, bars=bars)
-    reg = _registry_with([primary])
+    primary = FakeOhlcSource("primary", supported={"1d"}, bars=bars)
+    reg = make_source_registry([primary])
     result = fetch_range(
         db_path=migrated_db,
         registry=reg,
@@ -116,10 +90,10 @@ def test_primary_returns_bars(migrated_db):
 
 
 def test_primary_fails_falls_back_to_secondary(migrated_db):
-    primary = _FakeSource("primary", supported={"1d"}, error=RuntimeError("boom"))
+    primary = FakeOhlcSource("primary", supported={"1d"}, error=RuntimeError("boom"))
     bars = [_bar(86400 * i, src="secondary") for i in range(1, 4)]
-    secondary = _FakeSource("secondary", supported={"1d"}, bars=bars)
-    reg = _registry_with([primary, secondary])
+    secondary = FakeOhlcSource("secondary", supported={"1d"}, bars=bars)
+    reg = make_source_registry([primary, secondary])
     result = fetch_range(
         db_path=migrated_db,
         registry=reg,
@@ -136,9 +110,9 @@ def test_primary_fails_falls_back_to_secondary(migrated_db):
 
 
 def test_all_sources_open_returns_all_unavailable(migrated_db):
-    primary = _FakeSource("primary", supported={"1d"}, error=RuntimeError("boom"))
-    secondary = _FakeSource("secondary", supported={"1d"}, error=RuntimeError("boom"))
-    reg = _registry_with([primary, secondary], threshold=1)
+    primary = FakeOhlcSource("primary", supported={"1d"}, error=RuntimeError("boom"))
+    secondary = FakeOhlcSource("secondary", supported={"1d"}, error=RuntimeError("boom"))
+    reg = make_source_registry([primary, secondary], threshold=1)
     # First call trips both
     fetch_range(
         db_path=migrated_db,
@@ -168,8 +142,8 @@ def test_all_sources_open_returns_all_unavailable(migrated_db):
 
 
 def test_no_source_supports_timeframe_returns_no_source_status(migrated_db):
-    primary = _FakeSource("primary", supported={"1d"}, bars=[])
-    reg = _registry_with([primary])
+    primary = FakeOhlcSource("primary", supported={"1d"}, bars=[])
+    reg = make_source_registry([primary])
     result = fetch_range(
         db_path=migrated_db,
         registry=reg,
@@ -264,8 +238,8 @@ def test_out_of_reach_gaps_are_never_sent_to_sources(migrated_db, monkeypatch):
     now = 1776254400  # 2026-04-15T12:00:00Z, a Wednesday
     monkeypatch.setattr(fetcher_mod, "_now", lambda: now)
 
-    primary = _FakeSource("primary", supported={"1m"}, bars=[])
-    reg = _registry_with([primary])
+    primary = FakeOhlcSource("primary", supported={"1m"}, bars=[])
+    reg = make_source_registry([primary])
     # 1m reach is 30 days; ask for an in-session weekday window ~58 days
     # old (2026-02-16T12:00Z, a Monday) — entirely beyond reach.
     start = now - 58 * 86400
@@ -291,8 +265,8 @@ def test_gap_straddling_reach_floor_is_trimmed(migrated_db, monkeypatch):
     now = 1776254400  # 2026-04-15T12:00:00Z, a Wednesday
     monkeypatch.setattr(fetcher_mod, "_now", lambda: now)
 
-    primary = _FakeSource("primary", supported={"1m"}, bars=[])
-    reg = _registry_with([primary])
+    primary = FakeOhlcSource("primary", supported={"1m"}, bars=[])
+    reg = make_source_registry([primary])
     floor = now - 30 * 86400  # 1m reach
     fetch_range(
         db_path=migrated_db,
@@ -328,7 +302,7 @@ def test_partial_when_only_some_gaps_get_an_answer(migrated_db):
     finally:
         conn.close()
 
-    reg = _registry_with([_FlakySource()])
+    reg = make_source_registry([_FlakySource()])
     result = fetch_range(
         db_path=migrated_db,
         registry=reg,
@@ -346,8 +320,8 @@ def test_empty_source_answer_records_empty_outcome(migrated_db):
     """Micro-drift fix: the in-memory AttemptRecord must carry the same
     outcome the DB trail records ('empty') when a source answers with
     zero bars — and all-empty answers still finish as 'ok'."""
-    primary = _FakeSource("primary", supported={"1d"}, bars=[])
-    reg = _registry_with([primary])
+    primary = FakeOhlcSource("primary", supported={"1d"}, bars=[])
+    reg = make_source_registry([primary])
     result = fetch_range(
         db_path=migrated_db,
         registry=reg,

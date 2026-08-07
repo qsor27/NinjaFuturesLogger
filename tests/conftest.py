@@ -15,6 +15,31 @@ from models.execution import Execution
 from models.position import Position
 from services.import_db import bulk_insert_executions
 from services.instruments import set_registry_path
+from services.ohlc.registry import SourceRegistry
+
+
+class FakeOhlcSource:
+    """Configurable stand-in for an OhlcSource. Records every fetch call."""
+
+    def __init__(self, name="fake", *, supported=("1m",), bars=None, error=None):
+        self.name = name
+        self.supported_timeframes = frozenset(supported)
+        self._bars = list(bars or [])
+        self._error = error
+        self.calls: list[tuple[str, str, int, int]] = []
+
+    def fetch(self, instrument, timeframe, start, end):
+        self.calls.append((instrument, timeframe, start, end))
+        if self._error is not None:
+            raise self._error
+        return [b for b in self._bars if start <= b.time < end]
+
+
+def make_source_registry(sources, *, clock=lambda: 0, threshold=3, cooldown=10) -> SourceRegistry:
+    reg = SourceRegistry(clock=clock)
+    for s in sources:
+        reg.register(s, failure_threshold=threshold, base_cooldown_seconds=cooldown)
+    return reg
 
 
 @pytest.fixture(autouse=True)

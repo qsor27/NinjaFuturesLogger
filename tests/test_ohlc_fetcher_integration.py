@@ -1,9 +1,8 @@
 import pytest
 
 from db import connect
-from models.bar import Bar
 from services.ohlc.fetcher import fetch_range
-from services.ohlc.registry import SourceRegistry
+from tests.conftest import FakeOhlcSource, make_bar, make_source_registry
 
 
 @pytest.fixture(autouse=True)
@@ -15,56 +14,33 @@ def _pin_now(monkeypatch):
     monkeypatch.setattr(fetcher_mod, "_now", lambda: 10_000)
 
 
-class _GoodSource:
-    name = "good"
-    supported_timeframes = frozenset({"1m"})
-
-    def __init__(self, bars):
-        self._bars = bars
-        self.calls = 0
-
-    def fetch(self, instrument, timeframe, start, end):
-        self.calls += 1
-        return [
-            Bar(
-                instrument=instrument,
-                timeframe=timeframe,
-                time=t,
-                open=1,
-                high=1,
-                low=1,
-                close=1,
-                volume=0,
-                source="good",
-            )
-            for t in self._bars
-            if start <= t < end
-        ]
-
-
-class _BadSource:
-    name = "bad"
-    supported_timeframes = frozenset({"1m"})
-
-    def fetch(self, instrument, timeframe, start, end):
-        raise RuntimeError("boom")
-
-
-def _make_registry(*sources, clock):
-    reg = SourceRegistry(clock=clock)
-    for s in sources:
-        reg.register(
-            s,
-            failure_threshold=3,
-            base_cooldown_seconds=60,
-        )
-    return reg
-
-
 def test_fetch_range_writes_attempt_row(migrated_db):
     db = migrated_db
     bars = [i * 60 for i in range(10)]
-    reg = _make_registry(_GoodSource(bars), clock=lambda: 10_000)
+    reg = make_source_registry(
+        [
+            FakeOhlcSource(
+                "good",
+                supported={"1m"},
+                bars=[
+                    make_bar(
+                        instrument="MNQ",
+                        timeframe="1m",
+                        time=t,
+                        open=1,
+                        high=1,
+                        low=1,
+                        close=1,
+                        volume=0,
+                        source="good",
+                    )
+                    for t in bars
+                ],
+            )
+        ],
+        clock=lambda: 10_000,
+        cooldown=60,
+    )
     result = fetch_range(
         db_path=db,
         registry=reg,
@@ -92,10 +68,28 @@ def test_fetch_range_writes_attempt_row(migrated_db):
 def test_fetch_range_records_source_attempts_including_failures(migrated_db):
     db = migrated_db
     bars = [i * 60 for i in range(5)]
-    reg = _make_registry(
-        _BadSource(),
-        _GoodSource(bars),
+    good = FakeOhlcSource(
+        "good",
+        supported={"1m"},
+        bars=[
+            make_bar(
+                instrument="MNQ",
+                timeframe="1m",
+                time=t,
+                open=1,
+                high=1,
+                low=1,
+                close=1,
+                volume=0,
+                source="good",
+            )
+            for t in bars
+        ],
+    )
+    reg = make_source_registry(
+        [FakeOhlcSource("bad", supported={"1m"}, error=RuntimeError("boom")), good],
         clock=lambda: 10_000,
+        cooldown=60,
     )
     result = fetch_range(
         db_path=db,
@@ -126,14 +120,9 @@ def test_fetch_range_creates_gap_report_when_unfilled(migrated_db):
     end = now - 2 * 3600  # 90600, aligned
     start = end - 600  # 90000, aligned
 
-    class _EmptySource:
-        name = "empty"
-        supported_timeframes = frozenset({"1m"})
-
-        def fetch(self, *a, **kw):
-            return []
-
-    reg = _make_registry(_EmptySource(), clock=lambda: now)
+    reg = make_source_registry(
+        [FakeOhlcSource("empty", supported={"1m"}, bars=[])], clock=lambda: now, cooldown=60
+    )
     import services.ohlc.fetcher as fetcher_mod
 
     old = fetcher_mod._now
@@ -165,7 +154,30 @@ def test_fetch_range_emits_per_source_log_line(migrated_db, caplog):
 
     db = migrated_db
     bars = [i * 60 for i in range(5)]
-    reg = _make_registry(_GoodSource(bars), clock=lambda: 10_000)
+    reg = make_source_registry(
+        [
+            FakeOhlcSource(
+                "good",
+                supported={"1m"},
+                bars=[
+                    make_bar(
+                        instrument="MNQ",
+                        timeframe="1m",
+                        time=t,
+                        open=1,
+                        high=1,
+                        low=1,
+                        close=1,
+                        volume=0,
+                        source="good",
+                    )
+                    for t in bars
+                ],
+            )
+        ],
+        clock=lambda: 10_000,
+        cooldown=60,
+    )
     with caplog.at_level(logging.INFO, logger="ohlc.fetcher"):
         result = fetch_range(
             db_path=db,
@@ -196,7 +208,17 @@ def test_fetch_range_writes_attempt_even_when_cached(migrated_db):
         )
     conn.close()
 
-    reg = _make_registry(_GoodSource([]), clock=lambda: 10_000)
+    reg = make_source_registry(
+        [
+            FakeOhlcSource(
+                "good",
+                supported={"1m"},
+                bars=[],
+            )
+        ],
+        clock=lambda: 10_000,
+        cooldown=60,
+    )
     result = fetch_range(
         db_path=db,
         registry=reg,
@@ -223,7 +245,11 @@ def test_trail_error_class_matches_breaker_classification(migrated_db):
     on. A bare RuntimeError is 'other' to the breaker, so the trail must
     say 'other' too — not NULL."""
     db = migrated_db
-    reg = _make_registry(_BadSource(), clock=lambda: 10_000)
+    reg = make_source_registry(
+        [FakeOhlcSource("bad", supported={"1m"}, error=RuntimeError("boom"))],
+        clock=lambda: 10_000,
+        cooldown=60,
+    )
     result = fetch_range(
         db_path=db,
         registry=reg,
