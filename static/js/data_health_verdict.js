@@ -1,6 +1,9 @@
 // Renders the top-of-page verdict banner + updates the nav pill.
 // Shared between /data-health and /data-health/system.
 
+import { fetchJSON } from "./api.js";
+import { escHtml, formatTimeOfDay } from "./format.js";
+
 renderVerdict();
 
 async function renderVerdict() {
@@ -8,8 +11,7 @@ async function renderVerdict() {
   if (!el) return;
   let body;
   try {
-    const resp = await fetch("/api/data-health/summary");
-    body = await resp.json();
+    body = await fetchJSON("/api/data-health/summary");
   } catch (_e) {
     return;
   }
@@ -22,7 +24,7 @@ async function renderVerdict() {
   const style = colors[body.verdict] || colors.attention;
 
   const nextRetryStr = body.next_retry_at
-    ? ` Next retry ${formatTime(body.next_retry_at)}.`
+    ? ` Next retry ${formatTimeOfDay(body.next_retry_at)}.`
     : "";
 
   el.innerHTML = `
@@ -66,16 +68,3 @@ function updateNavPill(summary) {
   }
 }
 
-function formatTime(unixSec) {
-  return new Date(unixSec * 1000).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function escHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}

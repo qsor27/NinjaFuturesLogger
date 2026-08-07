@@ -1,6 +1,9 @@
 // Data Health / System tab: source breakers, coverage maintainer + rate
 // limiter, full per-fetch activity log.
 
+import { fetchJSON } from "./api.js";
+import { escHtml, formatTime } from "./format.js";
+
 initSystem();
 
 async function initSystem() {
@@ -12,15 +15,12 @@ async function initSystem() {
 async function renderSourcesBand() {
   const el = document.getElementById("sources-band");
   if (!el) return;
-  const resp = await fetch("/api/ohlc/sources");
-  const { sources } = await resp.json();
+  const { sources } = await fetchJSON("/api/ohlc/sources");
   const rows = sources.map((s) => {
     const stateColor = s.state === "closed" ? "#0a7f0a" : s.state === "open" ? "#b00020" : "#c07000";
-    const lastSuccess = s.last_success_at ? new Date(s.last_success_at * 1000).toLocaleString() : "—";
-    const lastFail = s.last_failure_at ? new Date(s.last_failure_at * 1000).toLocaleString() : "—";
-    const nextRetry = s.next_retry_at
-      ? new Date(s.next_retry_at * 1000).toLocaleString()
-      : "—";
+    const lastSuccess = formatTime(s.last_success_at);
+    const lastFail = formatTime(s.last_failure_at);
+    const nextRetry = formatTime(s.next_retry_at);
     const tripsSuffix = s.consecutive_trips > 1 ? ` (trip ${s.consecutive_trips})` : "";
     const errTooltip = s.last_failure_class
       ? ` title="${escHtml(s.last_failure_class)}"`
@@ -47,10 +47,9 @@ async function renderSourcesBand() {
 async function renderMaintainerPanel() {
   const el = document.getElementById("maintainer-panel");
   if (!el) return;
-  const resp = await fetch("/api/data-health/maintainer");
-  const body = await resp.json();
-  const next = body.next_run_at ? new Date(body.next_run_at * 1000).toLocaleString() : "—";
-  const last = body.last_run_at ? new Date(body.last_run_at * 1000).toLocaleString() : "—";
+  const body = await fetchJSON("/api/data-health/maintainer");
+  const next = formatTime(body.next_run_at);
+  const last = formatTime(body.last_run_at);
   const lastStatus = body.last_run_status ?? "—";
   const tb = body.token_bucket || {};
   el.innerHTML = `
@@ -66,14 +65,13 @@ async function renderMaintainerPanel() {
 async function renderAttemptsPanel() {
   const el = document.getElementById("attempts-panel");
   if (!el) return;
-  const resp = await fetch("/api/ohlc/attempts?limit=40");
-  const { attempts } = await resp.json();
+  const { attempts } = await fetchJSON("/api/ohlc/attempts?limit=40");
   if (!attempts.length) {
     el.innerHTML = `<div class="notice">No attempts recorded yet.</div>`;
     return;
   }
   const rows = attempts.map((a) => {
-    const started = a.started_at ? new Date(a.started_at * 1000).toLocaleString() : "—";
+    const started = formatTime(a.started_at);
     const dur = a.completed_at && a.started_at
       ? `${a.completed_at - a.started_at}s` : "—";
     const status = a.final_status ?? "running";
@@ -113,9 +111,3 @@ async function renderAttemptsPanel() {
     </table>`;
 }
 
-function escHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}

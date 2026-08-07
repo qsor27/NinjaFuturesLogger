@@ -1,8 +1,9 @@
 // Data Health / Coverage tab: completeness matrix, per-cell detail panel,
 // delete-and-refetch, stuck-gaps panel.
 
-import { HttpError, postJSON } from "./api.js";
+import { HttpError, fetchJSON, postJSON } from "./api.js";
 import { pollJob, triggerFetch } from "./ohlc_jobs.js";
+import { escHtml, formatTime } from "./format.js";
 
 initCoverage();
 
@@ -27,8 +28,7 @@ async function renderMatrix() {
   const url = days
     ? `/api/data-health/completeness?days=${encodeURIComponent(days)}`
     : "/api/data-health/completeness";
-  const resp = await fetch(url);
-  const body = await resp.json();
+  const body = await fetchJSON(url);
 
   if (!body.instruments.length) {
     el.innerHTML = "<p>No instruments with executions in the last 90 days.</p>";
@@ -50,8 +50,8 @@ async function renderMatrix() {
       const status = body.cells[inst]?.[tf] ?? "missing";
       const style = statusStyle[status] ?? "";
       return `<td style="${style};text-align:center;cursor:pointer;padding:6px 10px"
-               data-inst="${inst}" data-tf="${tf}" class="cell-btn"
-               title="${status}">${status}</td>`;
+               data-inst="${escHtml(inst)}" data-tf="${escHtml(tf)}" class="cell-btn"
+               title="${escHtml(status)}">${escHtml(status)}</td>`;
     }).join("");
     return `<tr><td><strong>${escHtml(inst)}</strong></td>${cells}</tr>`;
   }).join("");
@@ -89,8 +89,9 @@ async function openDetailPanel(instrument, timeframe, start, end) {
   panel.style.display = "block";
   panel.innerHTML = `<h3>${escHtml(instrument)} / ${escHtml(timeframe)} — gaps</h3><p>Loading…</p>`;
 
-  const resp = await fetch(`/api/data-health/missing/${instrument}/${timeframe}?start=${start}&end=${end}`);
-  const body = await resp.json();
+  const body = await fetchJSON(
+    `/api/data-health/missing/${instrument}/${timeframe}?start=${start}&end=${end}`,
+  );
 
   const deleteControls = `
     <div style="margin:0.5em 0;padding:0.5em;border:1px solid var(--border-card)">
@@ -99,7 +100,7 @@ async function openDetailPanel(instrument, timeframe, start, end) {
         Removes all stored bars in this window. The next fetch (on-demand or self-heal) will repopulate.
       </div>
       <button id="delete-bars-btn"
-        data-inst="${instrument}" data-tf="${timeframe}"
+        data-inst="${escHtml(instrument)}" data-tf="${escHtml(timeframe)}"
         data-start="${start}" data-end="${end}">Delete + refetch</button>
       <span id="delete-bars-status" style="margin-left:0.5em"></span>
     </div>`;
@@ -112,11 +113,11 @@ async function openDetailPanel(instrument, timeframe, start, end) {
   } else {
     const gapRows = body.gaps.map((g) =>
       `<tr>
-        <td>${new Date(g.start * 1000).toLocaleString()}</td>
-        <td>${new Date(g.end * 1000).toLocaleString()}</td>
+        <td>${formatTime(g.start)}</td>
+        <td>${formatTime(g.end)}</td>
         <td>
           <button class="fetch-gap-btn"
-            data-inst="${instrument}" data-tf="${timeframe}"
+            data-inst="${escHtml(instrument)}" data-tf="${escHtml(timeframe)}"
             data-start="${g.start}" data-end="${g.end}">Fetch Missing</button>
         </td>
       </tr>`
@@ -143,7 +144,7 @@ async function openDetailPanel(instrument, timeframe, start, end) {
       const tf = delBtn.dataset.tf;
       const s = parseInt(delBtn.dataset.start);
       const e = parseInt(delBtn.dataset.end);
-      const rangeLabel = `${new Date(s * 1000).toLocaleString()} – ${new Date(e * 1000).toLocaleString()}`;
+      const rangeLabel = `${formatTime(s)} – ${formatTime(e)}`;
       if (!window.confirm(`Delete all ${inst} ${tf} bars in\n${rangeLabel}?\n\nThis cannot be undone. A fetch will be triggered automatically afterwards.`)) {
         return;
       }
@@ -227,8 +228,8 @@ async function renderGapsPanel() {
   const el = document.getElementById("gaps-panel");
   if (!el) return;
   const [openResp, abandonedResp] = await Promise.all([
-    fetch("/api/ohlc/gaps?state=open").then((r) => r.json()),
-    fetch("/api/ohlc/gaps?state=abandoned").then((r) => r.json()),
+    fetchJSON("/api/ohlc/gaps?state=open"),
+    fetchJSON("/api/ohlc/gaps?state=abandoned"),
   ]);
   const open = openResp.gaps || [];
   const abandoned = abandonedResp.gaps || [];
@@ -245,7 +246,7 @@ async function renderGapsPanel() {
       btn.disabled = true;
       btn.textContent = "Retrying…";
       try {
-        await fetch(`/api/ohlc/gaps/${id}/retry`, { method: "POST" });
+        await postJSON(`/api/ohlc/gaps/${id}/retry`, {});
         setTimeout(() => renderGapsPanel(), 2000);
       } catch (_e) {
         btn.textContent = "Retry (failed)";
@@ -259,9 +260,8 @@ function renderGapTable(rows, variant) {
     return `<div class="notice">No ${variant} gaps.</div>`;
   }
   const body = rows.map((g) => {
-    const range = `${new Date(g.gap_start * 1000).toLocaleString()} – ${new Date(g.gap_end * 1000).toLocaleString()}`;
-    const nextRetry = g.next_retry_at
-      ? new Date(g.next_retry_at * 1000).toLocaleString() : "—";
+    const range = `${formatTime(g.gap_start)} – ${formatTime(g.gap_end)}`;
+    const nextRetry = formatTime(g.next_retry_at);
     return `<tr>
       <td>${escHtml(g.instrument)}</td>
       <td>${escHtml(g.timeframe)}</td>
@@ -280,9 +280,3 @@ function renderGapTable(rows, variant) {
   </table>`;
 }
 
-function escHtml(s) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
