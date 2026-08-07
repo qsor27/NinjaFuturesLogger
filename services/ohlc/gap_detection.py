@@ -1,4 +1,5 @@
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime, time
 from zoneinfo import ZoneInfo
 
@@ -117,6 +118,22 @@ def expected_slot_count(
     return len(expected_session_slots(instrument, timeframe, start, end))
 
 
+def _presence_predicate(timeframe: str, present_times: list[int]) -> Callable[[int], bool]:
+    """Return slot -> "is a bar present for this slot?".
+
+    Daily and above: yfinance stamps daily futures bars at local midnight
+    (04:00/05:00 UTC) while the session-aware walker emits epoch-aligned or
+    session-open slots — exact equality never matches. Bucket both sides to
+    the UTC calendar day; "did we get a bar for this day?" is all that
+    matters at these timeframes. Intraday: exact time match.
+    """
+    if timeframe_seconds(timeframe) >= 86400:
+        present_buckets = {t // 86400 for t in present_times}
+        return lambda slot: (slot // 86400) in present_buckets  # noqa: E731
+    present = set(present_times)
+    return lambda slot: slot in present  # noqa: E731
+
+
 def find_gaps(
     conn: sqlite3.Connection,
     *,
@@ -140,17 +157,7 @@ def find_gaps(
     )
 
     stride = timeframe_seconds(timeframe)
-    if stride >= 86400:
-        # Daily and above: yfinance stamps daily futures bars at local
-        # midnight (04:00/05:00 UTC), but expected_session_slots walks epoch-
-        # aligned 00:00 UTC slots. Exact equality never matches, so bucket
-        # both sides to the UTC calendar day — "did we get a bar for this
-        # day?" is all that matters at these timeframes.
-        present_buckets = {t // 86400 for t in present_times}
-        is_present = lambda slot: (slot // 86400) in present_buckets  # noqa: E731
-    else:
-        present = set(present_times)
-        is_present = lambda slot: slot in present  # noqa: E731
+    is_present = _presence_predicate(timeframe, present_times)
 
     gaps: list[tuple[int, int]] = []
     run_start: int | None = None
@@ -195,17 +202,8 @@ def classify_window(
     present_times = list_times(
         conn, instrument=instrument, timeframe=timeframe, start=start, end=end
     )
-    # For daily-and-above, the walker anchors at the session open (e.g. 17:00 CT)
-    # but providers like yfinance stamp daily bars at 00:00 UTC — so exact-time
-    # matching never aligns. Bucket both sides to a UTC calendar day instead;
-    # the only thing that matters at these timeframes is "did we get a bar for
-    # this day?".
-    if timeframe_seconds(timeframe) >= 86400:
-        present_days = {t // 86400 for t in present_times}
-        present_count = sum(1 for s in reachable if (s // 86400) in present_days)
-    else:
-        present = set(present_times)
-        present_count = sum(1 for s in reachable if s in present)
+    is_present = _presence_predicate(timeframe, present_times)
+    present_count = sum(1 for s in reachable if is_present(s))
     missing = len(reachable) - present_count
     return {
         "expected": len(slots),
