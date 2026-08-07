@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from db import connect
+from db import read_conn, transaction
 from models.settings import (
     CustomFieldDefinition,
     CustomFieldOption,
@@ -42,8 +42,7 @@ class CustomFieldsService:
     # ---- definitions ----
 
     def list_definitions(self, include_inactive: bool = True) -> list[CustomFieldDefinition]:
-        conn = connect(self._db_path)
-        try:
+        with read_conn(self._db_path) as conn:
             sql = (
                 "SELECT field_id, name, field_type, is_active, display_order, created_at "
                 "FROM custom_fields "
@@ -52,8 +51,6 @@ class CustomFieldsService:
                 sql += "WHERE is_active = 1 "
             sql += "ORDER BY display_order, field_id"
             rows = conn.execute(sql).fetchall()
-        finally:
-            conn.close()
         return [
             CustomFieldDefinition(
                 field_id=r["field_id"],
@@ -67,15 +64,12 @@ class CustomFieldsService:
         ]
 
     def get_definition(self, field_id: int) -> CustomFieldDefinition | None:
-        conn = connect(self._db_path)
-        try:
+        with read_conn(self._db_path) as conn:
             row = conn.execute(
                 "SELECT field_id, name, field_type, is_active, display_order, created_at "
                 "FROM custom_fields WHERE field_id = ?",
                 (field_id,),
             ).fetchone()
-        finally:
-            conn.close()
         if row is None:
             return None
         return CustomFieldDefinition(
@@ -98,9 +92,7 @@ class CustomFieldsService:
             raise ValueError(f"invalid field_type: {field_type!r}")
         if not name:
             raise ValueError("name is required")
-        conn = connect(self._db_path)
-        try:
-            conn.execute("BEGIN")
+        with transaction(self._db_path) as conn:
             try:
                 cur = conn.execute(
                     "INSERT INTO custom_fields (name, field_type, is_active, "
@@ -108,15 +100,8 @@ class CustomFieldsService:
                     (name, field_type, display_order, _now()),
                 )
             except sqlite3.IntegrityError as e:
-                conn.execute("ROLLBACK")
                 raise DuplicateFieldError(f"duplicate name: {name!r}") from e
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
             field_id = cur.lastrowid
-            conn.execute("COMMIT")
-        finally:
-            conn.close()
         return self.get_definition(field_id)  # type: ignore[return-value]
 
     def update_definition(
@@ -150,62 +135,38 @@ class CustomFieldsService:
             return existing
         set_clause = ", ".join(u[0] for u in updates)
         params = [u[1] for u in updates] + [field_id]
-        conn = connect(self._db_path)
-        try:
-            conn.execute("BEGIN")
-            try:
-                conn.execute(
-                    f"UPDATE custom_fields SET {set_clause} WHERE field_id = ?",
-                    tuple(params),
-                )
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            conn.close()
+        with transaction(self._db_path) as conn:
+            conn.execute(
+                f"UPDATE custom_fields SET {set_clause} WHERE field_id = ?",
+                tuple(params),
+            )
         return self.get_definition(field_id)  # type: ignore[return-value]
 
     def affected_executions(self, field_id: int) -> int:
-        conn = connect(self._db_path)
-        try:
+        with read_conn(self._db_path) as conn:
             row = conn.execute(
                 "SELECT COUNT(*) FROM execution_custom_field_values WHERE field_id = ?",
                 (field_id,),
             ).fetchone()
-        finally:
-            conn.close()
         return int(row[0])
 
     def delete_definition(self, field_id: int, *, confirm_count: int) -> None:
         actual = self.affected_executions(field_id)
         if confirm_count != actual:
             raise ValueError(f"confirm_count {confirm_count} does not match actual {actual}")
-        conn = connect(self._db_path)
-        try:
-            conn.execute("BEGIN")
-            try:
-                conn.execute("DELETE FROM custom_fields WHERE field_id = ?", (field_id,))
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            conn.close()
+        with transaction(self._db_path) as conn:
+            conn.execute("DELETE FROM custom_fields WHERE field_id = ?", (field_id,))
 
     # ---- options ----
 
     def list_options(self, field_id: int) -> list[CustomFieldOption]:
-        conn = connect(self._db_path)
-        try:
+        with read_conn(self._db_path) as conn:
             rows = conn.execute(
                 "SELECT option_id, field_id, value, display_order "
                 "FROM custom_field_options WHERE field_id = ? "
                 "ORDER BY display_order, option_id",
                 (field_id,),
             ).fetchall()
-        finally:
-            conn.close()
         return [
             CustomFieldOption(
                 option_id=r["option_id"],
@@ -225,34 +186,25 @@ class CustomFieldsService:
         validated = [CustomFieldOptionInput(**o) for o in options]
         existing = {o.value: o for o in self.list_options(field_id)}
         new_values = {o.value for o in validated}
-        conn = connect(self._db_path)
-        try:
-            conn.execute("BEGIN")
-            try:
-                for value, opt in existing.items():
-                    if value not in new_values:
-                        conn.execute(
-                            "DELETE FROM custom_field_options WHERE option_id = ?",
-                            (opt.option_id,),
-                        )
-                for v in validated:
-                    if v.value in existing:
-                        conn.execute(
-                            "UPDATE custom_field_options SET display_order = ? WHERE option_id = ?",
-                            (v.display_order, existing[v.value].option_id),
-                        )
-                    else:
-                        conn.execute(
-                            "INSERT INTO custom_field_options "
-                            "(field_id, value, display_order) VALUES (?, ?, ?)",
-                            (field_id, v.value, v.display_order),
-                        )
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            conn.close()
+        with transaction(self._db_path) as conn:
+            for value, opt in existing.items():
+                if value not in new_values:
+                    conn.execute(
+                        "DELETE FROM custom_field_options WHERE option_id = ?",
+                        (opt.option_id,),
+                    )
+            for v in validated:
+                if v.value in existing:
+                    conn.execute(
+                        "UPDATE custom_field_options SET display_order = ? WHERE option_id = ?",
+                        (v.display_order, existing[v.value].option_id),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO custom_field_options "
+                        "(field_id, value, display_order) VALUES (?, ?, ?)",
+                        (field_id, v.value, v.display_order),
+                    )
         return self.list_options(field_id)
 
     # ---- execution values ----
@@ -304,8 +256,7 @@ class CustomFieldsService:
 
     def get_execution_values(self, execution_id: str) -> dict[int, Any]:
         real_id = strip_split_suffix(execution_id)
-        conn = connect(self._db_path)
-        try:
+        with read_conn(self._db_path) as conn:
             rows = conn.execute(
                 "SELECT v.field_id, v.value, f.field_type "
                 "FROM execution_custom_field_values v "
@@ -313,8 +264,6 @@ class CustomFieldsService:
                 "WHERE v.execution_id = ?",
                 (real_id,),
             ).fetchall()
-        finally:
-            conn.close()
         return {r["field_id"]: self._decode(r["field_type"], r["value"]) for r in rows}
 
     def set_execution_value(
@@ -328,21 +277,12 @@ class CustomFieldsService:
         if defn is None:
             raise ValueError(f"no such field_id: {field_id}")
         if value is None or value == "":
-            conn = connect(self._db_path)
-            try:
-                conn.execute("BEGIN")
-                try:
-                    conn.execute(
-                        "DELETE FROM execution_custom_field_values "
-                        "WHERE execution_id = ? AND field_id = ?",
-                        (real_id, field_id),
-                    )
-                    conn.execute("COMMIT")
-                except Exception:
-                    conn.execute("ROLLBACK")
-                    raise
-            finally:
-                conn.close()
+            with transaction(self._db_path) as conn:
+                conn.execute(
+                    "DELETE FROM execution_custom_field_values "
+                    "WHERE execution_id = ? AND field_id = ?",
+                    (real_id, field_id),
+                )
             return
 
         options: list[str] | None = None
@@ -350,23 +290,14 @@ class CustomFieldsService:
             options = [o.value for o in self.list_options(field_id)]
         encoded = self._encode(defn.field_type, value, options)
 
-        conn = connect(self._db_path)
-        try:
-            conn.execute("BEGIN")
-            try:
-                conn.execute(
-                    "INSERT INTO execution_custom_field_values "
-                    "(execution_id, field_id, value, updated_at) VALUES (?, ?, ?, ?) "
-                    "ON CONFLICT(execution_id, field_id) DO UPDATE SET "
-                    "value = excluded.value, updated_at = excluded.updated_at",
-                    (real_id, field_id, encoded, _now()),
-                )
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
-        finally:
-            conn.close()
+        with transaction(self._db_path) as conn:
+            conn.execute(
+                "INSERT INTO execution_custom_field_values "
+                "(execution_id, field_id, value, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(execution_id, field_id) DO UPDATE SET "
+                "value = excluded.value, updated_at = excluded.updated_at",
+                (real_id, field_id, encoded, _now()),
+            )
 
     def values_for_position(
         self,

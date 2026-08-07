@@ -14,7 +14,7 @@ migrations).
 import time
 from pathlib import Path
 
-from db import connect
+from db import read_conn, transaction
 
 DEFAULT_TIMEFRAME = "5m"
 VOLUME_VISIBLE_DEFAULT = True
@@ -22,13 +22,10 @@ VOLUME_VISIBLE_DEFAULT = True
 
 def get_defaults(db_path: Path | str) -> dict:
     """Return a fresh dict with the current chart defaults."""
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         row = conn.execute(
             "SELECT default_timeframe, volume_visible_default FROM chart_defaults WHERE id = 1"
         ).fetchone()
-    finally:
-        conn.close()
     if row is None:
         return {
             "default_timeframe": DEFAULT_TIMEFRAME,
@@ -48,18 +45,9 @@ def save_defaults(
 ) -> None:
     if default_timeframe not in ("1m", "5m", "15m", "1h", "4h", "1d"):
         raise ValueError(f"invalid default_timeframe: {default_timeframe!r}")
-    conn = connect(db_path)
-    try:
-        conn.execute("BEGIN")
-        try:
-            conn.execute(
-                "UPDATE chart_defaults SET default_timeframe = ?, "
-                "volume_visible_default = ?, updated_at = ? WHERE id = 1",
-                (default_timeframe, int(bool(volume_visible_default)), int(time.time())),
-            )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
-    finally:
-        conn.close()
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE chart_defaults SET default_timeframe = ?, "
+            "volume_visible_default = ?, updated_at = ? WHERE id = 1",
+            (default_timeframe, int(bool(volume_visible_default)), int(time.time())),
+        )
