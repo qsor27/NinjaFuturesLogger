@@ -6,7 +6,7 @@ Timeframe = Literal["1m", "5m", "15m", "1h", "4h", "1d"]
 FetchStatus = Literal[
     "cached", "ok", "partial", "all_sources_unavailable", "no_source_for_timeframe", "out_of_reach"
 ]
-Outcome = Literal["ok", "failed", "skipped"]
+Outcome = Literal["ok", "empty", "failed", "skipped"]
 
 
 class Bar(StrictModel):

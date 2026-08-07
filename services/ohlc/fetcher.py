@@ -173,6 +173,7 @@ def fetch_range(
     bars_collected: list[Bar] = []
     attempts: list[AttemptRecord] = []
     any_gap_filled = False
+    all_gaps_filled = True
 
     def _record_and_log(
         *,
@@ -328,7 +329,7 @@ def fetch_range(
             attempts.append(
                 AttemptRecord(
                     source=source.name,
-                    outcome="ok",
+                    outcome=outcome,
                     count=len(bars),
                     error=None,
                 )
@@ -337,6 +338,8 @@ def fetch_range(
             break
         if gap_filled:
             any_gap_filled = True
+        else:
+            all_gaps_filled = False
 
     if bars_collected:
         conn = connect(db_path)
@@ -350,12 +353,12 @@ def fetch_range(
         finally:
             conn.close()
 
-    if bars_collected:
-        status = "ok" if any_gap_filled else "partial"
-    elif any_gap_filled:
+    if not any_gap_filled:
+        status = "all_sources_unavailable"
+    elif all_gaps_filled:
         status = "ok"
     else:
-        status = "all_sources_unavailable"
+        status = "partial"
 
     _finalize(
         db_path,

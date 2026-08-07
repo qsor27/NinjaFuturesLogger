@@ -305,3 +305,57 @@ def test_gap_straddling_reach_floor_is_trimmed(migrated_db, monkeypatch):
     assert primary.calls, "reachable part of the gap should still be fetched"
     for _inst, _tf, g_start, _g_end in primary.calls:
         assert g_start >= floor
+
+
+def test_partial_when_only_some_gaps_get_an_answer(migrated_db):
+    """B6: filling 1 of 2 gaps must report 'partial', not 'ok'."""
+
+    class _FlakySource:
+        name = "flaky"
+        supported_timeframes = frozenset({"1d"})
+
+        def fetch(self, instrument, timeframe, start, end):
+            if start >= 86400 * 5:
+                raise RuntimeError("boom")
+            return [_bar(86400, src="flaky")]
+
+    # Seed Mon 1970-01-05 so the window splits into two gaps:
+    # (Fri 86400, 172800) and (Tue 432000, 518400).
+    conn = connect(migrated_db)
+    try:
+        insert_many(conn, [_bar(86400 * 4, src="seed")])
+    finally:
+        conn.close()
+
+    reg = _registry_with([_FlakySource()])
+    result = fetch_range(
+        db_path=migrated_db,
+        registry=reg,
+        instrument="MNQ",
+        timeframe="1d",
+        start=86400,
+        end=86400 * 6,
+        trigger="on_demand",
+    )
+    assert result.bars_added == 1
+    assert result.status == "partial"
+
+
+def test_empty_source_answer_records_empty_outcome(migrated_db):
+    """Micro-drift fix: the in-memory AttemptRecord must carry the same
+    outcome the DB trail records ('empty') when a source answers with
+    zero bars — and all-empty answers still finish as 'ok'."""
+    primary = _FakeSource("primary", supported={"1d"}, bars=[])
+    reg = _registry_with([primary])
+    result = fetch_range(
+        db_path=migrated_db,
+        registry=reg,
+        instrument="MNQ",
+        timeframe="1d",
+        start=86400,
+        end=86400 * 3,
+        trigger="on_demand",
+    )
+    assert result.attempts, "expected at least one source attempt"
+    assert all(a.outcome == "empty" for a in result.attempts)
+    assert result.status == "ok"
