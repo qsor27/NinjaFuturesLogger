@@ -1,51 +1,59 @@
 // Shared fetch helpers. All API calls in the browsing UI go through these.
-// Every URL is absolute-from-root; no relative paths.
+// Every URL is absolute-from-root; no relative paths. Transport only —
+// formatting/escaping helpers live in format.js.
 
-export async function fetchJSON(url) {
-  const resp = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`GET ${url} failed: ${resp.status} ${text}`);
+// Thrown by every helper on a non-2xx response. `body` is the parsed JSON
+// error payload when the server sent one (e.g. {error: "out_of_reach"}),
+// the raw text otherwise, or null for an empty body. Callers that branch on
+// status codes (409 confirmations, 503 healthz) catch this and inspect
+// .status / .body instead of keeping raw fetch calls.
+export class HttpError extends Error {
+  constructor(method, url, status, rawText, body) {
+    super(`${method} ${url} failed: ${status} ${rawText}`);
+    this.name = "HttpError";
+    this.status = status;
+    this.body = body;
   }
-  return await resp.json();
 }
 
-export async function patchJSON(url, body) {
-  const resp = await fetch(url, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`PATCH ${url} failed: ${resp.status} ${text}`);
+async function request(method, url, body) {
+  const opts = { method, headers: { Accept: "application/json" } };
+  if (body !== undefined) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(body);
   }
-  return await resp.json();
+  const resp = await fetch(url, opts);
+  const text = await resp.text();
+  let parsed = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+  }
+  if (!resp.ok) throw new HttpError(method, url, resp.status, text, parsed);
+  return parsed; // null for 204 / empty bodies
 }
 
-export async function postJSON(url, body) {
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`POST ${url} failed: ${resp.status} ${text}`);
-  }
-  return await resp.json();
+export function fetchJSON(url) {
+  return request("GET", url);
 }
 
-export async function deleteJSON(url) {
-  const resp = await fetch(url, {
-    method: "DELETE",
-    headers: { Accept: "application/json" },
-  });
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`DELETE ${url} failed: ${resp.status} ${text}`);
-  }
-  return await resp.json();
+export function postJSON(url, body) {
+  return request("POST", url, body);
+}
+
+export function putJSON(url, body) {
+  return request("PUT", url, body);
+}
+
+export function patchJSON(url, body) {
+  return request("PATCH", url, body);
+}
+
+export function deleteJSON(url) {
+  return request("DELETE", url);
 }
 
 // Build a query string from an object, skipping null/empty values.
