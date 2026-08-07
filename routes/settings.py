@@ -8,6 +8,7 @@ from db import connect
 from logging_config import get_logger
 from models.settings import InstrumentConfig
 from routes._params import BadParam, int_arg
+from services.execution_db import execution_exists
 from services.instruments import get_registry
 from services.ohlc.coverage_state import (
     list_coverage,
@@ -304,31 +305,16 @@ def build_settings_blueprint() -> Blueprint:
 
     # ---- execution-level custom field values ----
 
-    def _execution_exists(execution_id: str) -> bool:
-        from db import connect
-        from services.notes import strip_split_suffix
-
-        real_id = strip_split_suffix(execution_id)
-        conn = connect(current_app.config["FTL_DB_PATH"])
-        try:
-            row = conn.execute(
-                "SELECT 1 FROM executions WHERE nt_execution_id = ?",
-                (real_id,),
-            ).fetchone()
-        finally:
-            conn.close()
-        return row is not None
-
     @bp.get("/api/executions/<execution_id>/custom-fields")
     def get_execution_custom_fields(execution_id: str):
-        if not _execution_exists(execution_id):
+        if not execution_exists(current_app.config["FTL_DB_PATH"], execution_id):
             return jsonify({"error": "execution not found"}), 404
         values = _svc().get_execution_values(execution_id)
         return jsonify({"values": {str(k): v for k, v in values.items()}})
 
     @bp.put("/api/executions/<execution_id>/custom-fields/<int:field_id>")
     def put_execution_custom_field(execution_id: str, field_id: int):
-        if not _execution_exists(execution_id):
+        if not execution_exists(current_app.config["FTL_DB_PATH"], execution_id):
             return jsonify({"error": "execution not found"}), 404
         body = request.get_json(silent=True) or {}
         value = body.get("value")
