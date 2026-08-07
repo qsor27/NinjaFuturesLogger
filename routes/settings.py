@@ -187,11 +187,12 @@ def build_settings_blueprint() -> Blueprint:
 
         body = request.get_json(silent=True) or {}
         value = body.get("theme")
-        if value not in ("dark", "light"):
-            return jsonify({"error": "theme must be 'dark' or 'light'"}), 400
 
         cfg_path = current_app.config["FTL_CONFIG_PATH"]
-        save_theme(cfg_path, value)
+        try:
+            save_theme(cfg_path, value)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         current_app.config["FTL_CONFIG"] = load_config(cfg_path)
         return jsonify({"theme": value})
 
@@ -208,10 +209,6 @@ def build_settings_blueprint() -> Blueprint:
 
         body = request.get_json(silent=True) or {}
         value = body.get("port")
-        if not isinstance(value, int) or isinstance(value, bool):
-            return jsonify({"error": "port must be an integer"}), 400
-        if value < 1024 or value > 65535:
-            return jsonify({"error": "port must be in [1024, 65535]"}), 400
 
         cfg_path = current_app.config["FTL_CONFIG_PATH"]
         try:

@@ -2,9 +2,6 @@ from flask import Blueprint, current_app, jsonify, request
 from pydantic import ValidationError
 
 from config import (
-    FilterDefaults,
-    PositionsFilterDefault,
-    StatsFilterDefault,
     clear_all_filter_defaults,
     load_config,
     save_filter_default,
@@ -42,24 +39,6 @@ def build_filter_defaults_blueprint() -> Blueprint:
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             return jsonify({"error": "body must be a JSON object"}), 400
-
-        # Validate the body shape before persisting. The accounts scope has a
-        # bespoke shape ({accounts: [...]}); positions/stats use their Pydantic
-        # models.
-        try:
-            if scope == "accounts":
-                if set(body.keys()) != {"accounts"}:
-                    return (
-                        jsonify({"error": "accounts body must be exactly {'accounts': [...]}"}),
-                        400,
-                    )
-                FilterDefaults(accounts=body["accounts"])
-            elif scope == "positions":
-                PositionsFilterDefault(**body)
-            else:  # stats
-                StatsFilterDefault(**body)
-        except ValidationError as e:
-            return jsonify({"error": str(e)}), 400
 
         try:
             save_filter_default(_cfg_path(), scope, body)
