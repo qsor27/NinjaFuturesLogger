@@ -11,7 +11,6 @@ from services.ohlc.gap_reports import (
     update_gap_reports,
 )
 
-
 ONE_HOUR = 3600
 
 

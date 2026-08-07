@@ -7,6 +7,8 @@ from models.execution import Execution
 from models.position import IntegrityIssue
 from services.execution_ordering import (
     order_executions_for_walk,
+)
+from services.execution_ordering import (
     parse_position_column as _parse_position_column,
 )
 

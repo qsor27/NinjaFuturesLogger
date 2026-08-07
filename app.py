@@ -19,12 +19,12 @@ from routes.filter_defaults import build_filter_defaults_blueprint
 from routes.first_run import build_first_run_blueprint
 from routes.imports import build_imports_blueprint
 from routes.monitoring import build_monitoring_blueprint
+from routes.nt_connection import build_nt_connection_blueprint
 from routes.ohlc import build_ohlc_blueprint
 from routes.pages import build_pages_blueprint
 from routes.positions import build_positions_blueprint
 from routes.settings import build_settings_blueprint
 from routes.stats import build_stats_blueprint
-from routes.nt_connection import build_nt_connection_blueprint
 from routes.support import build_support_blueprint
 from routes.user_metadata import build_user_metadata_blueprint
 from services.import_pipeline import ImportPipeline
