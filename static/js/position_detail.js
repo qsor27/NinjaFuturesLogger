@@ -44,7 +44,7 @@ function renderHeader(detail) {
     ["Exit price", p.exit_price !== null ? p.exit_price.toFixed(2) : "—", null],
     ["Points P&L", p.points_pnl !== null ? p.points_pnl.toFixed(2) : "—", p.points_pnl],
     ["$ P&L", fmtMoney(p.dollars_pnl, { decimals: 2 }), p.dollars_pnl],
-    ["Commission", `$${p.commission.toFixed(2)}`, null],
+    ["Commission", fmtMoney(p.commission, { decimals: 2, signed: false }), null],
     ["Duration", p.duration_minutes !== null ? p.duration_minutes.toFixed(1) + " m" : "—", null],
   ];
   headerDl.innerHTML = "";
@@ -136,8 +136,8 @@ function renderExecutions(executions, detail) {
     tr.appendChild(td(e.price.toFixed(2)));
     tr.appendChild(td(e.avg_entry_price !== null ? e.avg_entry_price.toFixed(2) : "—"));
     tr.appendChild(td(e.pnl_points !== null ? e.pnl_points.toFixed(2) : "—", pnlClass(e.pnl_points)));
-    tr.appendChild(td(e.pnl_dollars_net !== null ? `$${e.pnl_dollars_net.toFixed(2)}` : "—", pnlClass(e.pnl_dollars_net)));
-    tr.appendChild(td(`$${e.commission.toFixed(2)}`));
+    tr.appendChild(td(fmtMoney(e.pnl_dollars_net, { decimals: 2 }), pnlClass(e.pnl_dollars_net)));
+    tr.appendChild(td(fmtMoney(e.commission, { decimals: 2, signed: false })));
     tr.appendChild(td(e.original_action));
     tbody.appendChild(tr);
   }

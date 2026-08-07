@@ -1,4 +1,5 @@
 import { deleteJSON, fetchJSON, postJSON, putJSON } from "./api.js";
+import { fmtMoney } from "./format.js";
 
 const endpoint = "/api/config/instruments";
 const tbody = document.getElementById("instruments-tbody");
@@ -25,7 +26,7 @@ async function refresh() {
     cells[2].textContent = cfg.multiplier;
     cells[3].textContent = cfg.tick_size;
     const commRate = cfg.commission_per_contract;
-    cells[4].textContent = commRate > 0 ? `$${commRate}` : "—";
+    cells[4].textContent = commRate > 0 ? fmtMoney(commRate, { decimals: 2, signed: false }) : "—";
     cells[5].textContent = cfg.sources?.yfinance?.continuous ?? "";
     cells[6].textContent = cfg.sources?.stooq?.continuous ?? "";
     const s = cfg.session;

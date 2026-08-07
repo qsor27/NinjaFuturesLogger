@@ -103,7 +103,7 @@ function renderRunsTable(runs, total) {
     const duration = r.finished_at && r.started_at
       ? ((r.finished_at - r.started_at) * 1000).toFixed(0) + " ms"
       : "—";
-    const cursor = `${r.cursor_before} → ${r.cursor_after}`;
+    const cursor = `${r.cursor_before.toLocaleString()} → ${r.cursor_after.toLocaleString()}`;
     return `<tr style="cursor:pointer" data-tid="${r.tick_id}">
       <td>${r.tick_id}</td>
       <td>${escHtml(r.filename)}</td>
