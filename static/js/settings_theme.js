@@ -1,6 +1,8 @@
 // Handles the Appearance card form on /settings.
 // PUTs the selected theme to /api/config/theme and reloads on success.
 
+import { putJSON } from "./api.js";
+
 document.addEventListener('DOMContentLoaded', () => {
   const form = document.getElementById('theme-form');
   if (!form) return;
@@ -11,17 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const value = new FormData(form).get('theme');
     status.textContent = 'Saving\u2026';
     try {
-      const resp = await fetch('/api/config/theme', {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({theme: value}),
-      });
-      if (resp.ok) {
-        status.textContent = 'Saved. Reloading\u2026';
-        location.reload();
-      } else {
-        status.textContent = 'Save failed.';
-      }
+      await putJSON('/api/config/theme', { theme: value });
+      status.textContent = 'Saved. Reloading\u2026';
+      location.reload();
     } catch {
       status.textContent = 'Save failed.';
     }

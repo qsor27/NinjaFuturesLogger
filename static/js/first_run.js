@@ -1,5 +1,7 @@
 // Wizard controller - server-rendered shell, JSON API for logic.
 
+import { fetchJSON, postJSON } from "./api.js";
+
 const root = document.getElementById("first-run-root");
 if (!root) throw new Error("first-run-root missing");
 
@@ -17,20 +19,6 @@ function showStep(name) {
   });
 }
 
-async function postJSON(url, body) {
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  });
-  return resp.json();
-}
-
-async function getJSON(url) {
-  const resp = await fetch(url);
-  return resp.json();
-}
-
 let detectedIndicatorsPath = null;
 let cachedIndicatorPath = null;
 
@@ -38,7 +26,7 @@ async function loadIndicatorPath() {
   const pathEl = root.querySelector('[data-region="indicator-path"]');
   if (!pathEl) return;
   try {
-    const data = await getJSON(endpoints.indicatorPath);
+    const data = await fetchJSON(endpoints.indicatorPath);
     cachedIndicatorPath = data.path;
     pathEl.textContent = data.path;
     if (!data.exists) {
@@ -51,7 +39,12 @@ async function loadIndicatorPath() {
 
 async function runDetect() {
   showStep("detect");
-  const result = await getJSON(endpoints.detect);
+  let result;
+  try {
+    result = await fetchJSON(endpoints.detect);
+  } catch {
+    result = { found: false };
+  }
   if (result.found) {
     detectedIndicatorsPath = result.indicators_path;
     root.querySelector('[data-region="indicators-path"]').textContent = result.indicators_path;
@@ -67,10 +60,15 @@ async function runInstall() {
   const btn = root.querySelector('[data-action="install-indicator"]');
   btn.disabled = true;
   btn.textContent = "Installing...";
-  const result = await postJSON(endpoints.install, {
-    dest_dir: detectedIndicatorsPath,
-    on_conflict: "backup_replace",
-  });
+  let result;
+  try {
+    result = await postJSON(endpoints.install, {
+      dest_dir: detectedIndicatorsPath,
+      on_conflict: "backup_replace",
+    });
+  } catch (e) {
+    result = { success: false, error: (e.body && e.body.error) || e.message };
+  }
   btn.disabled = false;
   btn.textContent = "Install indicator";
   if (result.success) {
@@ -89,7 +87,12 @@ function startInboxPolling() {
   inboxDeadline = Date.now() + 60_000;
   const statusEl = root.querySelector('[data-region="verify-status"]');
   const tick = async () => {
-    const result = await getJSON(endpoints.inbox);
+    let result;
+    try {
+      result = await fetchJSON(endpoints.inbox);
+    } catch {
+      return; // transient — next 3s tick retries
+    }
     if (result.files_count > 0) {
       clearInterval(inboxTimer);
       showStep("done");
@@ -106,7 +109,11 @@ function startInboxPolling() {
 }
 
 async function finish() {
-  await postJSON(endpoints.complete, {});
+  try {
+    await postJSON(endpoints.complete, {});
+  } catch {
+    // redirect anyway; if the preference write failed the wizard re-opens
+  }
   window.location.href = "/";
 }
 

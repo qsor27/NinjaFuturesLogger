@@ -1,3 +1,5 @@
+import { fetchJSON, putJSON } from "./api.js";
+
 const panel = document.getElementById("windows-port-panel");
 if (panel) {
   const endpoint = panel.dataset.endpoint;
@@ -6,12 +8,13 @@ if (panel) {
   const status = panel.querySelector('[data-region="status"]');
 
   async function refresh() {
-    const resp = await fetch(endpoint);
-    if (!resp.ok) {
+    let data;
+    try {
+      data = await fetchJSON(endpoint);
+    } catch {
       portDisplay.textContent = "(could not load)";
       return;
     }
-    const data = await resp.json();
     portDisplay.textContent = data.port;
     portInput.value = data.port;
   }
@@ -25,14 +28,11 @@ if (panel) {
     }
     status.textContent = "Saving…";
     status.style.color = "var(--text-secondary)";
-    const resp = await fetch(endpoint, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ port: value }),
-    });
-    const body = await resp.json();
-    if (!resp.ok) {
-      status.textContent = body.error || "Save failed.";
+    let body;
+    try {
+      body = await putJSON(endpoint, { port: value });
+    } catch (e) {
+      status.textContent = (e.body && e.body.error) || "Save failed.";
       status.style.color = "var(--danger, #c33)";
       return;
     }
