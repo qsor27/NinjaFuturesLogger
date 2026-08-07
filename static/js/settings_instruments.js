@@ -1,3 +1,5 @@
+import { deleteJSON, fetchJSON, postJSON, putJSON } from "./api.js";
+
 const endpoint = "/api/config/instruments";
 const tbody = document.getElementById("instruments-tbody");
 const dialog = document.getElementById("instrument-dialog");
@@ -9,8 +11,7 @@ const cancelBtn = document.getElementById("dialog-cancel");
 let editingSymbol = null;
 
 async function refresh() {
-  const res = await fetch(endpoint);
-  const body = await res.json();
+  const body = await fetchJSON(endpoint);
   tbody.replaceChildren();
   for (const [symbol, cfg] of Object.entries(body.instruments).sort()) {
     const tr = document.createElement("tr");
@@ -80,13 +81,10 @@ async function saveDialog(event) {
       daily_break_end: f.session_break_end.value,
     },
   };
-  const res = await fetch(`${endpoint}/${symbol}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    alert(`Save failed: ${res.status}`);
+  try {
+    await putJSON(`${endpoint}/${symbol}`, payload);
+  } catch (e) {
+    alert(`Save failed: ${e.status || e.message}`);
     return;
   }
   dialog.close();
@@ -95,9 +93,10 @@ async function saveDialog(event) {
 
 async function deleteInstrument(symbol) {
   if (!confirm(`Delete ${symbol}?`)) return;
-  const res = await fetch(`${endpoint}/${symbol}`, { method: "DELETE" });
-  if (!res.ok && res.status !== 204) {
-    alert(`Delete failed: ${res.status}`);
+  try {
+    await deleteJSON(`${endpoint}/${symbol}`); // 204 → resolves null
+  } catch (e) {
+    alert(`Delete failed: ${e.status || e.message}`);
     return;
   }
   await refresh();
@@ -106,8 +105,7 @@ async function deleteInstrument(symbol) {
 async function renderCoverage() {
   const el = document.getElementById("coverage-rows");
   if (!el) return;
-  const resp = await fetch("/api/settings/coverage");
-  const body = await resp.json();
+  const body = await fetchJSON("/api/settings/coverage");
   el.replaceChildren();
   const table = document.createElement("table");
   const thead = document.createElement("thead");
@@ -127,10 +125,8 @@ async function renderCoverage() {
     const pinBtn = document.createElement("button");
     pinBtn.textContent = row.pinned ? "Unpin" : "Pin";
     pinBtn.addEventListener("click", async () => {
-      await fetch(`/api/settings/coverage/${encodeURIComponent(row.instrument)}/pin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pinned: !row.pinned }),
+      await postJSON(`/api/settings/coverage/${encodeURIComponent(row.instrument)}/pin`, {
+        pinned: !row.pinned,
       });
       await renderCoverage();
     });
@@ -142,9 +138,9 @@ async function renderCoverage() {
     if (row.state === "retired") {
       toggleBtn.textContent = "Reactivate";
       toggleBtn.addEventListener("click", async () => {
-        await fetch(
+        await postJSON(
           `/api/settings/coverage/${encodeURIComponent(row.instrument)}/reactivate`,
-          { method: "POST" },
+          {},
         );
         await renderCoverage();
       });
@@ -152,9 +148,9 @@ async function renderCoverage() {
       toggleBtn.textContent = "Retire";
       toggleBtn.addEventListener("click", async () => {
         if (!confirm(`Retire ${row.instrument}?`)) return;
-        await fetch(
+        await postJSON(
           `/api/settings/coverage/${encodeURIComponent(row.instrument)}/retire`,
-          { method: "POST" },
+          {},
         );
         await renderCoverage();
       });

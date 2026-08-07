@@ -1,10 +1,11 @@
+import { HttpError, deleteJSON, fetchJSON, postJSON, putJSON } from "./api.js";
+
 const endpoint = "/api/custom-fields";
 const list = document.getElementById("fields-list");
 const form = document.getElementById("new-field-form");
 
 async function refresh() {
-  const res = await fetch(endpoint);
-  const body = await res.json();
+  const body = await fetchJSON(endpoint);
   list.replaceChildren();
   for (const field of body.fields) {
     list.appendChild(renderField(field));
@@ -53,7 +54,7 @@ function renderOptionsEditor(fieldId) {
   saveBtn.textContent = "Save options";
   container.appendChild(saveBtn);
 
-  fetch(`${endpoint}/${fieldId}/options`).then((r) => r.json()).then((body) => {
+  fetchJSON(`${endpoint}/${fieldId}/options`).then((body) => {
     textarea.value = body.options.map((o) => o.value).join("\n");
   });
 
@@ -63,12 +64,11 @@ function renderOptionsEditor(fieldId) {
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
       .map((value, idx) => ({ value, display_order: idx }));
-    const res = await fetch(`${endpoint}/${fieldId}/options`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ options }),
-    });
-    if (!res.ok) alert("Save failed");
+    try {
+      await putJSON(`${endpoint}/${fieldId}/options`, { options });
+    } catch {
+      alert("Save failed");
+    }
   });
   return container;
 }
@@ -79,14 +79,10 @@ async function create(event) {
     name: form.elements.name.value,
     field_type: form.elements.field_type.value,
   };
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    const body = await res.json();
-    alert(`Create failed: ${body.error || res.status}`);
+  try {
+    await postJSON(endpoint, payload);
+  } catch (e) {
+    alert(`Create failed: ${(e.body && e.body.error) || e.status || e.message}`);
     return;
   }
   form.reset();
@@ -94,30 +90,29 @@ async function create(event) {
 }
 
 async function update(fieldId, patch) {
-  const res = await fetch(`${endpoint}/${fieldId}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  if (!res.ok) {
-    const body = await res.json();
-    alert(`Update failed: ${body.error || res.status}`);
+  try {
+    await putJSON(`${endpoint}/${fieldId}`, patch);
+  } catch (e) {
+    alert(`Update failed: ${(e.body && e.body.error) || e.status || e.message}`);
   }
 }
 
 async function remove(fieldId) {
-  const peek = await fetch(`${endpoint}/${fieldId}`, { method: "DELETE" });
-  if (peek.status === 204) {
-    await refresh();
-    return;
-  }
-  const body = await peek.json();
-  const n = body.affected_executions ?? 0;
-  if (!confirm(`This field has values on ${n} executions. Delete anyway?`)) return;
-  const res = await fetch(`${endpoint}/${fieldId}?confirm_count=${n}`, { method: "DELETE" });
-  if (!res.ok && res.status !== 204) {
-    alert("Delete failed");
-    return;
+  try {
+    await deleteJSON(`${endpoint}/${fieldId}`);
+  } catch (e) {
+    if (!(e instanceof HttpError) || e.status !== 409) {
+      alert("Delete failed");
+      return;
+    }
+    const n = (e.body && e.body.affected_executions) ?? 0;
+    if (!confirm(`This field has values on ${n} executions. Delete anyway?`)) return;
+    try {
+      await deleteJSON(`${endpoint}/${fieldId}?confirm_count=${n}`);
+    } catch {
+      alert("Delete failed");
+      return;
+    }
   }
   await refresh();
 }
