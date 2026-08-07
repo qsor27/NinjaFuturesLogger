@@ -99,3 +99,47 @@ def test_put_chart_defaults_persists_display_timezone_to_app_json(tmp_path: Path
     )
     data = json.loads(app_json.read_text())
     assert data["display_timezone"] == "Europe/London"
+
+
+def test_put_chart_defaults_omitted_display_timezone_is_preserved(tmp_path: Path):
+    client, app_json = _setup_app(tmp_path)
+    client.put(
+        "/api/config/chart-defaults",
+        json={
+            "default_timeframe": "5m",
+            "volume_visible_default": True,
+            "display_timezone": "Europe/London",
+        },
+    )
+    res = client.put(
+        "/api/config/chart-defaults",
+        json={"default_timeframe": "1m", "volume_visible_default": False},
+    )
+    assert res.status_code == 200
+    assert res.get_json()["display_timezone"] == "Europe/London"
+    body = client.get("/api/config/chart-defaults").get_json()
+    assert body["display_timezone"] == "Europe/London"
+    assert json.loads(app_json.read_text())["display_timezone"] == "Europe/London"
+
+
+def test_put_chart_defaults_explicit_null_clears_display_timezone(tmp_path: Path):
+    client, _ = _setup_app(tmp_path)
+    client.put(
+        "/api/config/chart-defaults",
+        json={
+            "default_timeframe": "5m",
+            "volume_visible_default": True,
+            "display_timezone": "Europe/London",
+        },
+    )
+    res = client.put(
+        "/api/config/chart-defaults",
+        json={
+            "default_timeframe": "5m",
+            "volume_visible_default": True,
+            "display_timezone": None,
+        },
+    )
+    assert res.status_code == 200
+    body = client.get("/api/config/chart-defaults").get_json()
+    assert body["display_timezone"] is None

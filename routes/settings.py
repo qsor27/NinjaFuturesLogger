@@ -140,6 +140,7 @@ def build_settings_blueprint() -> Blueprint:
         body = request.get_json(silent=True) or {}
         tf = body.get("default_timeframe")
         vv = body.get("volume_visible_default")
+        display_tz_provided = "display_timezone" in body
         dtz = body.get("display_timezone")
         source_tz_provided = "source_timezone" in body
         stz = body.get("source_timezone")
@@ -148,7 +149,7 @@ def build_settings_blueprint() -> Blueprint:
             return jsonify({"error": "invalid default_timeframe"}), 400
         if not isinstance(vv, bool):
             return jsonify({"error": "volume_visible_default must be boolean"}), 400
-        if dtz is not None:
+        if display_tz_provided and dtz is not None:
             try:
                 ZoneInfo(dtz)
             except Exception:
@@ -163,7 +164,8 @@ def build_settings_blueprint() -> Blueprint:
         save_defaults(db_path, default_timeframe=tf, volume_visible_default=vv)
 
         cfg_path = current_app.config["FTL_CONFIG_PATH"]
-        save_display_timezone(cfg_path, dtz)
+        if display_tz_provided:
+            save_display_timezone(cfg_path, dtz)
         if source_tz_provided:
             save_source_timezone(cfg_path, stz)
 
@@ -173,7 +175,7 @@ def build_settings_blueprint() -> Blueprint:
             {
                 "default_timeframe": tf,
                 "volume_visible_default": vv,
-                "display_timezone": dtz,
+                "display_timezone": current_app.config["FTL_CONFIG"].display_timezone,
                 "source_timezone": current_app.config["FTL_CONFIG"].session.source_timezone,
             }
         )
