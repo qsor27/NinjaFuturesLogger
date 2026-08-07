@@ -1,6 +1,5 @@
 import pytest
 
-from app import create_app
 from db import connect
 from models.execution import Execution
 from services.import_db import bulk_insert_executions
@@ -51,13 +50,9 @@ def _seed(db_path):
 
 
 @pytest.fixture
-def client(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
+def client(app, tmp_config):
     _seed(tmp_config.db_path)
-    try:
-        yield app.test_client()
-    finally:
-        services.stop()
+    return app.test_client()
 
 
 def test_summary(client):
@@ -225,25 +220,21 @@ def _seed_two_accounts(db_path):
         conn.close()
 
 
-def test_stats_summary_multi_account(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
+def test_stats_summary_multi_account(app, tmp_config):
     _seed_two_accounts(tmp_config.db_path)
-    try:
-        c = app.test_client()
+    c = app.test_client()
 
-        # Legacy single account
-        resp = c.get("/api/stats/summary?account=A")
-        assert resp.status_code == 200
-        assert resp.get_json()["total_positions"] == 1
+    # Legacy single account
+    resp = c.get("/api/stats/summary?account=A")
+    assert resp.status_code == 200
+    assert resp.get_json()["total_positions"] == 1
 
-        # Multi-account returns union
-        resp = c.get("/api/stats/summary?account=A&account=B")
-        assert resp.status_code == 200
-        assert resp.get_json()["total_positions"] == 2
+    # Multi-account returns union
+    resp = c.get("/api/stats/summary?account=A&account=B")
+    assert resp.status_code == 200
+    assert resp.get_json()["total_positions"] == 2
 
-        # No account param returns everything
-        resp = c.get("/api/stats/summary")
-        assert resp.status_code == 200
-        assert resp.get_json()["total_positions"] == 2
-    finally:
-        services.stop()
+    # No account param returns everything
+    resp = c.get("/api/stats/summary")
+    assert resp.status_code == 200
+    assert resp.get_json()["total_positions"] == 2

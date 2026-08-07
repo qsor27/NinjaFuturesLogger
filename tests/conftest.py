@@ -1,8 +1,12 @@
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from flask import Flask
 
+from app import create_app
+from background import BackgroundServices
 from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 from db import connect
 from migrations import run_migrations
@@ -55,3 +59,33 @@ def migrated_db(tmp_path: Path) -> Path:
     finally:
         conn.close()
     return db_path
+
+
+@pytest.fixture
+def app_and_services(tmp_config: Config) -> Iterator[tuple[Flask, BackgroundServices]]:
+    """The real app with background work disabled. Always stopped, even on failure."""
+    flask_app, services = create_app(tmp_config, start_background=False)
+    try:
+        yield flask_app, services
+    finally:
+        services.stop()
+
+
+@pytest.fixture
+def started_app_and_services(tmp_config: Config) -> Iterator[tuple[Flask, BackgroundServices]]:
+    """The real app with scheduler + watchdog actually running."""
+    flask_app, services = create_app(tmp_config, start_background=True)
+    try:
+        yield flask_app, services
+    finally:
+        services.stop()
+
+
+@pytest.fixture
+def app(app_and_services) -> Flask:
+    return app_and_services[0]
+
+
+@pytest.fixture
+def client(app):
+    return app.test_client()

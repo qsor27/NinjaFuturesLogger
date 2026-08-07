@@ -6,7 +6,6 @@ the counts match. Prevents silent divergence between aggregation and filter
 logic.
 """
 
-from app import create_app
 from db import connect
 from models.execution import Execution
 from services.import_db import bulk_insert_executions
@@ -63,53 +62,41 @@ FIXTURE = [
 ]
 
 
-def test_day_of_week_roundtrip(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        _seed(tmp_config.db_path, FIXTURE)
-        c = app.test_client()
+def test_day_of_week_roundtrip(app, tmp_config):
+    _seed(tmp_config.db_path, FIXTURE)
+    c = app.test_client()
 
-        stats = c.get("/api/stats/by-day-of-week").get_json()
-        tue_bucket = next(b for b in stats["buckets"] if b["dow"] == 1)
-        assert tue_bucket["trades"] == 2
+    stats = c.get("/api/stats/by-day-of-week").get_json()
+    tue_bucket = next(b for b in stats["buckets"] if b["dow"] == 1)
+    assert tue_bucket["trades"] == 2
 
-        pos = c.get("/api/positions?day_of_week=1").get_json()
-        assert pos["page"]["total"] == tue_bucket["trades"]
-    finally:
-        services.stop()
+    pos = c.get("/api/positions?day_of_week=1").get_json()
+    assert pos["page"]["total"] == tue_bucket["trades"]
 
 
-def test_by_hour_roundtrip(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        _seed(tmp_config.db_path, FIXTURE)
-        c = app.test_client()
+def test_by_hour_roundtrip(app, tmp_config):
+    _seed(tmp_config.db_path, FIXTURE)
+    c = app.test_client()
 
-        stats = c.get("/api/stats/by-hour?display_tz=America/New_York").get_json()
-        tz = stats["timezone"]
-        assert tz == "America/New_York"
-        # Hour 10 NY = 14:00 UTC on 04-14 → one position.
-        hour_10 = next(b for b in stats["buckets"] if b["hour"] == 10)
-        assert hour_10["position_count"] == 1
+    stats = c.get("/api/stats/by-hour?display_tz=America/New_York").get_json()
+    tz = stats["timezone"]
+    assert tz == "America/New_York"
+    # Hour 10 NY = 14:00 UTC on 04-14 → one position.
+    hour_10 = next(b for b in stats["buckets"] if b["hour"] == 10)
+    assert hour_10["position_count"] == 1
 
-        pos = c.get(f"/api/positions?hour_of_day=10&hour_tz={tz}").get_json()
-        assert pos["page"]["total"] == hour_10["position_count"]
-    finally:
-        services.stop()
+    pos = c.get(f"/api/positions?hour_of_day=10&hour_tz={tz}").get_json()
+    assert pos["page"]["total"] == hour_10["position_count"]
 
 
-def test_trades_per_day_roundtrip(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        _seed(tmp_config.db_path, FIXTURE)
-        c = app.test_client()
+def test_trades_per_day_roundtrip(app, tmp_config):
+    _seed(tmp_config.db_path, FIXTURE)
+    c = app.test_client()
 
-        stats = c.get("/api/stats/by-trades-per-day").get_json()
-        bucket_2 = next((b for b in stats["buckets"] if b["trades_per_day"] == 2), None)
-        assert bucket_2 is not None
-        assert bucket_2["total_trades"] == 2  # Tuesday has 2 trades
+    stats = c.get("/api/stats/by-trades-per-day").get_json()
+    bucket_2 = next((b for b in stats["buckets"] if b["trades_per_day"] == 2), None)
+    assert bucket_2 is not None
+    assert bucket_2["total_trades"] == 2  # Tuesday has 2 trades
 
-        pos = c.get("/api/positions?trades_per_day=2").get_json()
-        assert pos["page"]["total"] == bucket_2["total_trades"]
-    finally:
-        services.stop()
+    pos = c.get("/api/positions?trades_per_day=2").get_json()
+    assert pos["page"]["total"] == bucket_2["total_trades"]

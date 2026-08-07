@@ -1,4 +1,3 @@
-from app import create_app
 from db import connect
 from models.execution import Execution
 from services.import_db import bulk_insert_executions
@@ -51,115 +50,75 @@ def _mon_tue_executions():
     ]
 
 
-def test_day_of_week_filter_happy_path(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        _seed(tmp_config.db_path, _mon_tue_executions())
-        resp = app.test_client().get("/api/positions?day_of_week=0")
-        assert resp.status_code == 200
-        positions = resp.get_json()["positions"]
-        assert {p["entry_execution_id"] for p in positions} == {"mon-in"}
-    finally:
-        services.stop()
+def test_day_of_week_filter_happy_path(app, tmp_config):
+    _seed(tmp_config.db_path, _mon_tue_executions())
+    resp = app.test_client().get("/api/positions?day_of_week=0")
+    assert resp.status_code == 200
+    positions = resp.get_json()["positions"]
+    assert {p["entry_execution_id"] for p in positions} == {"mon-in"}
 
 
-def test_day_of_week_out_of_range_returns_400(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/api/positions?day_of_week=5")
-        assert resp.status_code == 400
-        assert "day_of_week" in resp.get_json()["error"]
-    finally:
-        services.stop()
+def test_day_of_week_out_of_range_returns_400(client):
+    resp = client.get("/api/positions?day_of_week=5")
+    assert resp.status_code == 400
+    assert "day_of_week" in resp.get_json()["error"]
 
 
-def test_hour_of_day_requires_hour_tz(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/api/positions?hour_of_day=14")
-        assert resp.status_code == 400
-        assert "hour_tz" in resp.get_json()["error"]
-    finally:
-        services.stop()
+def test_hour_of_day_requires_hour_tz(client):
+    resp = client.get("/api/positions?hour_of_day=14")
+    assert resp.status_code == 400
+    assert "hour_tz" in resp.get_json()["error"]
 
 
-def test_hour_of_day_happy_path(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        _seed(tmp_config.db_path, _mon_tue_executions())
-        # Entries are 12:00 UTC == 08:00 America/New_York, not 14:00.
-        resp_14 = app.test_client().get("/api/positions?hour_of_day=14&hour_tz=America/New_York")
-        assert resp_14.status_code == 200
-        assert resp_14.get_json()["page"]["total"] == 0
+def test_hour_of_day_happy_path(app, tmp_config):
+    _seed(tmp_config.db_path, _mon_tue_executions())
+    # Entries are 12:00 UTC == 08:00 America/New_York, not 14:00.
+    resp_14 = app.test_client().get("/api/positions?hour_of_day=14&hour_tz=America/New_York")
+    assert resp_14.status_code == 200
+    assert resp_14.get_json()["page"]["total"] == 0
 
-        resp_8 = app.test_client().get("/api/positions?hour_of_day=8&hour_tz=America/New_York")
-        assert resp_8.status_code == 200
-        assert resp_8.get_json()["page"]["total"] == 2
-    finally:
-        services.stop()
+    resp_8 = app.test_client().get("/api/positions?hour_of_day=8&hour_tz=America/New_York")
+    assert resp_8.status_code == 200
+    assert resp_8.get_json()["page"]["total"] == 2
 
 
-def test_hour_of_day_out_of_range_returns_400(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/api/positions?hour_of_day=24&hour_tz=America/New_York")
-        assert resp.status_code == 400
-        assert "hour_of_day" in resp.get_json()["error"]
-    finally:
-        services.stop()
+def test_hour_of_day_out_of_range_returns_400(client):
+    resp = client.get("/api/positions?hour_of_day=24&hour_tz=America/New_York")
+    assert resp.status_code == 400
+    assert "hour_of_day" in resp.get_json()["error"]
 
 
-def test_hour_tz_bad_value_returns_400(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/api/positions?hour_of_day=14&hour_tz=Not/A_Zone")
-        assert resp.status_code == 400
-        assert "hour_tz" in resp.get_json()["error"]
-    finally:
-        services.stop()
+def test_hour_tz_bad_value_returns_400(client):
+    resp = client.get("/api/positions?hour_of_day=14&hour_tz=Not/A_Zone")
+    assert resp.status_code == 400
+    assert "hour_tz" in resp.get_json()["error"]
 
 
-def test_trades_per_day_filter_happy_path(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        _seed(tmp_config.db_path, _mon_tue_executions())  # 1 position each day
-        resp = app.test_client().get("/api/positions?trades_per_day=1")
-        assert resp.status_code == 200
-        assert resp.get_json()["page"]["total"] == 2
-        resp0 = app.test_client().get("/api/positions?trades_per_day=5")
-        assert resp0.get_json()["page"]["total"] == 0
-    finally:
-        services.stop()
+def test_trades_per_day_filter_happy_path(app, tmp_config):
+    _seed(tmp_config.db_path, _mon_tue_executions())  # 1 position each day
+    resp = app.test_client().get("/api/positions?trades_per_day=1")
+    assert resp.status_code == 200
+    assert resp.get_json()["page"]["total"] == 2
+    resp0 = app.test_client().get("/api/positions?trades_per_day=5")
+    assert resp0.get_json()["page"]["total"] == 0
 
 
-def test_trades_per_day_must_be_positive_int(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/api/positions?trades_per_day=0")
-        assert resp.status_code == 400
-        assert "trades_per_day" in resp.get_json()["error"]
-    finally:
-        services.stop()
+def test_trades_per_day_must_be_positive_int(client):
+    resp = client.get("/api/positions?trades_per_day=0")
+    assert resp.status_code == 400
+    assert "trades_per_day" in resp.get_json()["error"]
 
 
-def test_session_date_range_happy_path(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        _seed(tmp_config.db_path, _mon_tue_executions())
-        resp = app.test_client().get(
-            "/api/positions?session_date_from=2026-04-14&session_date_to=2026-04-14"
-        )
-        positions = resp.get_json()["positions"]
-        assert {p["entry_execution_id"] for p in positions} == {"tue-in"}
-    finally:
-        services.stop()
+def test_session_date_range_happy_path(app, tmp_config):
+    _seed(tmp_config.db_path, _mon_tue_executions())
+    resp = app.test_client().get(
+        "/api/positions?session_date_from=2026-04-14&session_date_to=2026-04-14"
+    )
+    positions = resp.get_json()["positions"]
+    assert {p["entry_execution_id"] for p in positions} == {"tue-in"}
 
 
-def test_session_date_range_bad_iso_returns_400(tmp_config):
-    app, services = create_app(tmp_config, start_background=False)
-    try:
-        resp = app.test_client().get("/api/positions?session_date_from=04/14/2026")
-        assert resp.status_code == 400
-        assert "session_date_from" in resp.get_json()["error"]
-    finally:
-        services.stop()
+def test_session_date_range_bad_iso_returns_400(client):
+    resp = client.get("/api/positions?session_date_from=04/14/2026")
+    assert resp.status_code == 400
+    assert "session_date_from" in resp.get_json()["error"]
