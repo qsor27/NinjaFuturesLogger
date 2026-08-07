@@ -19,14 +19,14 @@ func TestResolveDataDir_FallsBackToEnvOverride(t *testing.T) {
 	}
 }
 
-func TestReadPort_DefaultsTo8000WhenFileMissing(t *testing.T) {
+func TestReadPort_DefaultsTo8003WhenFileMissing(t *testing.T) {
 	tmp := t.TempDir()
 	got, err := ReadPort(tmp)
 	if err != nil {
 		t.Fatalf("ReadPort returned error: %v", err)
 	}
-	if got != 8000 {
-		t.Errorf("ReadPort = %d, want 8000", got)
+	if got != 8003 {
+		t.Errorf("ReadPort = %d, want 8003", got)
 	}
 }
 
@@ -85,5 +85,43 @@ func TestWritePort_UpdatesFile(t *testing.T) {
 	w := parsed["windows"].(map[string]any)
 	if w["port"].(float64) != 9123 {
 		t.Errorf("port not updated: %v", w["port"])
+	}
+}
+
+func TestReadPort_DefaultsWhenPortAbsentFromConfig(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload map[string]any
+	}{
+		{"no windows section", map[string]any{"theme": "dark"}},
+		{"windows section without port", map[string]any{"windows": map[string]any{}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			configDir := filepath.Join(tmp, "config")
+			if err := os.MkdirAll(configDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			b, _ := json.Marshal(tc.payload)
+			if err := os.WriteFile(filepath.Join(configDir, "app.json"), b, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			got, err := ReadPort(tmp)
+			if err != nil {
+				t.Fatalf("ReadPort returned error: %v", err)
+			}
+			if got != defaultPort {
+				t.Errorf("ReadPort = %d, want defaultPort (%d)", got, defaultPort)
+			}
+		})
+	}
+}
+
+func TestConfigPath_JoinsConfigAppJson(t *testing.T) {
+	got := configPath(filepath.Join("some", "data"))
+	want := filepath.Join("some", "data", "config", "app.json")
+	if got != want {
+		t.Errorf("configPath = %q, want %q", got, want)
 	}
 }

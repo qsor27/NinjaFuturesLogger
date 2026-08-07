@@ -27,13 +27,24 @@ func ResolveDataDir() (string, error) {
 	return filepath.Join(local, "NinjaFuturesLogger", "data"), nil
 }
 
-// ReadPort returns the configured Windows port (defaults to 8000).
+// defaultPort is used when app.json is missing or carries no windows.port
+// value. Must stay in sync with the installer's seeded default
+// (windows/installer/pages.pas) and Python's WindowsConfig default
+// (config.py) — all three describe the same installed reality.
+const defaultPort = 8003
+
+// configPath returns the app.json location under a data directory.
+func configPath(dataDir string) string {
+	return filepath.Join(dataDir, "config", "app.json")
+}
+
+// ReadPort returns the configured Windows port (falls back to defaultPort).
 func ReadPort(dataDir string) (int, error) {
-	configPath := filepath.Join(dataDir, "config", "app.json")
-	data, err := os.ReadFile(configPath)
+	cfgPath := configPath(dataDir)
+	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return 8000, nil
+			return defaultPort, nil
 		}
 		return 0, fmt.Errorf("read app.json: %w", err)
 	}
@@ -43,11 +54,11 @@ func ReadPort(dataDir string) (int, error) {
 	}
 	windowsVal, ok := parsed["windows"].(map[string]any)
 	if !ok {
-		return 8000, nil
+		return defaultPort, nil
 	}
 	portVal, ok := windowsVal["port"]
 	if !ok {
-		return 8000, nil
+		return defaultPort, nil
 	}
 	switch v := portVal.(type) {
 	case float64:
@@ -62,16 +73,16 @@ func ReadPort(dataDir string) (int, error) {
 // WritePort persists a new port value into the `windows.port` field of
 // app.json, preserving all other fields. Atomic tmp+rename.
 func WritePort(dataDir string, port int) error {
-	configPath := filepath.Join(dataDir, "config", "app.json")
+	cfgPath := configPath(dataDir)
 	var parsed map[string]any
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(cfgPath)
 	if err == nil {
 		if err := json.Unmarshal(data, &parsed); err != nil {
 			return fmt.Errorf("parse app.json: %w", err)
 		}
 	} else if os.IsNotExist(err) {
 		parsed = map[string]any{}
-		if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(cfgPath), 0o755); err != nil {
 			return err
 		}
 	} else {
@@ -87,9 +98,9 @@ func WritePort(dataDir string, port int) error {
 	if err != nil {
 		return fmt.Errorf("marshal app.json: %w", err)
 	}
-	tmp := configPath + ".tmp"
+	tmp := cfgPath + ".tmp"
 	if err := os.WriteFile(tmp, out, 0o644); err != nil {
 		return fmt.Errorf("write tmp: %w", err)
 	}
-	return os.Rename(tmp, configPath)
+	return os.Rename(tmp, cfgPath)
 }
