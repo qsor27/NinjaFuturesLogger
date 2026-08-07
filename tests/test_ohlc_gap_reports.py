@@ -223,3 +223,38 @@ def test_reset_for_retry_reopens_abandoned(tmp_path):
     assert r["state"] == "open"
     assert r["attempt_count"] == 0
     assert r["next_retry_at"] == now
+
+
+def test_update_gap_reports_abandons_open_row_that_drifted_out_of_reach(tmp_path):
+    """An open 1m gap that ages past provider reach (30d) must become
+    'abandoned' — visible in the stuck-gaps panel — not 'resolved':
+    no bars ever arrived and none ever can."""
+    conn = _fresh_conn(tmp_path)
+    now = 12 * 86400 + 18 * ONE_HOUR  # in-session weekday window (see above)
+    end = now - 2 * ONE_HOUR
+    start = end - 600
+    update_gap_reports(
+        conn,
+        instrument="MNQ",
+        timeframe="1m",
+        range_start=start,
+        range_end=end,
+        attempt_id=None,
+        now=now,
+    )
+    assert len(list_reports(conn, state="open")) == 1
+    # 31 days later the 1m reach floor has moved past the gap; no bars
+    # were ever inserted, so find_gaps still reports it.
+    later = now + 31 * 86400
+    update_gap_reports(
+        conn,
+        instrument="MNQ",
+        timeframe="1m",
+        range_start=start,
+        range_end=end,
+        attempt_id=None,
+        now=later,
+    )
+    rows = conn.execute("SELECT state, resolved_at FROM ohlc_gap_reports").fetchall()
+    assert [r["state"] for r in rows] == ["abandoned"]
+    assert rows[0]["resolved_at"] is None

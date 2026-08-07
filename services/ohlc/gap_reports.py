@@ -8,6 +8,9 @@ Rules:
 - Gaps younger than 1 hour are ignored (provider may simply not have closed
   the bar yet).
 - Gaps that fall outside provider reach are not recorded (cannot be filled).
+- Open rows whose gap drifted out of provider reach unfilled are marked
+  'abandoned' (kept visible); rows outside any rescanned window still fall to
+  self-heal abandonment.
 - The only function that *writes* gap-report rows is update_gap_reports.
   Callers never INSERT directly. This is the single place the 1h grace rule
   and the reach filter are applied.
@@ -49,8 +52,8 @@ def update_gap_reports(
     Called as the final step inside fetch_range (and by self_heal when re-checking).
     - Any gap older than 1h and inside provider reach → upsert an open row.
     - Any existing open row whose gap is now covered → mark resolved.
-    - Open rows whose gap has drifted out of reach are auto-resolved on the next
-      update covering their window; rows outside any rescanned window fall to
+    - Open rows whose gap drifted out of provider reach unfilled are marked
+      'abandoned' (kept visible); rows outside any rescanned window fall to
       self-heal abandonment.
     """
     current_gaps = find_gaps(
@@ -60,6 +63,7 @@ def update_gap_reports(
         start=range_start,
         end=range_end,
     )
+    current_set = {(g_start, g_end) for g_start, g_end in current_gaps}
     # Same floor the fetcher clamps with (margin included): never record
     # a gap the fetcher would drop as out of reach.
     floor = reach_floor(timeframe, now=now, margin=REACH_MARGIN_SECONDS)
@@ -92,7 +96,22 @@ def update_gap_reports(
         (instrument, timeframe, range_start, range_end),
     ).fetchall()
     for row in opens:
-        if (row["gap_start"], row["gap_end"]) in still_missing:
+        key = (row["gap_start"], row["gap_end"])
+        if key in still_missing:
+            continue
+        if key in current_set:
+            # find_gaps still reports this exact gap but the filters above
+            # excluded it — for an existing row that can only be the reach
+            # filter (the 1h grace cannot re-trigger once now has advanced).
+            # The gap drifted out of provider reach unfilled: 'resolved'
+            # would claim the bars arrived. 'abandoned' keeps it visible in
+            # the stuck-gaps panel with its Try-again button.
+            conn.execute(
+                "UPDATE ohlc_gap_reports"
+                " SET state = 'abandoned', last_attempt_id = ?, last_attempt_at = ?"
+                " WHERE id = ?",
+                (attempt_id, now, row["id"]),
+            )
             continue
         conn.execute(
             "UPDATE ohlc_gap_reports"
