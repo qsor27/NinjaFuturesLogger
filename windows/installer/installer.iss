@@ -37,7 +37,6 @@ Source: "..\payload\NinjaFuturesLogger.exe";                    DestDir: "{app}"
 Source: "..\payload\python\*";                                  DestDir: "{app}\python";        Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\payload\site-packages\*";                           DestDir: "{app}\site-packages"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\payload\app\*";                                     DestDir: "{app}\app";           Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\payload\ninjascript\*";                             DestDir: "{app}\ninjascript";   Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\payload\externals\MicrosoftEdgeWebview2Setup.exe";  DestDir: "{tmp}";               Flags: deleteafterinstall
 
 [Icons]

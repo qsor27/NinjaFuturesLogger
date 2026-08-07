@@ -5,8 +5,8 @@
   Produces this structure under windows/payload/:
     python/                   (extracted embeddable distribution)
     site-packages/            (pip-installed from requirements-windows.txt)
-    app/                      (repo Python source)
-    ninjascript/              (ExecutionExporter.cs)
+    app/                      (repo Python source; app/ninjascript/ feeds the
+                              first-run install-indicator API — routes/first_run.py)
     externals/                (already populated by fetch-externals.ps1)
 #>
 
@@ -18,14 +18,15 @@ $Externals   = Join-Path $PayloadRoot "externals"
 $PythonDir   = Join-Path $PayloadRoot "python"
 $SitePkgs    = Join-Path $PayloadRoot "site-packages"
 $AppDir      = Join-Path $PayloadRoot "app"
-$NinjaDir    = Join-Path $PayloadRoot "ninjascript"
 
 if (-not (Test-Path (Join-Path $Externals "python-embed.zip"))) {
     throw "externals/python-embed.zip missing. Run fetch-externals.ps1 first."
 }
 
 Write-Host "Clearing previous payload (preserving externals/)..."
-foreach ($d in @($PythonDir, $SitePkgs, $AppDir, $NinjaDir)) {
+# payload\ninjascript is a stale leftover from builds before 2026-08-06 —
+# the ninjascript copy now lives only at app\ninjascript.
+foreach ($d in @($PythonDir, $SitePkgs, $AppDir, (Join-Path $PayloadRoot "ninjascript"))) {
     if (Test-Path $d) { Remove-Item -Recurse -Force $d }
 }
 
@@ -76,18 +77,23 @@ New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
 # Top-level .py files (app.py, config.py, db.py, main.py, wsgi.py, etc.)
 Get-ChildItem $RepoRoot -File -Filter "*.py" | Copy-Item -Destination $AppDir -Force
 # Module directories, excluding everything that isn't app code.
+# Dot-directories (.git, .venv, .claude, .superpowers, tool caches, ...)
+# are excluded wholesale by the -notlike ".*" filter.
 $excludeDirs = @(
-    "tests", "docs", "__pycache__", ".git", ".venv", "data", "windows",
-    ".github", ".playwright-mcp", "inbox", ".pytest_cache", ".ruff_cache",
-    "site-packages", "node_modules", "memory"
+    "tests", "docs", "__pycache__", "data", "windows", "inbox",
+    "site-packages", "node_modules", "memory", "tradingview"
 )
-Get-ChildItem $RepoRoot -Directory | Where-Object { $excludeDirs -notcontains $_.Name } | ForEach-Object {
-    Copy-Item $_.FullName -Destination $AppDir -Recurse -Force
-}
+Get-ChildItem $RepoRoot -Directory |
+    Where-Object { $_.Name -notlike ".*" -and $excludeDirs -notcontains $_.Name } |
+    ForEach-Object { Copy-Item $_.FullName -Destination $AppDir -Recurse -Force }
 
-Write-Host "Copying ninjascript..."
-New-Item -ItemType Directory -Force -Path $NinjaDir | Out-Null
-Copy-Item (Join-Path $RepoRoot "ninjascript\*.cs") -Destination $NinjaDir -Force
+Write-Host "Stripping nested __pycache__ from app/..."
+Get-ChildItem $AppDir -Recurse -Directory -Filter "__pycache__" |
+    Remove-Item -Recurse -Force
+
+Write-Host "Removing NUnit test sources from app/ninjascript/..."
+Get-ChildItem (Join-Path $AppDir "ninjascript") -File -Filter "*Tests.cs" |
+    Remove-Item -Force
 
 Write-Host ""
 Write-Host "Writing version.txt..."
@@ -105,4 +111,4 @@ Write-Host "Payload assembled at $PayloadRoot"
 Write-Host "  python/          $(if (Test-Path (Join-Path $PythonDir 'python.exe')) { 'OK' } else { 'MISSING' })"
 Write-Host "  site-packages/   $(((Get-ChildItem $SitePkgs -Directory) | Measure-Object).Count) packages"
 Write-Host "  app/             $(((Get-ChildItem $AppDir -Recurse -File) | Measure-Object).Count) files"
-Write-Host "  ninjascript/     $(((Get-ChildItem $NinjaDir -File) | Measure-Object).Count) files"
+Write-Host "  app/ninjascript/ $(((Get-ChildItem (Join-Path $AppDir 'ninjascript') -File) | Measure-Object).Count) files"
