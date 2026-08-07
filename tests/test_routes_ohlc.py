@@ -244,3 +244,33 @@ def test_gap_retry_returns_job_id_and_on_demand_trigger(tmp_config):
         assert row["trigger"] == "on_demand"
     finally:
         pool.shutdown(wait=True)
+
+
+def test_get_gaps_filters_by_state(tmp_config):
+    app, pool = _make_app(tmp_config)
+    try:
+        conn = connect(tmp_config.db_path)
+        try:
+            conn.execute("BEGIN")
+            conn.execute(
+                "INSERT INTO ohlc_gap_reports"
+                " (instrument, timeframe, gap_start, gap_end, first_seen_at,"
+                "  attempt_count, next_retry_at, state)"
+                " VALUES ('MNQ', '1m', 0, 60, 0, 0, 0, 'open')"
+            )
+            conn.execute(
+                "INSERT INTO ohlc_gap_reports"
+                " (instrument, timeframe, gap_start, gap_end, first_seen_at,"
+                "  attempt_count, next_retry_at, state)"
+                " VALUES ('MNQ', '1m', 60, 120, 0, 10, 0, 'abandoned')"
+            )
+            conn.execute("COMMIT")
+        finally:
+            conn.close()
+        client = app.test_client()
+        assert len(client.get("/api/ohlc/gaps?state=open").get_json()["gaps"]) == 1
+        assert len(client.get("/api/ohlc/gaps?state=abandoned").get_json()["gaps"]) == 1
+        assert len(client.get("/api/ohlc/gaps?state=all").get_json()["gaps"]) == 2
+        assert client.get("/api/ohlc/gaps?state=bogus").status_code == 400
+    finally:
+        pool.shutdown(wait=True)

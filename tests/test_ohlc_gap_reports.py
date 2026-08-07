@@ -4,7 +4,7 @@ from db import connect
 from migrations import run_migrations
 from services.ohlc.gap_reports import (
     compute_backoff,
-    list_open,
+    list_reports,
     record_retry_outcome,
     reset_for_retry,
     select_due,
@@ -53,7 +53,7 @@ def test_update_gap_reports_skips_gaps_younger_than_one_hour(tmp_path):
         attempt_id=None,
         now=now,
     )
-    reports = list_open(conn)
+    reports = list_reports(conn, state="open")
     assert reports == []
 
 
@@ -73,7 +73,7 @@ def test_update_gap_reports_records_gaps_older_than_one_hour(tmp_path):
         attempt_id=None,
         now=now,
     )
-    reports = list_open(conn)
+    reports = list_reports(conn, state="open")
     assert len(reports) == 1
     r = reports[0]
     assert r["instrument"] == "MNQ"
@@ -100,7 +100,7 @@ def test_update_gap_reports_marks_filled_gap_resolved(tmp_path):
         attempt_id=None,
         now=now,
     )
-    assert len(list_open(conn)) == 1
+    assert len(list_reports(conn, state="open")) == 1
     # Fill in every minute slot (10 of them).
     for i in range(10):
         _insert_bar(conn, instrument="MNQ", timeframe="1m", ts=start + i * 60)
@@ -114,7 +114,7 @@ def test_update_gap_reports_marks_filled_gap_resolved(tmp_path):
         attempt_id=None,
         now=now + 100,
     )
-    assert list_open(conn) == []
+    assert list_reports(conn, state="open") == []
     resolved = conn.execute("SELECT * FROM ohlc_gap_reports WHERE state='resolved'").fetchone()
     assert resolved["resolved_at"] == now + 100
 

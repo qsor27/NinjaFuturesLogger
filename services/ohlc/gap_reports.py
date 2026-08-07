@@ -100,9 +100,18 @@ def update_gap_reports(
         )
 
 
-def list_open(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def list_reports(
+    conn: sqlite3.Connection, *, state: str | None = None, limit: int = 500
+) -> list[sqlite3.Row]:
+    """Read gap-report rows, oldest next_retry_at first. state=None = all."""
+    if state is None:
+        return conn.execute(
+            "SELECT * FROM ohlc_gap_reports ORDER BY next_retry_at ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
     return conn.execute(
-        "SELECT * FROM ohlc_gap_reports WHERE state = 'open' ORDER BY next_retry_at ASC"
+        "SELECT * FROM ohlc_gap_reports WHERE state = ? ORDER BY next_retry_at ASC LIMIT ?",
+        (state, limit),
     ).fetchall()
 
 

@@ -244,21 +244,14 @@ def build_ohlc_blueprint() -> Blueprint:
 
     @bp.get("/api/ohlc/gaps")
     def get_gaps():
+        from services.ohlc.gap_reports import list_reports
+
         state = request.args.get("state", "open")
         if state not in ("open", "abandoned", "resolved", "all"):
             return jsonify({"error": "invalid state"}), 400
         conn = connect(_db_path())
         try:
-            if state == "all":
-                rows = conn.execute(
-                    "SELECT * FROM ohlc_gap_reports ORDER BY next_retry_at ASC LIMIT 500"
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM ohlc_gap_reports WHERE state = ?"
-                    " ORDER BY next_retry_at ASC LIMIT 500",
-                    (state,),
-                ).fetchall()
+            rows = list_reports(conn, state=None if state == "all" else state)
         finally:
             conn.close()
         return jsonify({"gaps": [dict(r) for r in rows]})

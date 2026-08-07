@@ -1,5 +1,5 @@
 import random
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 
 from services.ohlc.circuit_breaker import CircuitBreaker
 from services.ohlc.source import OhlcSource
@@ -10,10 +10,10 @@ from services.ohlc.yfinance_source import YfinanceSource
 class SourceRegistry:
     """Ordered list of (source, breaker) pairs.
 
-    The order in which `register()` is called determines the order in which
-    the fetcher tries sources. Iteration filters to sources whose breaker
-    currently allows a call AND that declare support for the requested
-    timeframe (Rule 5: no upscaling).
+    The order in which `register()` is called determines the order in
+    which the fetcher tries sources. The fetcher iterates `entries`
+    directly and applies its own timeframe/breaker filtering so every
+    skip lands in the forensic trail.
     """
 
     def __init__(self, *, clock: Callable[[], int]) -> None:
@@ -46,14 +46,6 @@ class SourceRegistry:
             rng=rng,
         )
         self.entries.append((source, breaker))
-
-    def sources_for(self, timeframe: str) -> Iterator[tuple[OhlcSource, CircuitBreaker]]:
-        for source, breaker in self.entries:
-            if timeframe not in source.supported_timeframes:
-                continue
-            if not breaker.allows():
-                continue
-            yield source, breaker
 
     def status_snapshots(self) -> list[dict]:
         return [breaker.status_snapshot() for _s, breaker in self.entries]
