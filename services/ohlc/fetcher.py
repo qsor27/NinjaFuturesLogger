@@ -64,7 +64,7 @@ def fetch_range(
     """Orchestrate a fetch and persist a full forensic trail.
 
     `trigger` is required. Accepted values include 'maintainer', 'sweep',
-    'on_demand', 'self_heal', 'post_import'. Any string is stored verbatim;
+    'on_demand', 'self_heal'. Any string is stored verbatim;
     the dashboard filters and groups by it.
     """
     attempt_id = new_attempt_id()

@@ -25,14 +25,15 @@ def healthz():
     scheduler_ok = services.scheduler_running()
     watchdog_ok = services.observer_alive()
 
-    # `tick_fresh` is informational here; foundation does not gate on it.
-    # Plan 17 hardens this once real scheduled jobs exist to keep the
-    # heartbeat moving under load.
+    # `tick_fresh` is informational; /healthz does not gate on it.
     last_tick = services.last_scheduler_tick()
     tick_fresh = last_tick is not None and (int(time.time()) - last_tick) <= max(
         heartbeat_seconds * 2, 5
     )
-    pool_saturated = False  # plan 10+ submits real work; foundation reports false.
+    # /healthz deliberately reports pool_saturated=False; live pool
+    # pressure is measured by BackgroundServices.system_health_snapshot
+    # and surfaced on /api/system/health instead.
+    pool_saturated = False
 
     body = {
         "sqlite": sqlite_ok,

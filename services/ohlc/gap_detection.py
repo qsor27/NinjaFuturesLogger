@@ -127,9 +127,8 @@ def find_gaps(
 ) -> list[tuple[int, int]]:
     """Minimal ``(sub_start, sub_end)`` ranges in [start, end) the store is missing.
 
-    Consults the instrument's session calendar (currently a stub default;
-    plan 16 makes it per-instrument) so the daily break is not flagged as
-    missing.
+    Consults the instrument's per-instrument session calendar so the daily
+    break is not flagged as missing.
     """
     if start >= end:
         return []
@@ -183,7 +182,7 @@ def classify_window(
     """Summarize a window as {expected, present, missing, out_of_reach}.
 
     A slot is `out_of_reach` if the provider cannot serve it even on a
-    fresh fetch (yfinance 1m -> only last 7 days). Everything beyond the
+    fresh fetch (yfinance 1m -> only last 30 days). Everything beyond the
     reach threshold is classified as out_of_reach, not missing.
     """
     if start >= end:

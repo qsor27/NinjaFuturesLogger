@@ -1,12 +1,11 @@
 """Instrument metadata — thin delegator over InstrumentRegistry.
 
-Plan 11 (positions.py) imports get_multiplier and base_symbol. Plan 14 (ohlc
-adapters, gap_detection, app.py) imports DEFAULT_TIMEFRAMES, source_symbol,
-SessionCalendar, and default_session. All six names are preserved by this
-module; their bodies now read from the JSON-backed InstrumentRegistry that
-plan 16 shipped. DEFAULT_TIMEFRAMES stays as a module constant because
-app.py reads it at import time via `from services.instruments import
-DEFAULT_TIMEFRAMES`.
+Exposes get_multiplier, base_symbol, parse_instrument, source_symbol,
+SessionCalendar, and default_session on top of the JSON-backed
+InstrumentRegistry (data/config/instruments.json, bound via
+set_registry_path() during create_app). DEFAULT_TIMEFRAMES remains a
+public module constant pinned by tests; production timeframe selection
+lives in services/ohlc/coverage_maintainer.py's window tables.
 """
 
 from dataclasses import dataclass

@@ -23,7 +23,7 @@ log = get_logger("background")
 
 
 class _NoopHandler(FileSystemEventHandler):
-    """Placeholder. Plan 10 replaces this with the import tick handler."""
+    """Default no-op watchdog handler, used when start() is called without a handler (tests and bare health checks)."""
 
 
 class BackgroundServices:
