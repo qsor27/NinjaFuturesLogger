@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -10,6 +11,22 @@ from pydantic import field_validator
 from models.base import StrictModel
 
 _SAVE_LOCK = threading.Lock()
+
+
+def _atomic_update(path: Path | str, mutate: Callable[[dict], None]) -> None:
+    """Read app.json, apply `mutate` in place, write via tmp + os.replace.
+
+    All savers share this one lock + atomic-rename dance. Validation happens
+    in each saver BEFORE calling this, so a failed validation never touches
+    the file.
+    """
+    path = Path(path)
+    with _SAVE_LOCK:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        mutate(raw)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+        os.replace(str(tmp), str(path))
 
 
 class SessionConfig(StrictModel):
@@ -117,14 +134,10 @@ def save_source_timezone(path: Path | str, value: str | None) -> None:
         except Exception as e:
             raise ValueError(f"invalid IANA timezone: {value!r}") from e
 
-    path = Path(path)
-    with _SAVE_LOCK:
-        raw_text = path.read_text(encoding="utf-8")
-        raw = json.loads(raw_text)
+    def mutate(raw: dict) -> None:
         raw.setdefault("session", {})["source_timezone"] = value
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-        os.replace(str(tmp), str(path))
+
+    _atomic_update(path, mutate)
 
 
 def save_display_timezone(path: Path | str, value: str | None) -> None:
@@ -140,23 +153,16 @@ def save_display_timezone(path: Path | str, value: str | None) -> None:
         except Exception as e:
             raise ValueError(f"invalid IANA timezone: {value!r}") from e
 
-    path = Path(path)
-    with _SAVE_LOCK:
-        raw_text = path.read_text(encoding="utf-8")
-        raw = json.loads(raw_text)
+    def mutate(raw: dict) -> None:
         raw["display_timezone"] = value
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-        os.replace(str(tmp), str(path))
+
+    _atomic_update(path, mutate)
 
 
 def save_windows_port(path: Path | str, value: int) -> None:
     """Update `windows.port` in app.json via atomic tmp+rename.
 
     Validates that value is in the IANA unprivileged-port range [1024, 65535].
-    All other Config fields are preserved by a read-modify-write under a
-    module-level lock.
-
     Takes effect on next launcher start — the running Python process is
     already bound to the old port.
     """
@@ -165,34 +171,24 @@ def save_windows_port(path: Path | str, value: int) -> None:
     if value < 1024 or value > 65535:
         raise ValueError(f"port must be in [1024, 65535], got {value}")
 
-    path = Path(path)
-    with _SAVE_LOCK:
-        raw_text = path.read_text(encoding="utf-8")
-        raw = json.loads(raw_text)
-        w = raw.setdefault("windows", {})
-        w["port"] = value
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-        os.replace(str(tmp), str(path))
+    def mutate(raw: dict) -> None:
+        raw.setdefault("windows", {})["port"] = value
+
+    _atomic_update(path, mutate)
 
 
 def save_theme(path: Path | str, value: str) -> None:
     """Update the top-level `theme` field in app.json via atomic tmp+rename.
 
-    Validates that value is either "dark" or "light". All other Config
-    fields are preserved by a read-modify-write under a module-level lock.
+    Validates that value is either "dark" or "light".
     """
     if value not in ("dark", "light"):
         raise ValueError(f"invalid theme: {value!r}")
 
-    path = Path(path)
-    with _SAVE_LOCK:
-        raw_text = path.read_text(encoding="utf-8")
-        raw = json.loads(raw_text)
+    def mutate(raw: dict) -> None:
         raw["theme"] = value
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-        os.replace(str(tmp), str(path))
+
+    _atomic_update(path, mutate)
 
 
 def save_filter_default(
@@ -205,8 +201,7 @@ def save_filter_default(
     `scope` must be one of "accounts", "positions", or "stats". `value` of
     None removes the scope entry. A non-None dict is validated against the
     matching Pydantic shape — unknown keys or wrong types raise
-    ValidationError. All other Config fields are preserved by a
-    read-modify-write under a module-level lock.
+    ValidationError.
 
     For the "accounts" scope the value must be `{"accounts": [...]}`; the
     list gets stored at `filter_defaults.accounts` (not nested in a
@@ -217,9 +212,7 @@ def save_filter_default(
     elif scope == "stats":
         validator = StatsFilterDefault
     elif scope == "accounts":
-        # Validate via FilterDefaults so the accounts list goes through the
-        # same coercion and strict-mode checks as on load.
-        validator = None  # handled below
+        validator = None  # bespoke shape, handled below
     else:
         raise ValueError(f"invalid filter-defaults scope: {scope!r}")
 
@@ -231,10 +224,7 @@ def save_filter_default(
         else:
             validator(**value)
 
-    path = Path(path)
-    with _SAVE_LOCK:
-        raw_text = path.read_text(encoding="utf-8")
-        raw = json.loads(raw_text)
+    def mutate(raw: dict) -> None:
         _migrate_filter_defaults(raw)
         fd = raw.setdefault("filter_defaults", {})
         if scope == "accounts":
@@ -247,18 +237,14 @@ def save_filter_default(
                 fd.pop(scope, None)
             else:
                 fd[scope] = value
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-        os.replace(str(tmp), str(path))
+
+    _atomic_update(path, mutate)
 
 
 def clear_all_filter_defaults(path: Path | str) -> None:
     """Remove the entire `filter_defaults` key from app.json."""
-    path = Path(path)
-    with _SAVE_LOCK:
-        raw_text = path.read_text(encoding="utf-8")
-        raw = json.loads(raw_text)
+
+    def mutate(raw: dict) -> None:
         raw.pop("filter_defaults", None)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
-        os.replace(str(tmp), str(path))
+
+    _atomic_update(path, mutate)
