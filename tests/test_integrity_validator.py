@@ -1,22 +1,17 @@
-from models.execution import Execution
 from services.integrity import cross_check_against_source_position_column
+from tests.conftest import make_execution
 
 
 def _ex(eid, side, qty, ts, *, position_after, entry_exit="Entry"):
-    return Execution(
-        nt_execution_id=eid,
-        account="Sim101",
-        instrument="MNQ",
+    return make_execution(
+        eid,
         timestamp=ts,
         side=side,
         original_action=side,
         quantity=qty,
         price=4000.0,
-        commission=0.0,
         entry_exit=entry_exit,
         position_after=position_after,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
 

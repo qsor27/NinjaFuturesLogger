@@ -1,5 +1,6 @@
 from models.execution import Execution
 from services.positions import build_positions
+from tests.conftest import make_execution
 
 
 def _ex(
@@ -15,10 +16,8 @@ def _ex(
     position_after: str | None = "1 L",
     commission: float = 0.0,
 ) -> Execution:
-    return Execution(
-        nt_execution_id=eid,
-        account=account,
-        instrument=instrument,
+    return make_execution(
+        eid,
         timestamp=ts,
         side=side,
         original_action=side,
@@ -26,9 +25,8 @@ def _ex(
         price=price,
         commission=commission,
         entry_exit=entry_exit,
+        instrument=instrument,
         position_after=position_after,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
 

@@ -1,11 +1,9 @@
-from db import connect
-from models.execution import Execution
-from services.import_db import bulk_insert_executions
+from tests.conftest import make_execution, seed_executions
 
 
 def _ex(exid, account, instrument, ts, side, action, ex_mark, pos_col):
-    return Execution(
-        nt_execution_id=exid,
+    return make_execution(
+        exid,
         account=account,
         instrument=instrument,
         timestamp=ts,
@@ -13,21 +11,10 @@ def _ex(exid, account, instrument, ts, side, action, ex_mark, pos_col):
         original_action=action,
         quantity=1,
         price=100.0,
-        commission=0.0,
         entry_exit=ex_mark,
         position_after=pos_col,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
-
-
-def _seed(db_path, execs):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(conn, execs)
-    finally:
-        conn.close()
 
 
 def _utc_ts(y: int, m: int, d: int, hour: int = 12, minute: int = 0) -> int:
@@ -51,7 +38,7 @@ def _mon_tue_executions():
 
 
 def test_day_of_week_filter_happy_path(app, tmp_config):
-    _seed(tmp_config.db_path, _mon_tue_executions())
+    seed_executions(tmp_config.db_path, _mon_tue_executions())
     resp = app.test_client().get("/api/positions?day_of_week=0")
     assert resp.status_code == 200
     positions = resp.get_json()["positions"]
@@ -71,7 +58,7 @@ def test_hour_of_day_requires_hour_tz(client):
 
 
 def test_hour_of_day_happy_path(app, tmp_config):
-    _seed(tmp_config.db_path, _mon_tue_executions())
+    seed_executions(tmp_config.db_path, _mon_tue_executions())
     # Entries are 12:00 UTC == 08:00 America/New_York, not 14:00.
     resp_14 = app.test_client().get("/api/positions?hour_of_day=14&hour_tz=America/New_York")
     assert resp_14.status_code == 200
@@ -95,7 +82,7 @@ def test_hour_tz_bad_value_returns_400(client):
 
 
 def test_trades_per_day_filter_happy_path(app, tmp_config):
-    _seed(tmp_config.db_path, _mon_tue_executions())  # 1 position each day
+    seed_executions(tmp_config.db_path, _mon_tue_executions())  # 1 position each day
     resp = app.test_client().get("/api/positions?trades_per_day=1")
     assert resp.status_code == 200
     assert resp.get_json()["page"]["total"] == 2
@@ -110,7 +97,7 @@ def test_trades_per_day_must_be_positive_int(client):
 
 
 def test_session_date_range_happy_path(app, tmp_config):
-    _seed(tmp_config.db_path, _mon_tue_executions())
+    seed_executions(tmp_config.db_path, _mon_tue_executions())
     resp = app.test_client().get(
         "/api/positions?session_date_from=2026-04-14&session_date_to=2026-04-14"
     )

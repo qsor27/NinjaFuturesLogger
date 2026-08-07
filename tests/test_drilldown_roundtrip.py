@@ -6,14 +6,12 @@ the counts match. Prevents silent divergence between aggregation and filter
 logic.
 """
 
-from db import connect
-from models.execution import Execution
-from services.import_db import bulk_insert_executions
+from tests.conftest import make_execution, seed_executions
 
 
 def _ex(exid, account, instrument, ts, side, action, ex_mark, pos_col):
-    return Execution(
-        nt_execution_id=exid,
+    return make_execution(
+        exid,
         account=account,
         instrument=instrument,
         timestamp=ts,
@@ -21,21 +19,10 @@ def _ex(exid, account, instrument, ts, side, action, ex_mark, pos_col):
         original_action=action,
         quantity=1,
         price=100.0,
-        commission=0.0,
         entry_exit=ex_mark,
         position_after=pos_col,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
-
-
-def _seed(db_path, execs):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(conn, execs)
-    finally:
-        conn.close()
 
 
 def _utc_ts(y: int, m: int, d: int, hour: int = 12, minute: int = 0) -> int:
@@ -63,7 +50,7 @@ FIXTURE = [
 
 
 def test_day_of_week_roundtrip(app, tmp_config):
-    _seed(tmp_config.db_path, FIXTURE)
+    seed_executions(tmp_config.db_path, FIXTURE)
     c = app.test_client()
 
     stats = c.get("/api/stats/by-day-of-week").get_json()
@@ -75,7 +62,7 @@ def test_day_of_week_roundtrip(app, tmp_config):
 
 
 def test_by_hour_roundtrip(app, tmp_config):
-    _seed(tmp_config.db_path, FIXTURE)
+    seed_executions(tmp_config.db_path, FIXTURE)
     c = app.test_client()
 
     stats = c.get("/api/stats/by-hour?display_tz=America/New_York").get_json()
@@ -90,7 +77,7 @@ def test_by_hour_roundtrip(app, tmp_config):
 
 
 def test_trades_per_day_roundtrip(app, tmp_config):
-    _seed(tmp_config.db_path, FIXTURE)
+    seed_executions(tmp_config.db_path, FIXTURE)
     c = app.test_client()
 
     stats = c.get("/api/stats/by-trades-per-day").get_json()

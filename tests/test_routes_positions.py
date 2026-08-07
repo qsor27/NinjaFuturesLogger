@@ -5,9 +5,9 @@ from flask import Flask
 
 from db import connect
 from migrations import run_migrations
-from models.execution import Execution
 from routes.positions import build_positions_blueprint
 from services.import_db import bulk_insert_executions
+from tests.conftest import make_execution
 
 
 @pytest.fixture
@@ -34,8 +34,8 @@ def _ex(
     entry_exit="Entry",
     price=4000.0,
 ):
-    return Execution(
-        nt_execution_id=eid,
+    return make_execution(
+        eid,
         account=account,
         instrument=instrument,
         timestamp=ts,
@@ -43,11 +43,8 @@ def _ex(
         original_action=side,
         quantity=qty,
         price=price,
-        commission=0.0,
         entry_exit=entry_exit,
         position_after=position_after,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
 

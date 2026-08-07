@@ -1,34 +1,13 @@
-from db import connect
-from models.execution import Execution
-from services.import_db import bulk_insert_executions
+from tests.conftest import make_execution, seed_executions
 
 
 def _seed(db_path):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(
-            conn,
-            [
-                Execution(
-                    nt_execution_id="abc",
-                    account="Sim",
-                    instrument="MNQ",
-                    timestamp=1,
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=100.0,
-                    commission=0.0,
-                    entry_exit="Entry",
-                    position_after="1 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=1,
-                )
-            ],
-        )
-    finally:
-        conn.close()
+    seed_executions(
+        db_path,
+        [
+            make_execution("abc"),
+        ],
+    )
 
 
 def test_patch_note_creates(app, tmp_config):

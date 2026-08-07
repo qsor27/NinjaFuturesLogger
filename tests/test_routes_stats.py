@@ -1,52 +1,34 @@
 import pytest
 
-from db import connect
-from models.execution import Execution
-from services.import_db import bulk_insert_executions
+from tests.conftest import make_execution, seed_executions
 
 
 def _seed(db_path):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(
-            conn,
-            [
-                Execution(
-                    nt_execution_id="a",
-                    account="Sim",
-                    instrument="MNQ",
-                    timestamp=1776070800,  # 2026-04-13 09:00 UTC
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=100.0,
-                    commission=2.0,
-                    entry_exit="Entry",
-                    position_after="1 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=1,
-                ),
-                Execution(
-                    nt_execution_id="b",
-                    account="Sim",
-                    instrument="MNQ",
-                    timestamp=1776071400,
-                    side="Sell",
-                    original_action="Sell",
-                    quantity=1,
-                    price=110.0,
-                    commission=2.0,
-                    entry_exit="Exit",
-                    position_after="-",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=2,
-                ),
-            ],
-        )
-    finally:
-        conn.close()
+    seed_executions(
+        db_path,
+        [
+            make_execution(
+                "a",
+                account="Sim",
+                timestamp=1776070800,
+                price=100.0,
+                commission=2.0,
+                imported_at=1,
+            ),
+            make_execution(
+                "b",
+                account="Sim",
+                timestamp=1776071400,
+                side="Sell",
+                original_action="Sell",
+                price=110.0,
+                commission=2.0,
+                entry_exit="Exit",
+                position_after="-",
+                imported_at=2,
+            ),
+        ],
+    )
 
 
 @pytest.fixture
@@ -145,79 +127,51 @@ def test_distribution(client):
 
 
 def _seed_two_accounts(db_path):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(
-            conn,
-            [
-                Execution(
-                    nt_execution_id="a1",
-                    account="A",
-                    instrument="MNQ",
-                    timestamp=1776070800,
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=100.0,
-                    commission=2.0,
-                    entry_exit="Entry",
-                    position_after="1 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=1,
-                ),
-                Execution(
-                    nt_execution_id="a2",
-                    account="A",
-                    instrument="MNQ",
-                    timestamp=1776071400,
-                    side="Sell",
-                    original_action="Sell",
-                    quantity=1,
-                    price=110.0,
-                    commission=2.0,
-                    entry_exit="Exit",
-                    position_after="-",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=2,
-                ),
-                Execution(
-                    nt_execution_id="b1",
-                    account="B",
-                    instrument="MNQ",
-                    timestamp=1776072000,
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=100.0,
-                    commission=2.0,
-                    entry_exit="Entry",
-                    position_after="1 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=3,
-                ),
-                Execution(
-                    nt_execution_id="b2",
-                    account="B",
-                    instrument="MNQ",
-                    timestamp=1776072600,
-                    side="Sell",
-                    original_action="Sell",
-                    quantity=1,
-                    price=105.0,
-                    commission=2.0,
-                    entry_exit="Exit",
-                    position_after="-",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=4,
-                ),
-            ],
-        )
-    finally:
-        conn.close()
+    seed_executions(
+        db_path,
+        [
+            make_execution(
+                "a1",
+                account="A",
+                timestamp=1776070800,
+                price=100.0,
+                commission=2.0,
+                imported_at=1,
+            ),
+            make_execution(
+                "a2",
+                account="A",
+                timestamp=1776071400,
+                side="Sell",
+                original_action="Sell",
+                price=110.0,
+                commission=2.0,
+                entry_exit="Exit",
+                position_after="-",
+                imported_at=2,
+            ),
+            make_execution(
+                "b1",
+                account="B",
+                timestamp=1776072000,
+                price=100.0,
+                commission=2.0,
+                imported_at=3,
+            ),
+            make_execution(
+                "b2",
+                account="B",
+                timestamp=1776072600,
+                side="Sell",
+                original_action="Sell",
+                price=105.0,
+                commission=2.0,
+                entry_exit="Exit",
+                position_after="-",
+                imported_at=4,
+            ),
+        ],
+    )
 
 
 def test_stats_summary_multi_account(app, tmp_config):

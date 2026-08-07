@@ -1,5 +1,5 @@
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pytest
@@ -10,6 +10,8 @@ from background import BackgroundServices
 from config import Config, SchedulerConfig, SessionConfig, ThreadPoolConfig
 from db import connect
 from migrations import run_migrations
+from models.execution import Execution
+from services.import_db import bulk_insert_executions
 from services.instruments import set_registry_path
 
 
@@ -89,3 +91,33 @@ def app(app_and_services) -> Flask:
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+def make_execution(eid: str = "e", **overrides) -> Execution:
+    """Build an Execution with sane defaults; override any field by keyword."""
+    base = dict(
+        nt_execution_id=eid,
+        account="Sim101",
+        instrument="MNQ",
+        timestamp=1,
+        side="Buy",
+        original_action="Buy",
+        quantity=1,
+        price=100.0,
+        commission=0.0,
+        entry_exit="Entry",
+        position_after="1 L",
+        source_order_id=None,
+        source_filename="f.csv",
+        imported_at=1,
+    )
+    base.update(overrides)
+    return Execution(**base)
+
+
+def seed_executions(db_path: Path | str, execs: Sequence[Execution]) -> None:
+    conn = connect(db_path)
+    try:
+        bulk_insert_executions(conn, execs)
+    finally:
+        conn.close()

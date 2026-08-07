@@ -2,7 +2,7 @@ from pathlib import Path
 
 from db import connect
 from migrations import run_migrations
-from models.execution import Execution, RejectRecord
+from models.execution import RejectRecord
 from services.import_db import (
     bulk_insert_executions,
     delete_cursor,
@@ -12,6 +12,7 @@ from services.import_db import (
     record_run,
     save_cursor,
 )
+from tests.conftest import make_execution
 
 
 def _migrated(tmp_path: Path):
@@ -21,21 +22,14 @@ def _migrated(tmp_path: Path):
 
 
 def _ex(i: int, account: str = "Sim101"):
-    return Execution(
-        nt_execution_id=f"id-{i}",
+    return make_execution(
+        f"id-{i}",
         account=account,
-        instrument="MNQ",
         timestamp=1_700_000_000 + i,
-        side="Buy",
-        original_action="Buy",
-        quantity=1,
         price=4000.0 + i,
-        commission=0.0,
-        entry_exit="Entry",
         position_after=f"{i} L",
-        source_order_id=None,
-        source_filename="file.csv",
         imported_at=1_700_000_100,
+        source_filename="file.csv",
     )
 
 

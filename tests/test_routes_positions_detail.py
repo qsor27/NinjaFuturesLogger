@@ -1,54 +1,33 @@
 import pytest
 
-from db import connect
-from models.execution import Execution
 from services.flags import set_reviewed
-from services.import_db import bulk_insert_executions
 from services.notes import upsert_note
+from tests.conftest import make_execution, seed_executions
 
 
 def _seed(db_path):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(
-            conn,
-            [
-                Execution(
-                    nt_execution_id="a",
-                    account="Sim",
-                    instrument="MNQ",
-                    timestamp=100,
-                    side="Buy",
-                    original_action="Buy",
-                    quantity=1,
-                    price=100.0,
-                    commission=0.0,
-                    entry_exit="Entry",
-                    position_after="1 L",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=100,
-                ),
-                Execution(
-                    nt_execution_id="b",
-                    account="Sim",
-                    instrument="MNQ",
-                    timestamp=200,
-                    side="Sell",
-                    original_action="Sell",
-                    quantity=1,
-                    price=101.0,
-                    commission=0.0,
-                    entry_exit="Exit",
-                    position_after="-",
-                    source_order_id=None,
-                    source_filename="f.csv",
-                    imported_at=200,
-                ),
-            ],
-        )
-    finally:
-        conn.close()
+    seed_executions(
+        db_path,
+        [
+            make_execution(
+                "a",
+                account="Sim",
+                timestamp=100,
+                price=100.0,
+            ),
+            make_execution(
+                "b",
+                account="Sim",
+                timestamp=200,
+                side="Sell",
+                original_action="Sell",
+                price=101.0,
+                entry_exit="Exit",
+                position_after="-",
+                imported_at=200,
+            ),
+        ],
+    )
 
 
 def test_detail_attaches_notes_and_reviewed(app, tmp_config):

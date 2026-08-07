@@ -1,9 +1,7 @@
 from pathlib import Path
 
-from db import connect
-from models.execution import Execution
-from services.import_db import bulk_insert_executions
 from services.positions_service import get_position, list_positions
+from tests.conftest import make_execution, seed_executions
 
 
 def _ex(
@@ -18,8 +16,8 @@ def _ex(
     entry_exit="Entry",
     price=4000.0,
 ):
-    return Execution(
-        nt_execution_id=eid,
+    return make_execution(
+        eid,
         account=account,
         instrument=instrument,
         timestamp=ts,
@@ -27,25 +25,14 @@ def _ex(
         original_action=side,
         quantity=qty,
         price=price,
-        commission=0.0,
         entry_exit=entry_exit,
         position_after=position_after,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
 
 
-def _seed(db_path: Path, rows):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(conn, rows)
-    finally:
-        conn.close()
-
-
 def test_list_positions_returns_computed_positions(migrated_db: Path):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "Buy", 1, 100, position_after="1 L"),
@@ -58,7 +45,7 @@ def test_list_positions_returns_computed_positions(migrated_db: Path):
 
 
 def test_list_positions_filters_by_account(migrated_db: Path):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "Buy", 1, 100, account="Sim101", position_after="1 L"),
@@ -76,7 +63,7 @@ def test_list_positions_filters_by_account(migrated_db: Path):
 
 
 def test_list_positions_filters_by_instrument(migrated_db: Path):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "Buy", 1, 100, instrument="MNQ", position_after="1 L"),
@@ -92,7 +79,7 @@ def test_list_positions_filters_by_instrument(migrated_db: Path):
 
 
 def test_get_position_by_natural_key(migrated_db: Path):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "Buy", 1, 100, position_after="1 L"),

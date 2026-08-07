@@ -1,11 +1,10 @@
 from db import connect
-from models.execution import Execution
-from services.import_db import bulk_insert_executions
+from tests.conftest import make_execution, seed_executions
 
 
 def _ex(exid, account, instrument, ts, side, action, ex_mark, pos_col):
-    return Execution(
-        nt_execution_id=exid,
+    return make_execution(
+        exid,
         account=account,
         instrument=instrument,
         timestamp=ts,
@@ -13,25 +12,14 @@ def _ex(exid, account, instrument, ts, side, action, ex_mark, pos_col):
         original_action=action,
         quantity=1,
         price=100.0,
-        commission=0.0,
         entry_exit=ex_mark,
         position_after=pos_col,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
 
 
-def _seed(db_path, execs):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(conn, execs)
-    finally:
-        conn.close()
-
-
 def test_list_default_pagination(app, tmp_config):
-    _seed(
+    seed_executions(
         tmp_config.db_path,
         [
             _ex("a", "Sim", "MNQ", 100, "Buy", "Buy", "Entry", "1 L"),
@@ -49,7 +37,7 @@ def test_list_default_pagination(app, tmp_config):
 
 
 def test_list_account_filter(app, tmp_config):
-    _seed(
+    seed_executions(
         tmp_config.db_path,
         [
             _ex("a", "X", "MNQ", 100, "Buy", "Buy", "Entry", "1 L"),
@@ -82,7 +70,7 @@ def test_list_pagination_page_and_size(app, tmp_config):
     for i in range(6):
         rows.append(_ex(f"e{i}", "A", "MNQ", 100 + i * 10, "Buy", "Buy", "Entry", "1 L"))
         rows.append(_ex(f"x{i}", "A", "MNQ", 105 + i * 10, "Sell", "Sell", "Exit", "-"))
-    _seed(tmp_config.db_path, rows)
+    seed_executions(tmp_config.db_path, rows)
     resp = app.test_client().get("/api/positions?page=2&page_size=2")
     body = resp.get_json()
     assert body["page"]["total"] == 6
@@ -91,7 +79,7 @@ def test_list_pagination_page_and_size(app, tmp_config):
 
 
 def test_list_outcome_filter(app, tmp_config):
-    _seed(
+    seed_executions(
         tmp_config.db_path,
         [
             _ex("a", "A", "MNQ", 100, "Buy", "Buy", "Entry", "1 L"),
@@ -116,7 +104,7 @@ def test_list_rejects_unknown_outcome(client):
 
 
 def test_filters_endpoint(app, tmp_config):
-    _seed(
+    seed_executions(
         tmp_config.db_path,
         [
             _ex("a", "X", "MNQ", 100, "Buy", "Buy", "Entry", "1 L"),
@@ -133,7 +121,7 @@ def test_filters_endpoint(app, tmp_config):
 def test_list_session_date_range_filter(app, tmp_config):
     # 2026-04-13 09:00 UTC (ts 1776070800) -> session 2026-04-13
     # 2026-04-14 09:00 UTC (ts 1776157200) -> session 2026-04-14
-    _seed(
+    seed_executions(
         tmp_config.db_path,
         [
             _ex("a", "Sim", "MNQ", 1776070800, "Buy", "Buy", "Entry", "1 L"),

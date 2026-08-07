@@ -1,7 +1,5 @@
 from db import connect
-from models.execution import Execution
 from services.flags import set_reviewed
-from services.import_db import bulk_insert_executions
 from services.notes import upsert_note
 from services.position_filters import PositionFilter
 from services.positions_service import (
@@ -9,11 +7,12 @@ from services.positions_service import (
     get_filter_options,
     list_positions_page,
 )
+from tests.conftest import make_execution, seed_executions
 
 
 def _ex(exid, account, instrument, ts, side="Buy", action="Buy", ex_mark="Entry", pos_col="1 L"):
-    return Execution(
-        nt_execution_id=exid,
+    return make_execution(
+        exid,
         account=account,
         instrument=instrument,
         timestamp=ts,
@@ -21,25 +20,14 @@ def _ex(exid, account, instrument, ts, side="Buy", action="Buy", ex_mark="Entry"
         original_action=action,
         quantity=1,
         price=100.0,
-        commission=0.0,
         entry_exit=ex_mark,
         position_after=pos_col,
-        source_order_id=None,
-        source_filename="f.csv",
         imported_at=ts,
     )
 
 
-def _seed(db_path, execs):
-    conn = connect(db_path)
-    try:
-        bulk_insert_executions(conn, execs)
-    finally:
-        conn.close()
-
-
 def test_list_positions_page_basic(migrated_db):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "Sim101", "MNQ", 100, "Buy", "Buy", "Entry", "1 L"),
@@ -60,7 +48,7 @@ def test_list_positions_page_basic(migrated_db):
 
 
 def test_list_positions_page_account_filter(migrated_db):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "X", "MNQ", 100, "Buy", "Buy", "Entry", "1 L"),
@@ -86,7 +74,7 @@ def test_list_positions_page_pagination(migrated_db):
         exit_id = f"x{i}"
         executions.append(_ex(entry_id, "A", "MNQ", 100 + i * 10, "Buy", "Buy", "Entry", "1 L"))
         executions.append(_ex(exit_id, "A", "MNQ", 105 + i * 10, "Sell", "Sell", "Exit", "-"))
-    _seed(migrated_db, executions)
+    seed_executions(migrated_db, executions)
     page1 = list_positions_page(migrated_db, filter_=PositionFilter(), page=1, page_size=2)
     page2 = list_positions_page(migrated_db, filter_=PositionFilter(), page=2, page_size=2)
     assert page1.page.total == 6
@@ -96,7 +84,7 @@ def test_list_positions_page_pagination(migrated_db):
 
 
 def test_get_filter_options_lists_accounts_and_instruments(migrated_db):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "Sim101", "MNQ", 100),
@@ -115,7 +103,7 @@ def test_get_filter_options_empty_db_returns_empty_lists(migrated_db):
 
 
 def test_attach_metadata_collects_notes_and_flags(migrated_db):
-    _seed(
+    seed_executions(
         migrated_db,
         [
             _ex("a", "Sim101", "MNQ", 100, "Buy", "Buy", "Entry", "1 L"),
