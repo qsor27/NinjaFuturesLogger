@@ -3,7 +3,7 @@ from pathlib import Path
 
 from db import read_conn, transaction
 from logging_config import get_logger
-from models.bar import AttemptRecord, Bar, FetchResult
+from models.bar import AttemptRecord, Bar, FetchResult, FetchStatus, Outcome
 from services.ohlc._classify import classify_exception, http_status
 from services.ohlc.attempts import (
     begin_attempt,
@@ -50,6 +50,196 @@ def _now() -> int:
     return int(time.time())
 
 
+class _AttemptTrail:
+    """Forensic trail for one fetch_range call: writes the per-source DB
+    row, emits the structured log line, and accumulates the in-memory
+    AttemptRecord list that FetchResult returns."""
+
+    def __init__(
+        self,
+        *,
+        db_path: Path | str,
+        attempt_id: str,
+        trigger: str,
+        instrument: str,
+        timeframe: str,
+    ) -> None:
+        self._db_path = db_path
+        self._attempt_id = attempt_id
+        self._trigger = trigger
+        self._instrument = instrument
+        self._timeframe = timeframe
+        self.records: list[AttemptRecord] = []
+
+    def record(
+        self,
+        *,
+        source_name: str,
+        g_start: int,
+        g_end: int,
+        outcome: str,
+        bars_returned: int = 0,
+        duration_ms: int | None = None,
+        http_status_code: int | None = None,
+        error_class: str | None = None,
+        error: str | None = None,
+        attempt_outcome: Outcome | None = None,
+    ) -> None:
+        """DB trail row + log line; when attempt_outcome is given, also an
+        in-memory AttemptRecord (vocabularies differ: the DB stores e.g.
+        'skipped_breaker', FetchResult stores 'skipped'). AttemptRecord's
+        count always equals bars_returned (0 for skipped/failed)."""
+        _record_source(
+            self._db_path,
+            self._attempt_id,
+            g_start,
+            g_end,
+            source_name,
+            outcome,
+            bars_returned,
+            duration_ms,
+            http_status_code,
+            error_class,
+            error,
+        )
+        log.info(
+            "ohlc source attempt",
+            extra={
+                "attempt_id": self._attempt_id,
+                "trigger": self._trigger,
+                "instrument": self._instrument,
+                "tf": self._timeframe,
+                "gap_start": g_start,
+                "gap_end": g_end,
+                "source": source_name,
+                "outcome": outcome,
+                "bars_returned": bars_returned,
+                "duration_ms": duration_ms,
+                "error_class": error_class,
+                "error": error,
+            },
+        )
+        if attempt_outcome is not None:
+            self.records.append(
+                AttemptRecord(
+                    source=source_name,
+                    outcome=attempt_outcome,
+                    count=bars_returned,
+                    error=error,
+                )
+            )
+
+
+def _try_sources_for_gap(
+    *,
+    registry: SourceRegistry,
+    db_path: Path | str,
+    instrument: str,
+    timeframe: str,
+    gap_start: int,
+    gap_end: int,
+    token_bucket: TokenBucket | None,
+    trail: _AttemptTrail,
+) -> tuple[list[Bar], bool]:
+    """Try each registered source in order for one gap.
+
+    Module-private and called only by fetch_range — the load-bearing rule
+    "fetch_range is the only function that calls a source" holds at the
+    module boundary; no other entry point reaches source.fetch.
+
+    Returns (bars, gap_filled): bars is the first answering source's
+    result (possibly empty), gap_filled is True iff some source answered
+    without raising. ([], False) when every source was skipped or failed.
+    """
+    for source, breaker in list(registry.entries):
+        if timeframe not in source.supported_timeframes:
+            trail.record(
+                source_name=source.name,
+                g_start=gap_start,
+                g_end=gap_end,
+                outcome="skipped_no_timeframe",
+            )
+            continue
+        if not breaker.allows():
+            trail.record(
+                source_name=source.name,
+                g_start=gap_start,
+                g_end=gap_end,
+                outcome="skipped_breaker",
+                attempt_outcome="skipped",
+            )
+            continue
+
+        t0 = time.monotonic()
+        try:
+            if token_bucket is not None:
+                with token_bucket.acquire(timeout=60):
+                    bars = source.fetch(instrument, timeframe, gap_start, gap_end)
+            else:
+                bars = source.fetch(instrument, timeframe, gap_start, gap_end)
+        except TimeoutError as te:
+            dur_ms = int((time.monotonic() - t0) * 1000)
+            trail.record(
+                source_name=source.name,
+                g_start=gap_start,
+                g_end=gap_end,
+                outcome="skipped_rate_limit",
+                duration_ms=dur_ms,
+                error_class="rate_limit_token_bucket",
+                error=repr(te),
+                attempt_outcome="skipped",
+            )
+            continue
+        except Exception as e:
+            dur_ms = int((time.monotonic() - t0) * 1000)
+            breaker.record_failure(e)
+            _persist_breaker(db_path, breaker)
+            trail.record(
+                source_name=source.name,
+                g_start=gap_start,
+                g_end=gap_end,
+                outcome="failed",
+                duration_ms=dur_ms,
+                http_status_code=http_status(e),
+                error_class=classify_exception(e)[0],
+                error=repr(e),
+                attempt_outcome="failed",
+            )
+            continue
+
+        dur_ms = int((time.monotonic() - t0) * 1000)
+        breaker.record_success()
+        _persist_breaker(db_path, breaker)
+        outcome = "ok" if bars else "empty"
+        trail.record(
+            source_name=source.name,
+            g_start=gap_start,
+            g_end=gap_end,
+            outcome=outcome,
+            bars_returned=len(bars),
+            duration_ms=dur_ms,
+            attempt_outcome=outcome,
+        )
+        return bars, True
+    return [], False
+
+
+def _short_circuit(
+    *,
+    db_path: Path | str,
+    attempt_id: str,
+    status: FetchStatus,
+    gaps_found: int,
+    instrument: str,
+    timeframe: str,
+    start: int,
+    end: int,
+) -> FetchResult:
+    """Finalize an attempt that never reached a source; build its result."""
+    _finalize(db_path, attempt_id, gaps_found, 0, status, None, instrument, timeframe, start, end)
+    return FetchResult(status=status, bars_added=0, attempts=[], attempt_id=attempt_id)
+
+
 def fetch_range(
     *,
     db_path: Path | str,
@@ -82,53 +272,43 @@ def fetch_range(
             now=now,
         )
 
-    # Short-circuit: empty range.
     if start >= end:
-        _finalize(db_path, attempt_id, 0, 0, "cached", None, instrument, timeframe, start, end)
-        return FetchResult(
+        return _short_circuit(
+            db_path=db_path,
+            attempt_id=attempt_id,
             status="cached",
-            bars_added=0,
-            attempts=[],
-            attempt_id=attempt_id,
-        )
-
-    # Short-circuit: no source supports this timeframe.
-    if not any(timeframe in s.supported_timeframes for s, _b in registry.entries):
-        _finalize(
-            db_path,
-            attempt_id,
-            0,
-            0,
-            "no_source_for_timeframe",
-            None,
-            instrument,
-            timeframe,
-            start,
-            end,
-        )
-        return FetchResult(
-            status="no_source_for_timeframe",
-            bars_added=0,
-            attempts=[],
-            attempt_id=attempt_id,
-        )
-
-    with read_conn(db_path) as conn:
-        gaps = find_gaps(
-            conn,
+            gaps_found=0,
             instrument=instrument,
             timeframe=timeframe,
             start=start,
             end=end,
         )
 
-    if not gaps:
-        _finalize(db_path, attempt_id, 0, 0, "cached", None, instrument, timeframe, start, end)
-        return FetchResult(
-            status="cached",
-            bars_added=0,
-            attempts=[],
+    if not any(timeframe in s.supported_timeframes for s, _b in registry.entries):
+        return _short_circuit(
+            db_path=db_path,
             attempt_id=attempt_id,
+            status="no_source_for_timeframe",
+            gaps_found=0,
+            instrument=instrument,
+            timeframe=timeframe,
+            start=start,
+            end=end,
+        )
+
+    with read_conn(db_path) as conn:
+        gaps = find_gaps(conn, instrument=instrument, timeframe=timeframe, start=start, end=end)
+
+    if not gaps:
+        return _short_circuit(
+            db_path=db_path,
+            attempt_id=attempt_id,
+            status="cached",
+            gaps_found=0,
+            instrument=instrument,
+            timeframe=timeframe,
+            start=start,
+            end=end,
         )
 
     gaps, dropped_out_of_reach = _clamp_gaps_to_reach(gaps, timeframe=timeframe, now=now)
@@ -143,191 +323,39 @@ def fetch_range(
             },
         )
     if not gaps:
-        _finalize(
-            db_path,
-            attempt_id,
-            dropped_out_of_reach,
-            0,
-            "out_of_reach",
-            None,
-            instrument,
-            timeframe,
-            start,
-            end,
-        )
-        return FetchResult(
-            status="out_of_reach",
-            bars_added=0,
-            attempts=[],
+        return _short_circuit(
+            db_path=db_path,
             attempt_id=attempt_id,
+            status="out_of_reach",
+            gaps_found=dropped_out_of_reach,
+            instrument=instrument,
+            timeframe=timeframe,
+            start=start,
+            end=end,
         )
 
+    trail = _AttemptTrail(
+        db_path=db_path,
+        attempt_id=attempt_id,
+        trigger=trigger,
+        instrument=instrument,
+        timeframe=timeframe,
+    )
     bars_collected: list[Bar] = []
-    attempts: list[AttemptRecord] = []
     any_gap_filled = False
     all_gaps_filled = True
-
-    def _record_and_log(
-        *,
-        source_name: str,
-        g_start: int,
-        g_end: int,
-        outcome: str,
-        bars_returned: int,
-        duration_ms: int | None,
-        http_status_code: int | None,
-        error_class: str | None,
-        error: str | None,
-    ) -> None:
-        _record_source(
-            db_path,
-            attempt_id,
-            g_start,
-            g_end,
-            source_name,
-            outcome,
-            bars_returned,
-            duration_ms,
-            http_status_code,
-            error_class,
-            error,
-        )
-        log.info(
-            "ohlc source attempt",
-            extra={
-                "attempt_id": attempt_id,
-                "trigger": trigger,
-                "instrument": instrument,
-                "tf": timeframe,
-                "gap_start": g_start,
-                "gap_end": g_end,
-                "source": source_name,
-                "outcome": outcome,
-                "bars_returned": bars_returned,
-                "duration_ms": duration_ms,
-                "error_class": error_class,
-                "error": error,
-            },
-        )
-
     for gap_start, gap_end in gaps:
-        gap_filled = False
-        for source, breaker in list(registry.entries):
-            if timeframe not in source.supported_timeframes:
-                _record_and_log(
-                    source_name=source.name,
-                    g_start=gap_start,
-                    g_end=gap_end,
-                    outcome="skipped_no_timeframe",
-                    bars_returned=0,
-                    duration_ms=None,
-                    http_status_code=None,
-                    error_class=None,
-                    error=None,
-                )
-                continue
-            if not breaker.allows():
-                _record_and_log(
-                    source_name=source.name,
-                    g_start=gap_start,
-                    g_end=gap_end,
-                    outcome="skipped_breaker",
-                    bars_returned=0,
-                    duration_ms=None,
-                    http_status_code=None,
-                    error_class=None,
-                    error=None,
-                )
-                attempts.append(
-                    AttemptRecord(
-                        source=source.name,
-                        outcome="skipped",
-                        count=0,
-                        error=None,
-                    )
-                )
-                continue
-
-            t0 = time.monotonic()
-            try:
-                if token_bucket is not None:
-                    with token_bucket.acquire(timeout=60):
-                        bars = source.fetch(instrument, timeframe, gap_start, gap_end)
-                else:
-                    bars = source.fetch(instrument, timeframe, gap_start, gap_end)
-            except TimeoutError as te:
-                dur_ms = int((time.monotonic() - t0) * 1000)
-                _record_and_log(
-                    source_name=source.name,
-                    g_start=gap_start,
-                    g_end=gap_end,
-                    outcome="skipped_rate_limit",
-                    bars_returned=0,
-                    duration_ms=dur_ms,
-                    http_status_code=None,
-                    error_class="rate_limit_token_bucket",
-                    error=repr(te),
-                )
-                attempts.append(
-                    AttemptRecord(
-                        source=source.name,
-                        outcome="skipped",
-                        count=0,
-                        error=repr(te),
-                    )
-                )
-                continue
-            except Exception as e:
-                dur_ms = int((time.monotonic() - t0) * 1000)
-                breaker.record_failure(e)
-                _persist_breaker(db_path, breaker)
-                _record_and_log(
-                    source_name=source.name,
-                    g_start=gap_start,
-                    g_end=gap_end,
-                    outcome="failed",
-                    bars_returned=0,
-                    duration_ms=dur_ms,
-                    http_status_code=http_status(e),
-                    error_class=classify_exception(e)[0],
-                    error=repr(e),
-                )
-                attempts.append(
-                    AttemptRecord(
-                        source=source.name,
-                        outcome="failed",
-                        count=0,
-                        error=repr(e),
-                    )
-                )
-                continue
-
-            dur_ms = int((time.monotonic() - t0) * 1000)
-            breaker.record_success()
-            _persist_breaker(db_path, breaker)
-            bars_collected.extend(bars)
-            outcome = "ok" if bars else "empty"
-            _record_and_log(
-                source_name=source.name,
-                g_start=gap_start,
-                g_end=gap_end,
-                outcome=outcome,
-                bars_returned=len(bars),
-                duration_ms=dur_ms,
-                http_status_code=None,
-                error_class=None,
-                error=None,
-            )
-            attempts.append(
-                AttemptRecord(
-                    source=source.name,
-                    outcome=outcome,
-                    count=len(bars),
-                    error=None,
-                )
-            )
-            gap_filled = True
-            break
+        bars, gap_filled = _try_sources_for_gap(
+            registry=registry,
+            db_path=db_path,
+            instrument=instrument,
+            timeframe=timeframe,
+            gap_start=gap_start,
+            gap_end=gap_end,
+            token_bucket=token_bucket,
+            trail=trail,
+        )
+        bars_collected.extend(bars)
         if gap_filled:
             any_gap_filled = True
         else:
@@ -371,7 +399,7 @@ def fetch_range(
     return FetchResult(
         status=status,
         bars_added=len(bars_collected),
-        attempts=attempts,
+        attempts=trail.records,
         attempt_id=attempt_id,
     )
 
