@@ -259,3 +259,30 @@ def test_attach_classification_sets_ftl_failure_attribute():
     assert returned is err
     assert err.ftl_failure.failure_class == "network"
     assert err.ftl_failure.retry_after_seconds is None
+
+
+def test_classify_exception_prefers_attached_classification():
+    from services.ohlc._classify import classify_exception
+
+    err = RuntimeError("boom")
+    err.ftl_failure = FailureClassification(failure_class="rate_limit", retry_after_seconds=42)
+    assert classify_exception(err) == ("rate_limit", 42)
+
+
+def test_classify_exception_falls_back_to_http_shape():
+    from services.ohlc._classify import classify_exception
+
+    class _Resp:
+        status_code = 503
+        headers = {}
+
+    class _Err(Exception):
+        response = _Resp()
+
+    assert classify_exception(_Err()) == ("server_error", None)
+
+
+def test_classify_exception_bare_exception_is_other():
+    from services.ohlc._classify import classify_exception
+
+    assert classify_exception(RuntimeError("boom")) == ("other", None)

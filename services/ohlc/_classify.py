@@ -1,16 +1,37 @@
-"""Helpers for attaching FailureClassification to adapter exceptions.
+"""OHLC failure classification — the single source of truth.
 
-Plan 18: adapters call `attach_classification(err, ...)` before re-raising
-so CircuitBreaker.record_failure can read a typed signal instead of
-sniffing exception internals.
+Adapters attach a FailureClassification before re-raising
+(attach_classification / classify_http_error); the circuit breaker and
+the fetcher's forensic trail both classify caught exceptions via
+classify_exception. Breaker behavior and the
+fetch_source_attempts.error_class column can therefore never disagree.
 """
 
 from __future__ import annotations
 
 import time
 from email.utils import parsedate_to_datetime
+from typing import Literal
 
-from services.ohlc.circuit_breaker import FailureClass, FailureClassification
+from pydantic import BaseModel, ConfigDict
+
+FailureClass = Literal["rate_limit", "server_error", "network", "no_data", "other"]
+
+
+class FailureClassification(BaseModel):
+    """Optional structured failure signal attached to adapter exceptions.
+
+    Adapters that know *why* a call failed (HTTP status code, explicit
+    Retry-After header, connection error) should attach an instance of
+    this model to the exception as an attribute named `ftl_failure`.
+    classify_exception looks for that attribute and falls back to
+    classifying from the exception shape if absent.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    failure_class: FailureClass
+    retry_after_seconds: int | None = None
 
 
 def attach_classification(
@@ -55,3 +76,28 @@ def classify_http_error(err: BaseException) -> tuple[FailureClass, int | None]:
     if code is not None and 500 <= code < 600:
         return "server_error", retry_after
     return "other", retry_after
+
+
+def classify_exception(err: BaseException) -> tuple[FailureClass, int | None]:
+    """Classify any exception raised by a source adapter.
+
+    Precedence:
+    1. An attached FailureClassification (adapters set this) wins.
+    2. An HTTP-shaped error (non-None `.response`) is classified by status
+       code + Retry-After header via classify_http_error.
+    3. Anything else is "other" — counts toward the slow-trip threshold
+       but never fast-trips the breaker.
+    """
+    attached = getattr(err, "ftl_failure", None)
+    if isinstance(attached, FailureClassification):
+        return attached.failure_class, attached.retry_after_seconds
+    if getattr(err, "response", None) is None:
+        return "other", None
+    return classify_http_error(err)
+
+
+def http_status(err: BaseException) -> int | None:
+    """Extract an HTTP status code from a `requests.HTTPError`-shaped exception."""
+    response = getattr(err, "response", None)
+    code = getattr(response, "status_code", None)
+    return int(code) if code is not None else None

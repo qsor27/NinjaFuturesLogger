@@ -227,3 +227,28 @@ def test_fetch_range_writes_attempt_even_when_cached(tmp_path):
     conn.close()
     assert row["final_status"] == "cached"
     assert row["bars_written"] == 0
+
+
+def test_trail_error_class_matches_breaker_classification(tmp_path):
+    """B5: the forensic trail must record the same class the breaker acted
+    on. A bare RuntimeError is 'other' to the breaker, so the trail must
+    say 'other' too — not NULL."""
+    db = _fresh_db(tmp_path)
+    reg = _make_registry(_BadSource(), clock=lambda: 10_000)
+    result = fetch_range(
+        db_path=db,
+        registry=reg,
+        instrument="MNQ",
+        timeframe="1m",
+        start=0,
+        end=300,
+        trigger="on_demand",
+    )
+    conn = connect(db)
+    rows = conn.execute(
+        "SELECT error_class FROM fetch_source_attempts WHERE attempt_id = ? AND outcome = 'failed'",
+        (result.attempt_id,),
+    ).fetchall()
+    conn.close()
+    assert rows, "expected failed source attempts"
+    assert all(r["error_class"] == "other" for r in rows)

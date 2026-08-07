@@ -2,27 +2,15 @@ import threading
 from collections.abc import Callable
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from services.ohlc._classify import (
+    FailureClass,
+    FailureClassification,
+    classify_exception,
+)
+
+__all__ = ["CircuitBreaker", "FailureClass", "FailureClassification", "State"]
 
 State = Literal["closed", "open", "half_open"]
-
-FailureClass = Literal["rate_limit", "server_error", "network", "no_data", "other"]
-
-
-class FailureClassification(BaseModel):
-    """Optional structured failure signal attached to adapter exceptions.
-
-    Adapters that know *why* a call failed (HTTP status code, explicit
-    Retry-After header, connection error) should attach an instance of
-    this model to the exception as an attribute named `ftl_failure`.
-    CircuitBreaker.record_failure looks for that attribute and falls back
-    to classifying from the exception shape if absent.
-    """
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    failure_class: FailureClass
-    retry_after_seconds: int | None = None
 
 
 class CircuitBreaker:
@@ -106,7 +94,7 @@ class CircuitBreaker:
     def record_failure(self, error: BaseException) -> None:
         with self._lock:
             now = self._clock()
-            cls, retry_after = self._classify(error)
+            cls, retry_after = classify_exception(error)
             if cls == "no_data":
                 # The provider answered; it just has no bars for the range
                 # (delisted contract, beyond-reach history, thin market).
@@ -178,23 +166,6 @@ class CircuitBreaker:
             self.last_success_at = row["last_success_at"]
             self.last_error = row["last_error"]
             self.last_failure_class = row["last_failure_class"]
-
-    def _classify(self, error: BaseException) -> tuple[FailureClass, int | None]:
-        """Return (class, retry_after_seconds).
-
-        Prefers an attached FailureClassification; falls back to sniffing
-        a `.response.status_code` attribute (`requests.HTTPError` shape).
-        """
-        attached = getattr(error, "ftl_failure", None)
-        if isinstance(attached, FailureClassification):
-            return attached.failure_class, attached.retry_after_seconds
-        response = getattr(error, "response", None)
-        code = getattr(response, "status_code", None)
-        if code == 429:
-            return "rate_limit", None
-        if code is not None and 500 <= code < 600:
-            return "server_error", None
-        return "other", None
 
     def _base_for(self, cls: FailureClass) -> int:
         if cls == "rate_limit":

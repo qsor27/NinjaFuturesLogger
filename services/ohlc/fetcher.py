@@ -4,6 +4,7 @@ from pathlib import Path
 from db import connect
 from logging_config import get_logger
 from models.bar import AttemptRecord, Bar, FetchResult
+from services.ohlc._classify import classify_exception, http_status
 from services.ohlc.attempts import (
     begin_attempt,
     complete_attempt,
@@ -11,7 +12,7 @@ from services.ohlc.attempts import (
     record_source_attempt,
 )
 from services.ohlc.breaker_persistence import persist_breaker
-from services.ohlc.circuit_breaker import CircuitBreaker, FailureClassification
+from services.ohlc.circuit_breaker import CircuitBreaker
 from services.ohlc.gap_detection import find_gaps
 from services.ohlc.gap_reports import update_gap_reports
 from services.ohlc.rate_limiter import TokenBucket
@@ -56,25 +57,6 @@ def _clamp_gaps_to_reach(
 # reads. Production code uses wall-clock seconds.
 def _now() -> int:
     return int(time.time())
-
-
-def _error_class(err: BaseException) -> str | None:
-    attached = getattr(err, "ftl_failure", None)
-    if isinstance(attached, FailureClassification):
-        return attached.failure_class
-    response = getattr(err, "response", None)
-    code = getattr(response, "status_code", None)
-    if code == 429:
-        return "rate_limit"
-    if code is not None and 500 <= code < 600:
-        return "server_error"
-    return None
-
-
-def _http_status(err: BaseException) -> int | None:
-    response = getattr(err, "response", None)
-    code = getattr(response, "status_code", None)
-    return int(code) if code is not None else None
 
 
 def fetch_range(
@@ -322,8 +304,8 @@ def fetch_range(
                     outcome="failed",
                     bars_returned=0,
                     duration_ms=dur_ms,
-                    http_status=_http_status(e),
-                    error_class=_error_class(e),
+                    http_status=http_status(e),
+                    error_class=classify_exception(e)[0],
                     error=repr(e),
                 )
                 attempts.append(
