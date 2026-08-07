@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
+from routes._params import BadParam, int_arg
 from services.ohlc.gap_detection import (
     classify_window,
     expected_session_slots,
@@ -35,7 +36,10 @@ def build_monitoring_blueprint() -> Blueprint:
 
     @bp.get("/api/data-health/completeness")
     def data_health_completeness():
-        days = int(request.args.get("days", str(DATA_HEALTH_LOOKBACK_DAYS)))
+        try:
+            days = int_arg(request.args, "days", default=DATA_HEALTH_LOOKBACK_DAYS, lo=1, hi=365)
+        except BadParam as e:
+            return jsonify({"error": str(e)}), 400
         now = int(time.time())
         start = now - days * 86400
         cutoff = now - ACTIVE_INSTRUMENTS_LOOKBACK_DAYS * 86400
@@ -82,9 +86,11 @@ def build_monitoring_blueprint() -> Blueprint:
             return jsonify({"error": f"unknown timeframe: {timeframe}"}), 400
 
         now = int(time.time())
-        default_days = DATA_HEALTH_LOOKBACK_DAYS
-        start = int(request.args.get("start", now - default_days * 86400))
-        end = int(request.args.get("end", now))
+        try:
+            start = int_arg(request.args, "start", default=now - DATA_HEALTH_LOOKBACK_DAYS * 86400)
+            end = int_arg(request.args, "end", default=now)
+        except BadParam as e:
+            return jsonify({"error": str(e)}), 400
 
         # Clamp the gap-listing window to the provider reach for this
         # timeframe — listing gaps that no source can ever serve only
@@ -186,7 +192,7 @@ def build_monitoring_blueprint() -> Blueprint:
             s = open_sources[0]
             opened_at = s.get("opened_at")
             since_str = time.strftime("%H:%M", time.localtime(opened_at)) if opened_at else "—"
-            line = f"{s['name']} tripped at {since_str}. " f"{open_gap_count} open gap(s)."
+            line = f"{s['name']} tripped at {since_str}. {open_gap_count} open gap(s)."
         else:
             verdict, icon, word = "attention", "yellow", "Attention"
             line = f"All sources healthy, {open_gap_count} gap(s) waiting on retries."

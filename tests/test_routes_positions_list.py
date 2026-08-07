@@ -203,3 +203,15 @@ def test_list_session_date_range_bad_format_returns_400(tmp_config):
         assert resp.status_code == 400
     finally:
         services.stop()
+
+
+def test_list_rejects_bad_paging_params(tmp_config):
+    app, services = create_app(tmp_config, start_background=False)
+    try:
+        client = app.test_client()
+        assert client.get("/api/positions?page=abc").status_code == 400
+        assert client.get("/api/positions?page=0").status_code == 400
+        assert client.get("/api/positions?page_size=0").status_code == 400
+        assert client.get("/api/positions?page_size=501").status_code == 400
+    finally:
+        services.stop()

@@ -208,3 +208,13 @@ def test_put_execution_custom_field_split_suffix_lands_on_parent(tmp_path: Path)
     assert res.status_code == 200
     res = client.get("/api/executions/E1/custom-fields")
     assert res.get_json()["values"] == {str(fid): "B-"}
+
+
+def test_delete_custom_field_non_integer_confirm_count_400(tmp_path: Path):
+    client = _setup_app(tmp_path)
+    fid = client.post(
+        "/api/custom-fields",
+        json={"name": "setup", "field_type": "text"},
+    ).get_json()["field"]["field_id"]
+    res = client.delete(f"/api/custom-fields/{fid}?confirm_count=abc")
+    assert res.status_code == 400

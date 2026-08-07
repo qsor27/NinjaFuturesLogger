@@ -596,6 +596,24 @@ def test_data_health_maintainer_endpoint(tmp_path):
         services.stop()
 
 
+def test_data_health_completeness_rejects_bad_days(monitoring_app):
+    app, _ = monitoring_app
+    client = app.test_client()
+    resp = client.get("/api/data-health/completeness?days=abc")
+    assert resp.status_code == 400
+    assert "days" in resp.get_json()["error"]
+    assert client.get("/api/data-health/completeness?days=0").status_code == 400
+
+
+def test_data_health_missing_rejects_bad_window(monitoring_app):
+    app, _ = monitoring_app
+    client = app.test_client()
+    resp = client.get("/api/data-health/missing/MNQ/1m?start=abc")
+    assert resp.status_code == 400
+    assert "start" in resp.get_json()["error"]
+    assert client.get("/api/data-health/missing/MNQ/1m?end=abc").status_code == 400
+
+
 def test_data_health_completeness_emits_out_of_reach(tmp_path):
     """An execution seeded 60 days ago should produce a cell where 1m
     and 5m are marked out_of_reach (at least partially) at a 90-day window."""

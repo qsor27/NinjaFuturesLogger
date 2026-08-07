@@ -7,6 +7,7 @@ from config import load_config
 from db import connect
 from logging_config import get_logger
 from models.settings import InstrumentConfig
+from routes._params import BadParam, int_arg
 from services.instruments import get_registry
 from services.ohlc.coverage_state import (
     list_coverage,
@@ -269,11 +270,14 @@ def build_settings_blueprint() -> Blueprint:
     def delete_custom_field(field_id: int):
         svc = _svc()
         actual = svc.affected_executions(field_id)
-        confirm_raw = request.args.get("confirm_count")
-        if confirm_raw is None:
+        try:
+            confirm_count = int_arg(request.args, "confirm_count", default=None)
+        except BadParam as e:
+            return jsonify({"error": str(e)}), 400
+        if confirm_count is None:
             return jsonify({"affected_executions": actual}), 409
         try:
-            svc.delete_definition(field_id, confirm_count=int(confirm_raw))
+            svc.delete_definition(field_id, confirm_count=confirm_count)
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
         return "", 204

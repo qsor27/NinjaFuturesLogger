@@ -4,6 +4,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from db import connect
 from logging_config import get_logger
+from routes._params import BadParam, int_arg
 from services.instruments import effective_commission, get_multiplier
 from services.integrity_db import mark_ignored, mark_resolved_by_user
 from services.markers import build_markers
@@ -110,11 +111,10 @@ def build_positions_blueprint() -> Blueprint:
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
         try:
-            page = int(request.args.get("page", "1"))
-            page_size = int(request.args.get("page_size", "50"))
-        except ValueError:
-            return jsonify({"error": "page and page_size must be integers"}), 400
-        page_size = max(1, min(page_size, 500))
+            page = int_arg(request.args, "page", default=1, lo=1)
+            page_size = int_arg(request.args, "page_size", default=50, lo=1, hi=500)
+        except BadParam as e:
+            return jsonify({"error": str(e)}), 400
         result = list_positions_page(
             _db_path(),
             filter_=filter_,

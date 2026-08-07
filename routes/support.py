@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from logging_config import get_logger
+from routes._params import BadParam, int_arg
 from services.support_bundle import build_bundle
 from services.version import get_version
 
@@ -19,13 +20,10 @@ def build_support_blueprint() -> Blueprint:
 
     @bp.get("/api/support/bundle")
     def support_bundle():
-        raw_days = request.args.get("days", str(DEFAULT_DAYS))
         try:
-            days = int(raw_days)
-        except ValueError:
-            return jsonify({"error": f"days must be an integer, got {raw_days!r}"}), 400
-        if days < MIN_DAYS or days > MAX_DAYS:
-            return jsonify({"error": f"days must be in [{MIN_DAYS}, {MAX_DAYS}]"}), 400
+            days = int_arg(request.args, "days", default=DEFAULT_DAYS, lo=MIN_DAYS, hi=MAX_DAYS)
+        except BadParam as e:
+            return jsonify({"error": str(e)}), 400
 
         db_path = current_app.config["FTL_DB_PATH"]
         log_dir = Path(current_app.config["FTL_LOG_DIR"])
