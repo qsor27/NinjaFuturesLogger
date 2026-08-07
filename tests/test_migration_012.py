@@ -10,8 +10,7 @@ def test_user_preferences_table_exists_after_migration(tmp_path):
     try:
         run_migrations(conn, Path("migrations"))
         row = conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name='user_preferences'"
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='user_preferences'"
         ).fetchone()
         assert row is not None
         cols = {c["name"]: c for c in conn.execute("PRAGMA table_info(user_preferences)")}

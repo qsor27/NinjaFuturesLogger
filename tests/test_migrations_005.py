@@ -56,12 +56,10 @@ def test_cascade_delete_execution_cleans_note_and_flag(tmp_path: Path):
             "VALUES ('abc','A','MNQ',1,'Buy','Buy',1,100.0,0.0,'Entry','1 L',NULL,'f.csv',1)"
         )
         conn.execute(
-            "INSERT INTO execution_notes (execution_id, note, updated_at) "
-            "VALUES ('abc','hello',1)"
+            "INSERT INTO execution_notes (execution_id, note, updated_at) VALUES ('abc','hello',1)"
         )
         conn.execute(
-            "INSERT INTO execution_flags (execution_id, reviewed, reviewed_at) "
-            "VALUES ('abc',1,1)"
+            "INSERT INTO execution_flags (execution_id, reviewed, reviewed_at) VALUES ('abc',1,1)"
         )
         conn.execute("COMMIT")
         conn.execute("DELETE FROM executions WHERE nt_execution_id='abc'")

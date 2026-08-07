@@ -101,13 +101,15 @@ def update_gap_reports(
 
 def list_open(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT * FROM ohlc_gap_reports WHERE state = 'open'"
-        " ORDER BY next_retry_at ASC"
+        "SELECT * FROM ohlc_gap_reports WHERE state = 'open' ORDER BY next_retry_at ASC"
     ).fetchall()
 
 
 def select_due(
-    conn: sqlite3.Connection, *, now: int, limit: int,
+    conn: sqlite3.Connection,
+    *,
+    now: int,
+    limit: int,
 ) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM ohlc_gap_reports"
@@ -142,7 +144,8 @@ def record_retry_outcome(
         return
 
     row = conn.execute(
-        "SELECT attempt_count FROM ohlc_gap_reports WHERE id=?", (gap_id,),
+        "SELECT attempt_count FROM ohlc_gap_reports WHERE id=?",
+        (gap_id,),
     ).fetchone()
     new_count = int(row["attempt_count"]) + 1
     if new_count >= ABANDON_AFTER_ATTEMPTS:
@@ -164,7 +167,10 @@ def record_retry_outcome(
 
 
 def reset_for_retry(
-    conn: sqlite3.Connection, *, gap_id: int, now: int,
+    conn: sqlite3.Connection,
+    *,
+    gap_id: int,
+    now: int,
 ) -> None:
     """User clicked 'Retry now' — reopen, clear counters, schedule immediate retry."""
     conn.execute(

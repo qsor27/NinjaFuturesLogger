@@ -91,7 +91,7 @@ def test_executions_unique_index_on_nt_execution_id(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:
         indexes = conn.execute(
-            "SELECT name, sql FROM sqlite_master " "WHERE type='index' AND tbl_name='executions'"
+            "SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='executions'"
         ).fetchall()
         names = {r[0] for r in indexes}
         assert "idx_executions_nt_execution_id" in names

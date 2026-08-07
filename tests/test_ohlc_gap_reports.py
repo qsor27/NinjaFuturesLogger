@@ -116,9 +116,7 @@ def test_update_gap_reports_marks_filled_gap_resolved(tmp_path):
         now=now + 100,
     )
     assert list_open(conn) == []
-    resolved = conn.execute(
-        "SELECT * FROM ohlc_gap_reports WHERE state='resolved'"
-    ).fetchone()
+    resolved = conn.execute("SELECT * FROM ohlc_gap_reports WHERE state='resolved'").fetchone()
     assert resolved["resolved_at"] == now + 100
 
 
@@ -173,11 +171,13 @@ def test_record_retry_outcome_increments_and_backs_off(tmp_path):
     )
     row = conn.execute("SELECT id FROM ohlc_gap_reports").fetchone()
     record_retry_outcome(
-        conn, gap_id=row["id"], attempt_id="abc", resolved=False, now=now,
+        conn,
+        gap_id=row["id"],
+        attempt_id="abc",
+        resolved=False,
+        now=now,
     )
-    r = conn.execute(
-        "SELECT * FROM ohlc_gap_reports WHERE id=?", (row["id"],)
-    ).fetchone()
+    r = conn.execute("SELECT * FROM ohlc_gap_reports WHERE id=?", (row["id"],)).fetchone()
     assert r["attempt_count"] == 1
     assert r["last_attempt_id"] == "abc"
     assert r["last_attempt_at"] == now
@@ -198,11 +198,13 @@ def test_record_retry_outcome_abandons_after_threshold(tmp_path):
     )
     row = conn.execute("SELECT id FROM ohlc_gap_reports").fetchone()
     record_retry_outcome(
-        conn, gap_id=row["id"], attempt_id="abc", resolved=False, now=now,
+        conn,
+        gap_id=row["id"],
+        attempt_id="abc",
+        resolved=False,
+        now=now,
     )
-    r = conn.execute(
-        "SELECT state FROM ohlc_gap_reports WHERE id=?", (row["id"],)
-    ).fetchone()
+    r = conn.execute("SELECT state FROM ohlc_gap_reports WHERE id=?", (row["id"],)).fetchone()
     assert r["state"] == "abandoned"
 
 
@@ -218,9 +220,7 @@ def test_reset_for_retry_reopens_abandoned(tmp_path):
     )
     row = conn.execute("SELECT id FROM ohlc_gap_reports").fetchone()
     reset_for_retry(conn, gap_id=row["id"], now=now)
-    r = conn.execute(
-        "SELECT * FROM ohlc_gap_reports WHERE id=?", (row["id"],)
-    ).fetchone()
+    r = conn.execute("SELECT * FROM ohlc_gap_reports WHERE id=?", (row["id"],)).fetchone()
     assert r["state"] == "open"
     assert r["attempt_count"] == 0
     assert r["next_retry_at"] == now

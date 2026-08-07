@@ -220,7 +220,7 @@ def build_ohlc_blueprint() -> Blueprint:
         conn = connect(_db_path())
         try:
             rows = conn.execute(
-                f"SELECT * FROM fetch_attempts WHERE {clause}" f" ORDER BY started_at DESC LIMIT ?",
+                f"SELECT * FROM fetch_attempts WHERE {clause} ORDER BY started_at DESC LIMIT ?",
                 (*params, limit),
             ).fetchall()
             by_attempt = {r["id"]: {**dict(r), "sources": []} for r in rows}
@@ -247,7 +247,7 @@ def build_ohlc_blueprint() -> Blueprint:
         try:
             if state == "all":
                 rows = conn.execute(
-                    "SELECT * FROM ohlc_gap_reports" " ORDER BY next_retry_at ASC LIMIT 500"
+                    "SELECT * FROM ohlc_gap_reports ORDER BY next_retry_at ASC LIMIT 500"
                 ).fetchall()
             else:
                 rows = conn.execute(

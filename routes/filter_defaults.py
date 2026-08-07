@@ -50,9 +50,7 @@ def build_filter_defaults_blueprint() -> Blueprint:
             if scope == "accounts":
                 if set(body.keys()) != {"accounts"}:
                     return (
-                        jsonify(
-                            {"error": "accounts body must be exactly {'accounts': [...]}"}
-                        ),
+                        jsonify({"error": "accounts body must be exactly {'accounts': [...]}"}),
                         400,
                     )
                 FilterDefaults(accounts=body["accounts"])

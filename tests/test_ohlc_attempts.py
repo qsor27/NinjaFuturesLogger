@@ -27,9 +27,7 @@ def test_migration_011_creates_all_four_tables(tmp_path):
         run_migrations(conn, Path("migrations"))
         tables = {
             r["name"]
-            for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
     finally:
         conn.close()

@@ -77,9 +77,9 @@ def test_mfe_mae_endpoint_never_imports_fetch_range():
     """Rule 6: the detail route must not pull fetch_range into its top-level imports."""
     import routes.positions as mod
 
-    assert (
-        "fetch_range" not in mod.__dict__
-    ), "routes/positions.py must not import fetch_range at module level — Rule 6"
+    assert "fetch_range" not in mod.__dict__, (
+        "routes/positions.py must not import fetch_range at module level — Rule 6"
+    )
 
 
 def test_efficiency_distribution_route_empty_dataset(tmp_config):

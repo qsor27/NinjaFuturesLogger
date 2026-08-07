@@ -98,9 +98,7 @@ def self_heal_tick(
                 start=gap_start,
                 end=gap_end,
             )
-            still_open = any(
-                g[0] == gap_start and g[1] == gap_end for g in remaining
-            )
+            still_open = any(g[0] == gap_start and g[1] == gap_end for g in remaining)
             conn.execute("BEGIN")
             record_retry_outcome(
                 conn,

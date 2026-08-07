@@ -54,7 +54,7 @@ def test_bars_has_lookup_index(tmp_path: Path):
         names = {
             r[0]
             for r in conn.execute(
-                "SELECT name FROM sqlite_master " "WHERE type='index' AND tbl_name='bars'"
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='bars'"
             ).fetchall()
         }
         assert "idx_bars_instrument_tf_time" in names

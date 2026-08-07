@@ -115,7 +115,7 @@ def test_parse_rejects_bad_price():
 
 
 def test_parse_rejects_bad_time():
-    line = "MNQ,Buy,1,4237.75,yesterday,id,Entry,1 L," "1,n,$0.00,1,Sim101,Apex Trader Funding ,"
+    line = "MNQ,Buy,1,4237.75,yesterday,id,Entry,1 L,1,n,$0.00,1,Sim101,Apex Trader Funding ,"
     with pytest.raises(ParseError, match="time"):
         _parse(line)
 
@@ -131,17 +131,14 @@ def test_parse_rejects_bad_entry_exit():
 
 def test_parse_rejects_empty_execution_id():
     line = (
-        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,,Entry,1 L,"
-        "1,n,$0.00,1,Sim101,Apex Trader Funding ,"
+        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,,Entry,1 L,1,n,$0.00,1,Sim101,Apex Trader Funding ,"
     )
     with pytest.raises(ParseError, match="execution id"):
         _parse(line)
 
 
 def test_parse_rejects_empty_account():
-    line = (
-        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L," "1,n,$0.00,1,,Apex Trader Funding ,"
-    )
+    line = "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L,1,n,$0.00,1,,Apex Trader Funding ,"
     with pytest.raises(ParseError, match="account"):
         _parse(line)
 
@@ -156,17 +153,14 @@ def test_parse_commission_with_no_dollar_prefix_still_accepted():
 
 
 def test_parse_empty_commission_becomes_zero():
-    line = (
-        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L," "1,n,,1,Sim101,Apex Trader Funding ,"
-    )
+    line = "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,1 L,1,n,,1,Sim101,Apex Trader Funding ,"
     e = _parse(line)
     assert e.commission == 0.0
 
 
 def test_parse_empty_position_after_becomes_none():
     line = (
-        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,,"
-        "1,n,$0.00,1,Sim101,Apex Trader Funding ,"
+        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,id,Entry,,1,n,$0.00,1,Sim101,Apex Trader Funding ,"
     )
     e = _parse(line)
     assert e.position_after is None
@@ -174,8 +168,7 @@ def test_parse_empty_position_after_becomes_none():
 
 def test_parse_dash_position_after_is_preserved_verbatim():
     line = (
-        "MNQ,Sell,1,4237.75,1/15/2025 2:45:30 PM,id,Exit,-,"
-        "1,n,$0.00,1,Sim101,Apex Trader Funding ,"
+        "MNQ,Sell,1,4237.75,1/15/2025 2:45:30 PM,id,Exit,-,1,n,$0.00,1,Sim101,Apex Trader Funding ,"
     )
     e = _parse(line)
     assert e.position_after == "-"

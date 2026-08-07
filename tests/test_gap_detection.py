@@ -120,15 +120,11 @@ def test_friday_and_sunday_session_hours_still_expected():
     from services.ohlc.gap_detection import expected_session_slots
 
     # Friday 14:00–16:00 CT (19:00–21:00 UTC) is in-session.
-    fri = expected_session_slots(
-        "MNQ", "1h", _t("2026-04-17T19:00:00"), _t("2026-04-17T21:00:00")
-    )
+    fri = expected_session_slots("MNQ", "1h", _t("2026-04-17T19:00:00"), _t("2026-04-17T21:00:00"))
     assert fri == [_t("2026-04-17T19:00:00"), _t("2026-04-17T20:00:00")]
 
     # Sunday 17:00–18:00 CT (22:00–23:00 UTC) is in-session (post-reopen).
-    sun = expected_session_slots(
-        "MNQ", "1h", _t("2026-04-19T22:00:00"), _t("2026-04-19T23:00:00")
-    )
+    sun = expected_session_slots("MNQ", "1h", _t("2026-04-19T22:00:00"), _t("2026-04-19T23:00:00"))
     assert sun == [_t("2026-04-19T22:00:00")]
 
 

@@ -85,7 +85,7 @@ def test_tick_ignores_trailing_partial_line(tmp_path: Path, migrated_db: Path):
     assert result.rows_inserted == 1
     with path.open("a", encoding="utf-8") as f:
         f.write(
-            ",4240.00,1/15/2025 3:00:00 PM,zid,Exit,-," "1,n,$0.00,1,Sim101,Apex Trader Funding ,\n"
+            ",4240.00,1/15/2025 3:00:00 PM,zid,Exit,-,1,n,$0.00,1,Sim101,Apex Trader Funding ,\n"
         )
     result = pipeline.ingest_tick(path)
     assert result.rows_inserted == 1

@@ -71,9 +71,7 @@ def test_seed_version_env_does_not_overwrite_existing_env(tmp_path, monkeypatch)
     install_root = tmp_path / "install"
     app_dir = install_root / "app"
     install_root.mkdir(parents=True, exist_ok=True)
-    (install_root / "version.txt").write_text(
-        "image_tag=v_from_file\n", encoding="utf-8"
-    )
+    (install_root / "version.txt").write_text("image_tag=v_from_file\n", encoding="utf-8")
     monkeypatch.setenv("FTL_IMAGE_TAG", "v_from_env")
     monkeypatch.delenv("FTL_GIT_SHA", raising=False)
 

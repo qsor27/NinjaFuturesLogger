@@ -95,7 +95,7 @@ def delete_range(
     deletion creates.
     """
     cur = conn.execute(
-        "DELETE FROM bars WHERE instrument = ? AND timeframe = ?" "  AND time >= ? AND time < ?",
+        "DELETE FROM bars WHERE instrument = ? AND timeframe = ?  AND time >= ? AND time < ?",
         (instrument, timeframe, start, end),
     )
     return cur.rowcount or 0

@@ -67,8 +67,7 @@ def test_integrity_open_partial_index_exists(tmp_path: Path):
     conn = _migrate(tmp_path)
     try:
         rows = conn.execute(
-            "SELECT name, sql FROM sqlite_master "
-            "WHERE type='index' AND tbl_name='integrity_issues'"
+            "SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='integrity_issues'"
         ).fetchall()
         names = {r[0] for r in rows}
         assert "idx_integrity_open" in names

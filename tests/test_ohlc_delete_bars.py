@@ -29,8 +29,7 @@ def _count_bars(db_path, *, instrument, timeframe, start, end):
 
     conn = connect(db_path)
     n = conn.execute(
-        "SELECT COUNT(*) FROM bars WHERE instrument=? AND timeframe=?"
-        " AND time >= ? AND time < ?",
+        "SELECT COUNT(*) FROM bars WHERE instrument=? AND timeframe=? AND time >= ? AND time < ?",
         (instrument, timeframe, start, end),
     ).fetchone()[0]
     conn.close()

@@ -226,9 +226,7 @@ def save_filter_default(
     if value is not None:
         if scope == "accounts":
             if set(value.keys()) != {"accounts"}:
-                raise ValueError(
-                    "accounts scope body must be exactly {'accounts': [...]}"
-                )
+                raise ValueError("accounts scope body must be exactly {'accounts': [...]}")
             FilterDefaults(accounts=value["accounts"])  # validates the list
         else:
             validator(**value)
