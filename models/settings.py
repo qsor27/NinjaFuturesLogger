@@ -1,8 +1,11 @@
-from typing import Literal
+from typing import Literal, get_args
 
 from models.base import StrictModel
 
 Timeframe = Literal["1m", "5m", "15m", "1h", "4h", "1d"]
+# The one runtime source of truth for chart timeframes. The migration CHECK
+# constraint on chart_defaults keeps its own frozen literal copy by design.
+VALID_TIMEFRAMES: tuple[str, ...] = get_args(Timeframe)
 FieldType = Literal["text", "number", "dropdown", "date", "boolean"]
 
 

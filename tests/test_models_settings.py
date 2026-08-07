@@ -161,3 +161,12 @@ def test_instrument_config_commission_round_trips():
     cfg = InstrumentConfig(**raw)
     assert cfg.commission_per_contract == 1.08
     assert cfg.model_dump()["commission_per_contract"] == 1.08
+
+
+def test_valid_timeframes_derived_from_literal():
+    from typing import get_args
+
+    from models.settings import VALID_TIMEFRAMES, Timeframe
+
+    assert VALID_TIMEFRAMES == ("1m", "5m", "15m", "1h", "4h", "1d")
+    assert VALID_TIMEFRAMES == get_args(Timeframe)

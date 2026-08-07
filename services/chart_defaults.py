@@ -15,6 +15,7 @@ import time
 from pathlib import Path
 
 from db import read_conn, transaction
+from models.settings import VALID_TIMEFRAMES
 
 DEFAULT_TIMEFRAME = "5m"
 VOLUME_VISIBLE_DEFAULT = True
@@ -43,7 +44,7 @@ def save_defaults(
     default_timeframe: str,
     volume_visible_default: bool,
 ) -> None:
-    if default_timeframe not in ("1m", "5m", "15m", "1h", "4h", "1d"):
+    if default_timeframe not in VALID_TIMEFRAMES:
         raise ValueError(f"invalid default_timeframe: {default_timeframe!r}")
     with transaction(db_path) as conn:
         conn.execute(

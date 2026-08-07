@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from config import load_config
 from db import connect
 from logging_config import get_logger
-from models.settings import InstrumentConfig
+from models.settings import VALID_TIMEFRAMES, InstrumentConfig
 from routes._params import BadParam, int_arg
 from services.execution_db import execution_exists
 from services.instruments import get_registry
@@ -146,7 +146,7 @@ def build_settings_blueprint() -> Blueprint:
         source_tz_provided = "source_timezone" in body
         stz = body.get("source_timezone")
 
-        if tf not in ("1m", "5m", "15m", "1h", "4h", "1d"):
+        if tf not in VALID_TIMEFRAMES:
             return jsonify({"error": "invalid default_timeframe"}), 400
         if not isinstance(vv, bool):
             return jsonify({"error": "volume_visible_default must be boolean"}), 400
