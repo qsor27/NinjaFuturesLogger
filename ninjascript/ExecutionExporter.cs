@@ -919,17 +919,17 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
         }
 
-        private void LogMessage(string message)
+        private void WriteLog(string level, string message)
         {
             try
             {
-                if (!EnableLogging) return;
+                if (level == "INFO" && !EnableLogging) return;
 
                 var logPath = Path.Combine(exportDirectory, "logs", "execution_export.log");
-                var logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - INFO - {message}";
+                var logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {level} - {message}";
 
                 File.AppendAllText(logPath, logEntry + Environment.NewLine);
-                Print(message); // Also print to NinjaTrader output window
+                Print(level == "ERROR" ? $"ERROR: {message}" : message); // Also print to NinjaTrader output window
             }
             catch
             {
@@ -937,20 +937,14 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
         }
 
+        private void LogMessage(string message)
+        {
+            WriteLog("INFO", message);
+        }
+
         private void LogError(string message)
         {
-            try
-            {
-                var logPath = Path.Combine(exportDirectory, "logs", "execution_export.log");
-                var logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - ERROR - {message}";
-
-                File.AppendAllText(logPath, logEntry + Environment.NewLine);
-                Print($"ERROR: {message}"); // Also print to NinjaTrader output window
-            }
-            catch
-            {
-                // Silently ignore logging errors to prevent cascading failures
-            }
+            WriteLog("ERROR", message);
         }
 
         private void CleanupResources()
