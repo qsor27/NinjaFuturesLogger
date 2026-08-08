@@ -115,8 +115,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger
 
         // Combined rule (2026-08 consolidation decision): backtest orders, orders tied
         // to a strategy entry signal, and ATM/strategy protective exits (matched by
-        // name) all bypass validation enforcement. The old Name.Contains("Strategy")
-        // heuristic is deliberately dropped. Deliberate behavior change: ATM/strategy
+        // name) all bypass validation enforcement. The old Name-substring heuristic
+        // ("Strategy") is deliberately dropped. Deliberate behavior change: ATM/strategy
         // protective stops now bypass validation instead of risking cancellation.
         public static bool IsAutomatedOrder(Order order)
         {
