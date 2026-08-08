@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using System.Security;
 using System.Text;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,9 +16,7 @@ using System.Windows.Media.Animation;
 using NinjaTrader.Cbi;
 using NinjaTrader.Gui;
 using NinjaTrader.Gui.Chart;
-using NinjaTrader.Data;
 using NinjaTrader.NinjaScript;
-using NinjaTrader.NinjaScript.DrawingTools;
 using NinjaTrader.NinjaScript.NinjaFuturesLogger;
 #endregion
 
@@ -28,7 +25,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 {
     /// <summary>
     /// ExecutionExporter - Automatically exports trade executions to CSV format
-    /// Compatible with FuturesTradingLog application
+    /// Compatible with NinjaFuturesLogger application
     /// Task 8.5-8.7: Extended with TradeValidation column support
     /// </summary>
     public class ExecutionExporter : Indicator
@@ -59,7 +56,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             if (State == State.SetDefaults)
             {
-                Description                     = @"Automatically exports trade executions to CSV format for FuturesTradingLog application";
+                Description                     = @"Automatically exports trade executions to CSV format for NinjaFuturesLogger application";
                 Name                           = "ExecutionExporter";
                 Calculate                      = Calculate.OnBarClose;
                 IsOverlay                      = false;
@@ -460,55 +457,6 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
 
             return Path.Combine(exportDir, filename);
-        }
-
-        /// <summary>
-        /// Writes data to file with retry logic for transient failures
-        /// </summary>
-        /// <param name="filePath">Full path to the file</param>
-        /// <param name="data">Data to write</param>
-        /// <param name="append">Whether to append or overwrite</param>
-        private void WriteToFileWithRetry(string filePath, string data, bool append)
-        {
-            int maxRetries = 3;
-            int retryDelayMs = 1000;
-
-            for (int attempt = 1; attempt <= maxRetries; attempt++)
-            {
-                try
-                {
-                    File.AppendAllText(filePath, data);
-                    return; // Success
-                }
-                catch (IOException ex)
-                {
-                    if (attempt < maxRetries)
-                    {
-                        LogError($"File write attempt {attempt} failed (IOException): {ex.Message}. Retrying in {retryDelayMs}ms...");
-                        Thread.Sleep(retryDelayMs);
-                    }
-                    else
-                    {
-                        LogError($"File write failed after {maxRetries} attempts (IOException): Path={filePath}, Error={ex.Message}");
-                        throw;
-                    }
-                }
-                catch (SecurityException ex)
-                {
-                    LogError($"File write failed (SecurityException): Permission denied for path {filePath}. Error: {ex.Message}. Please check folder permissions.");
-                    throw;
-                }
-                catch (UnauthorizedAccessException ex)
-                {
-                    LogError($"File write failed (UnauthorizedAccessException): Access denied for path {filePath}. Error: {ex.Message}. Please check folder permissions.");
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    LogError($"File write failed (Unexpected error): Type={ex.GetType().Name}, Path={filePath}, Error={ex.Message}");
-                    throw;
-                }
-            }
         }
 
         #endregion
@@ -1181,7 +1129,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         /// <summary>
         /// Directory path where CSV execution files will be exported.
-        /// Default: User's Documents folder under FuturesTradingLog\data
+        /// Default: User's Documents folder under NinjaFuturesLogger\data
         /// The directory will be created automatically if it doesn't exist.
         /// Subdirectories 'exported' and 'logs' will also be created.
         /// </summary>
@@ -1192,7 +1140,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         /// <summary>
         /// When enabled, creates one CSV file per trading session using session close date.
         /// When disabled, creates time-stamped files that rotate based on size limit.
-        /// Recommended: true for integration with FuturesTradingLog daily import.
+        /// Recommended: true for integration with NinjaFuturesLogger daily import.
         /// </summary>
         [NinjaScriptProperty]
         [Display(Name = "Create Daily Files", Description = "Create one CSV file per trading session (recommended for daily imports)", GroupName = "Settings", Order = 2)]
@@ -1245,11 +1193,11 @@ namespace NinjaTrader.NinjaScript.Indicators
         /// <summary>
         /// Enable trade validation tracking to mark closed positions for review.
         /// When enabled, tracks closed positions and saves validation state to file.
-        /// Integrates with FuturesTradingLog web interface for performance analysis.
+        /// Integrates with NinjaFuturesLogger web interface for performance analysis.
         /// Default: false (disabled)
         /// </summary>
         [NinjaScriptProperty]
-        [Display(Name = "Enable Validation Tracking", Description = "Track closed positions for validation in FuturesTradingLog (default: disabled)", GroupName = "Validation Settings", Order = 7)]
+        [Display(Name = "Enable Validation Tracking", Description = "Track closed positions for validation in NinjaFuturesLogger (default: disabled)", GroupName = "Validation Settings", Order = 7)]
         public bool EnableValidationTracking { get; set; }
 
         /// <summary>
@@ -1306,7 +1254,6 @@ namespace NinjaTrader.NinjaScript.Indicators
         private ScrollViewer scrollViewer;
         private PositionValidationTracker tracker;
         private ExecutionExporter exporter;
-        private bool isVisible;
         private int maxVisiblePositions;
         private const double PositionEntryHeight = 120.0;
         private TextBlock titleText;
@@ -1315,7 +1262,6 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             tracker = validationTracker;
             exporter = parentExporter;
-            isVisible = false;
             maxVisiblePositions = maxPositions;
 
             CreatePanelUI();
@@ -1529,7 +1475,6 @@ namespace NinjaTrader.NinjaScript.Indicators
             };
 
             mainPanel.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-            isVisible = true;
         }
 
         private void CollapsePanel()
@@ -1550,7 +1495,6 @@ namespace NinjaTrader.NinjaScript.Indicators
             };
 
             mainPanel.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-            isVisible = false;
         }
 
         public StackPanel GetPanel()

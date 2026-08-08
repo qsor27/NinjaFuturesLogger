@@ -1,19 +1,13 @@
 #region Using declarations
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
 using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Threading;
-using System.Xml.Serialization;
 using NinjaTrader.Cbi;
 using NinjaTrader.Gui;
 using NinjaTrader.Gui.Tools;
@@ -26,21 +20,18 @@ namespace NinjaTrader.NinjaScript.AddOns
     /// <summary>
     /// TradeFeedbackAddOn - Interactive trade validation interface for NinjaTrader
     /// Allows traders to mark closed positions as Valid or Invalid
-    /// Integrates with FuturesTradingLog application for performance analysis
+    /// Integrates with NinjaFuturesLogger application for performance analysis
     /// </summary>
     public class TradeFeedbackAddOn : NinjaTrader.NinjaScript.AddOnBase
     {
         #region Variables
         private PositionValidationTracker validationTracker;
-        private readonly object lockObject = new object();
 
         // Task 8.3: Settings variables with defaults
         private bool enableOrderBlocking = true;
         private int gracePeriodSeconds = 0;
-        private bool autoShowPanelOnPositionClose = true;
         private bool bypassAutomatedStrategies = true;
         private bool enableEmergencyOverride = true;
-        private int maxUnvalidatedPositionsToDisplay = 5;
         #endregion
 
         #region AddOn Lifecycle
@@ -55,20 +46,16 @@ namespace NinjaTrader.NinjaScript.AddOns
                 // Task 8.3: Initialize default settings
                 EnableOrderBlocking = true;
                 GracePeriodSeconds = 0;
-                AutoShowPanelOnPositionClose = true;
                 BypassAutomatedStrategies = true;
                 EnableEmergencyOverride = true;
-                MaxUnvalidatedPositionsToDisplay = 5;
             }
             else if (State == State.DataLoaded)
             {
                 // Task 8.4: Apply settings to AddOn behavior
                 enableOrderBlocking = EnableOrderBlocking;
                 gracePeriodSeconds = GracePeriodSeconds;
-                autoShowPanelOnPositionClose = AutoShowPanelOnPositionClose;
                 bypassAutomatedStrategies = BypassAutomatedStrategies;
                 enableEmergencyOverride = EnableEmergencyOverride;
-                maxUnvalidatedPositionsToDisplay = MaxUnvalidatedPositionsToDisplay;
 
                 // Initialize validation tracker (shared singleton; canonical state file,
                 // legacy files migrated on first ever touch)
@@ -88,7 +75,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                 }
 
                 Print("TradeFeedbackAddOn initialized. State file: " + TradeValidationShared.StateFilePath);
-                Print($"Settings - Order blocking: {enableOrderBlocking}, Grace period: {gracePeriodSeconds}s, Auto-show panel: {autoShowPanelOnPositionClose}, Max display: {maxUnvalidatedPositionsToDisplay}");
+                Print($"Settings - Order blocking: {enableOrderBlocking}, Grace period: {gracePeriodSeconds}s");
             }
             else if (State == State.Terminated)
             {
@@ -145,12 +132,6 @@ namespace NinjaTrader.NinjaScript.AddOns
                     validationTracker.AddPosition(positionId, entryTime, instrument, (decimal)pnl, requiresValidation);
 
                     Print($"Position closed: {instrument} P&L: {pnl:F2} - Requires validation: {requiresValidation}");
-
-                    // Task 8.4: Show validation panel if position requires validation AND auto-show is enabled
-                    if (requiresValidation && autoShowPanelOnPositionClose)
-                    {
-                        ShowValidationPanelForActiveCharts();
-                    }
                 }
             }
             catch (Exception ex)
@@ -211,7 +192,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                     Print($"Order detected: {e.Order.OrderId} - User should validate positions before proceeding");
 
                     // Task 7.4: Show validation enforcement modal
-                    ShowValidationEnforcementModal(unvalidatedPositions, e.Order);
+                    ShowValidationEnforcementModal(unvalidatedPositions);
                 }
             }
             catch (Exception ex)
@@ -224,7 +205,7 @@ namespace NinjaTrader.NinjaScript.AddOns
         /// Task 7.4: Shows validation enforcement modal dialog
         /// Task 7.5: Implements "Validate and Continue" workflow
         /// </summary>
-        private void ShowValidationEnforcementModal(List<PositionValidationEntry> unvalidatedPositions, Order blockedOrder)
+        private void ShowValidationEnforcementModal(List<PositionValidationEntry> unvalidatedPositions)
         {
             try
             {
@@ -234,7 +215,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                     try
                     {
                         // Create custom WPF window for validation enforcement
-                        var modal = new ValidationEnforcementWindow(unvalidatedPositions, validationTracker, blockedOrder, this);
+                        var modal = new ValidationEnforcementWindow(unvalidatedPositions, validationTracker, this);
                         modal.Owner = Application.Current.MainWindow;
                         modal.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
@@ -272,30 +253,6 @@ namespace NinjaTrader.NinjaScript.AddOns
         #endregion
 
         #region Chart Panel UI
-
-        /// <summary>
-        /// Shows validation panel on all active chart windows
-        /// </summary>
-        private void ShowValidationPanelForActiveCharts()
-        {
-            try
-            {
-                // This would need to iterate through active chart windows
-                // For now, this is a placeholder for the UI integration
-                // Actual implementation would require accessing ChartControl instances
-                Print("Validation panel would be shown on active charts");
-            }
-            catch (Exception ex)
-            {
-                Print($"Error showing validation panel: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Creates or retrieves validation panel for a chart window
-        /// </summary>
-        // Removed: ChartWindow not available in NinjaTrader AddOn context
-        // Chart panel UI will be implemented as a separate tool window instead
 
         #endregion
 
@@ -351,17 +308,6 @@ namespace NinjaTrader.NinjaScript.AddOns
         public int GracePeriodSeconds { get; set; }
 
         /// <summary>
-        /// Task 8.3: Auto-Show Panel on Position Close
-        /// Default: true
-        /// </summary>
-        [NinjaScriptProperty]
-        [Display(Name = "Auto-Show Panel on Position Close",
-                 Description = "Automatically display validation panel when a position closes",
-                 GroupName = "Trade Feedback Settings",
-                 Order = 3)]
-        public bool AutoShowPanelOnPositionClose { get; set; }
-
-        /// <summary>
         /// Task 8.3: Bypass Validation for Automated Strategies
         /// Default: true
         /// </summary>
@@ -383,319 +329,9 @@ namespace NinjaTrader.NinjaScript.AddOns
                  Order = 5)]
         public bool EnableEmergencyOverride { get; set; }
 
-        /// <summary>
-        /// Task 8.3: Maximum Unvalidated Positions to Display (1-10)
-        /// Default: 5
-        /// </summary>
-        [NinjaScriptProperty]
-        [Range(1, 10)]
-        [Display(Name = "Maximum Unvalidated Positions to Display",
-                 Description = "Maximum number of positions shown in validation panel (1-10)",
-                 GroupName = "Trade Feedback Settings",
-                 Order = 6)]
-        public int MaxUnvalidatedPositionsToDisplay { get; set; }
-
         #endregion
     }
 
-    #region ValidationPanel WPF UI Class
-
-    /// <summary>
-    /// WPF panel for displaying and interacting with position validation UI
-    /// Positioned on right edge of chart window
-    /// </summary>
-    public class ValidationPanel
-    {
-        private StackPanel mainPanel;
-        private ScrollViewer scrollViewer;
-        private PositionValidationTracker tracker;
-        private TradeFeedbackAddOn addOn;
-        private bool isVisible;
-        private int maxVisiblePositions;
-        private const double PositionEntryHeight = 120.0;
-
-        public ValidationPanel(PositionValidationTracker validationTracker, TradeFeedbackAddOn parentAddOn, int maxPositions)
-        {
-            tracker = validationTracker;
-            addOn = parentAddOn;
-            isVisible = false;
-            maxVisiblePositions = maxPositions; // Task 8.4: Use setting value
-
-            CreatePanelUI();
-        }
-
-        /// <summary>
-        /// Creates the WPF panel structure
-        /// </summary>
-        private void CreatePanelUI()
-        {
-            // Create main container panel
-            mainPanel = new StackPanel
-            {
-                Width = 150,
-                Background = new SolidColorBrush(Color.FromArgb(200, 30, 30, 30)), // Semi-transparent dark background
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 50, 10, 0),
-                Opacity = 0 // Start hidden for animation
-            };
-
-            // Create scroll viewer for position list with auto-scroll
-            scrollViewer = new ScrollViewer
-            {
-                MaxHeight = maxVisiblePositions * PositionEntryHeight,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden
-            };
-
-            // Container for position entries
-            var positionsStack = new StackPanel();
-            scrollViewer.Content = positionsStack;
-
-            mainPanel.Children.Add(scrollViewer);
-
-            // Initially collapsed
-            mainPanel.Visibility = Visibility.Collapsed;
-        }
-
-        /// <summary>
-        /// Updates panel with current unvalidated positions
-        /// </summary>
-        public void RefreshPositions()
-        {
-            if (mainPanel == null) return;
-
-            var positionsStack = (StackPanel)scrollViewer.Content;
-            positionsStack.Children.Clear();
-
-            var unvalidated = tracker.GetUnvalidated();
-
-            if (unvalidated.Count == 0)
-            {
-                // Fade out and collapse panel when no positions need validation
-                CollapsePanel();
-                return;
-            }
-
-            // Show and expand panel with animation
-            ExpandPanel();
-
-            // Add position entries (most recent first)
-            foreach (var position in unvalidated.OrderByDescending(p => p.CloseTimestamp))
-            {
-                var entryPanel = CreatePositionEntry(position);
-                positionsStack.Children.Add(entryPanel);
-            }
-
-            // Auto-scroll to top when new positions added
-            scrollViewer.ScrollToTop();
-        }
-
-        /// <summary>
-        /// Creates UI for a single position entry
-        /// </summary>
-        private StackPanel CreatePositionEntry(PositionValidationEntry position)
-        {
-            var entryPanel = new StackPanel
-            {
-                Margin = new Thickness(5),
-                Background = new SolidColorBrush(Color.FromArgb(100, 50, 50, 50))
-            };
-
-            // Instrument symbol display
-            var instrumentLabel = new TextBlock
-            {
-                Text = position.Instrument,
-                Foreground = Brushes.White,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(5, 5, 5, 2)
-            };
-            entryPanel.Children.Add(instrumentLabel);
-
-            // Entry/Exit time in HH:mm format
-            var timeLabel = new TextBlock
-            {
-                Text = position.CloseTimestamp.ToString("HH:mm"),
-                Foreground = Brushes.LightGray,
-                FontSize = 10,
-                Margin = new Thickness(5, 0, 5, 2)
-            };
-            entryPanel.Children.Add(timeLabel);
-
-            // P&L with color coding: green for profit, red for loss
-            var pnlLabel = new TextBlock
-            {
-                Text = $"P&L: ${position.PnL:F2}",
-                Foreground = position.PnL >= 0 ? Brushes.LimeGreen : Brushes.Red,
-                FontWeight = FontWeights.Bold,
-                Margin = new Thickness(5, 0, 5, 5)
-            };
-            entryPanel.Children.Add(pnlLabel);
-
-            // Button container - Valid/Invalid buttons side-by-side
-            var buttonPanel = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(5)
-            };
-
-            // Valid button: green background, white text
-            var validButton = new Button
-            {
-                Content = "✓ Valid",
-                Background = new SolidColorBrush(Color.FromRgb(0, 150, 0)),
-                Foreground = Brushes.White,
-                Width = 60,
-                Margin = new Thickness(2),
-                Cursor = Cursors.Hand
-            };
-            validButton.Click += (s, e) => OnValidButtonClick(position.PositionId);
-            buttonPanel.Children.Add(validButton);
-
-            // Invalid button: red background, white text
-            var invalidButton = new Button
-            {
-                Content = "✗ Invalid",
-                Background = new SolidColorBrush(Color.FromRgb(180, 0, 0)),
-                Foreground = Brushes.White,
-                Width = 60,
-                Margin = new Thickness(2),
-                Cursor = Cursors.Hand
-            };
-            invalidButton.Click += (s, e) => OnInvalidButtonClick(position.PositionId);
-            buttonPanel.Children.Add(invalidButton);
-
-            entryPanel.Children.Add(buttonPanel);
-
-            return entryPanel;
-        }
-
-        /// <summary>
-        /// Handles Valid button click
-        /// Updates tracker, logs action, and removes position from UI
-        /// </summary>
-        private void OnValidButtonClick(string positionId)
-        {
-            // Update validation tracker to "Valid"
-            tracker.MarkValidated(positionId, "Valid");
-
-            // Task 8.6: Update shared validation map for ExecutionExporter
-            addOn.UpdateSharedValidationMap(positionId, "Valid");
-
-            // Log validation action to NinjaTrader output window
-            System.Diagnostics.Debug.WriteLine($"Position {positionId} marked as Valid");
-
-            // Remove position from UI panel by refreshing
-            RefreshPositions();
-        }
-
-        /// <summary>
-        /// Handles Invalid button click
-        /// Updates tracker, logs action, and removes position from UI
-        /// </summary>
-        private void OnInvalidButtonClick(string positionId)
-        {
-            // Update validation tracker to "Invalid"
-            tracker.MarkValidated(positionId, "Invalid");
-
-            // Task 8.6: Update shared validation map for ExecutionExporter
-            addOn.UpdateSharedValidationMap(positionId, "Invalid");
-
-            // Log validation action to NinjaTrader output window
-            System.Diagnostics.Debug.WriteLine($"Position {positionId} marked as Invalid");
-
-            // Remove position from UI panel by refreshing
-            RefreshPositions();
-        }
-
-        /// <summary>
-        /// Expands panel with smooth fade-in animation
-        /// </summary>
-        private void ExpandPanel()
-        {
-            if (mainPanel == null) return;
-
-            mainPanel.Visibility = Visibility.Visible;
-
-            // Create fade-in animation
-            var fadeIn = new DoubleAnimation
-            {
-                From = 0,
-                To = 1,
-                Duration = TimeSpan.FromMilliseconds(300),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
-            };
-
-            mainPanel.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-            isVisible = true;
-        }
-
-        /// <summary>
-        /// Collapses panel with smooth fade-out animation
-        /// </summary>
-        private void CollapsePanel()
-        {
-            if (mainPanel == null) return;
-
-            // Create fade-out animation
-            var fadeOut = new DoubleAnimation
-            {
-                From = 1,
-                To = 0,
-                Duration = TimeSpan.FromMilliseconds(300),
-                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
-            };
-
-            fadeOut.Completed += (s, e) =>
-            {
-                // Collapse to minimal width after fade-out
-                mainPanel.Visibility = Visibility.Collapsed;
-            };
-
-            mainPanel.BeginAnimation(UIElement.OpacityProperty, fadeOut);
-            isVisible = false;
-        }
-
-        /// <summary>
-        /// Toggles panel visibility
-        /// </summary>
-        public void ToggleVisibility()
-        {
-            if (mainPanel == null) return;
-
-            if (isVisible)
-            {
-                CollapsePanel();
-            }
-            else
-            {
-                RefreshPositions();
-            }
-        }
-
-        /// <summary>
-        /// Gets the main WPF panel
-        /// </summary>
-        public StackPanel GetPanel()
-        {
-            return mainPanel;
-        }
-
-        /// <summary>
-        /// Cleanup resources
-        /// </summary>
-        public void Cleanup()
-        {
-            if (mainPanel != null)
-            {
-                mainPanel.Children.Clear();
-                mainPanel = null;
-            }
-        }
-    }
-
-    #endregion
 
     #region ValidationEnforcementWindow
 
@@ -707,18 +343,15 @@ namespace NinjaTrader.NinjaScript.AddOns
     {
         private List<PositionValidationEntry> unvalidatedPositions;
         private PositionValidationTracker tracker;
-        private Order blockedOrder;
         private TradeFeedbackAddOn addOn;
 
         public ValidationEnforcementWindow(
             List<PositionValidationEntry> positions,
             PositionValidationTracker validationTracker,
-            Order order,
             TradeFeedbackAddOn parentAddOn)
         {
             unvalidatedPositions = positions;
             tracker = validationTracker;
-            blockedOrder = order;
             addOn = parentAddOn;
 
             InitializeWindow();

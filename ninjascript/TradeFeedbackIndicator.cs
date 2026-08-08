@@ -1,17 +1,11 @@
 #region Using declarations
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
 using System.Linq;
 using System.Text;
-using System.Windows.Input;
 using NinjaTrader.Cbi;
-using NinjaTrader.Gui;
-using NinjaTrader.Gui.Chart;
-using NinjaTrader.Gui.Tools;
 using NinjaTrader.NinjaScript;
 using NinjaTrader.NinjaScript.NinjaFuturesLogger;
 #endregion
@@ -20,7 +14,7 @@ using NinjaTrader.NinjaScript.NinjaFuturesLogger;
 namespace NinjaTrader.NinjaScript.Indicators
 {
 	/// <summary>
-	/// Trade Feedback Indicator - Tracks closed positions and integrates with FuturesTradingLog
+	/// Trade Feedback Indicator - Tracks closed positions and integrates with NinjaFuturesLogger
 	/// </summary>
 	public class TradeFeedbackIndicator : Indicator
 	{
@@ -43,7 +37,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 		{
 			if (State == State.SetDefaults)
 			{
-				Description = @"Tracks trade positions for validation in FuturesTradingLog";
+				Description = @"Tracks trade positions for validation in NinjaFuturesLogger";
 				Name = "TradeFeedbackIndicator";
 				Calculate = Calculate.OnBarClose;
 				IsOverlay = true;
@@ -149,12 +143,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 				// Check if position just went to flat (closed)
 				if (pos.MarketPosition == MarketPosition.Flat && pos.Quantity == 0)
 				{
-					// Get average prices from position
-					double averagePrice = pos.AveragePrice;
-
-					// Calculate approximate P&L (this is a rough estimate since position is closed)
-					// In reality, we'd need to track entry/exit prices separately
-					// For now, just mark it for validation
 					Print($"✓ POSITION CLOSED: {instrument} [{account}] - Adding to validation tracker");
 
 					var positionId = TradeValidationShared.GeneratePositionId(DateTime.Now, instrument, account);
@@ -237,7 +225,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 								}
 
 								message.AppendLine();
-								message.AppendLine("Please validate in FuturesTradingLog web interface");
+								message.AppendLine("Please validate in NinjaFuturesLogger web interface");
 
 								if (enableEmergencyOverride)
 								{
@@ -257,10 +245,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 				Print($"✗ Error in OnOrderUpdate: {ex.Message}");
 			}
 		}
-
-		#endregion
-
-		#region Helper Methods
 
 		#endregion
 	}
