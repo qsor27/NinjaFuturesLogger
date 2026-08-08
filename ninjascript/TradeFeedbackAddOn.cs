@@ -32,6 +32,10 @@ namespace NinjaTrader.NinjaScript.AddOns
         private int gracePeriodSeconds = 0;
         private bool bypassAutomatedStrategies = true;
         private bool enableEmergencyOverride = true;
+
+        // Cumulative realized PnL per account, sampled at each flat transition; the
+        // delta is the realized PnL of the trade that just closed.
+        private readonly Dictionary<string, double> lastRealizedPnlByAccount = new Dictionary<string, double>();
         #endregion
 
         #region AddOn Lifecycle
@@ -70,6 +74,15 @@ namespace NinjaTrader.NinjaScript.AddOns
                         {
                             account.PositionUpdate += OnPositionUpdate;
                             account.OrderUpdate += OnOrderUpdate;
+
+                            try
+                            {
+                                lastRealizedPnlByAccount[account.Name] = account.Get(AccountItem.RealizedProfitLoss, Currency.UsDollar);
+                            }
+                            catch
+                            {
+                                lastRealizedPnlByAccount[account.Name] = 0;
+                            }
                         }
                     }
                 }
@@ -122,13 +135,29 @@ namespace NinjaTrader.NinjaScript.AddOns
                     var account = e.Position.Account?.Name ?? "Unknown";
                     var instrument = e.Position.Instrument?.FullName ?? "Unknown";
                     var entryTime = DateTime.Now; // Use current time as approximation
-                    var pnl = e.Position.GetUnrealizedProfitLoss(PerformanceUnit.Currency);
+
+                    // Realized PnL of the closing trade = delta of the account's cumulative
+                    // realized PnL since the last flat transition. (GetUnrealizedProfitLoss on an
+                    // already-flat position is ~0 and never triggered validation - the old bug.)
+                    double realizedNow = 0;
+                    try
+                    {
+                        if (e.Position.Account != null)
+                            realizedNow = e.Position.Account.Get(AccountItem.RealizedProfitLoss, Currency.UsDollar);
+                    }
+                    catch { }
+
+                    double baseline;
+                    if (!lastRealizedPnlByAccount.TryGetValue(account, out baseline))
+                        baseline = realizedNow;
+                    var pnl = realizedNow - baseline;
+                    lastRealizedPnlByAccount[account] = realizedNow;
 
                     // Generate position ID
                     var positionId = TradeValidationShared.GeneratePositionId(entryTime, instrument, account);
 
                     // Add to validation tracker (require validation for stopped-out positions)
-                    bool requiresValidation = pnl < 0; // Require validation for losses
+                    bool requiresValidation = pnl < 0; // Require validation for realized losses
                     validationTracker.AddPosition(positionId, entryTime, instrument, (decimal)pnl, requiresValidation);
 
                     Print($"Position closed: {instrument} P&L: {pnl:F2} - Requires validation: {requiresValidation}");
