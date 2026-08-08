@@ -1,5 +1,6 @@
 #region Using declarations
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -34,8 +35,10 @@ namespace NinjaTrader.NinjaScript.AddOns
         private bool enableEmergencyOverride = true;
 
         // Cumulative realized PnL per account, sampled at each flat transition; the
-        // delta is the realized PnL of the trade that just closed.
-        private readonly Dictionary<string, double> lastRealizedPnlByAccount = new Dictionary<string, double>();
+        // delta is the realized PnL of the trade that just closed. Account event
+        // callbacks (PositionUpdate) can fire on different threads, so this follows
+        // the file's existing cross-thread-map convention (see SharedValidationMap).
+        private readonly ConcurrentDictionary<string, double> lastRealizedPnlByAccount = new ConcurrentDictionary<string, double>();
         #endregion
 
         #region AddOn Lifecycle
@@ -139,13 +142,27 @@ namespace NinjaTrader.NinjaScript.AddOns
                     // Realized PnL of the closing trade = delta of the account's cumulative
                     // realized PnL since the last flat transition. (GetUnrealizedProfitLoss on an
                     // already-flat position is ~0 and never triggered validation - the old bug.)
-                    double realizedNow = 0;
+                    // A failed/unavailable read must never fabricate a PnL or mutate the baseline:
+                    // that would either poison the NEXT trade's delta or produce a false "large
+                    // loss" (0 - baseline) that wrongly triggers validation/order-blocking. So we
+                    // skip validation tracking for this closed position entirely and log it -
+                    // no AddPosition call, no baseline write.
+                    double realizedNow;
                     try
                     {
-                        if (e.Position.Account != null)
-                            realizedNow = e.Position.Account.Get(AccountItem.RealizedProfitLoss, Currency.UsDollar);
+                        if (e.Position.Account == null)
+                        {
+                            Print($"Skipping validation tracking for {instrument}: position has no Account reference");
+                            return;
+                        }
+
+                        realizedNow = e.Position.Account.Get(AccountItem.RealizedProfitLoss, Currency.UsDollar);
                     }
-                    catch { }
+                    catch (Exception readEx)
+                    {
+                        Print($"Error reading RealizedProfitLoss for {account}: {readEx.Message} - skipping validation tracking for this closed position");
+                        return;
+                    }
 
                     double baseline;
                     if (!lastRealizedPnlByAccount.TryGetValue(account, out baseline))
