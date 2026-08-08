@@ -84,7 +84,13 @@ namespace NinjaTrader.NinjaScript.AddOns
                             }
                             catch
                             {
-                                lastRealizedPnlByAccount[account.Name] = 0;
+                                // Do NOT write a 0 baseline here - a failed seed read must never
+                                // fabricate a baseline, or the first close on this account would
+                                // compute pnl = realizedNow - 0, a false "large loss" that wrongly
+                                // triggers validation/order-blocking. Leave the map entry absent;
+                                // OnPositionUpdate's missing-baseline self-heal (baseline =
+                                // realizedNow -> delta 0) handles the first close safely.
+                                Print($"Failed to seed realized P&L baseline for account {account.Name} - will self-heal on first close");
                             }
                         }
                     }
@@ -555,6 +561,15 @@ namespace NinjaTrader.NinjaScript.AddOns
 
             // Task 8.6: Update shared validation map for ExecutionExporter
             addOn.UpdateSharedValidationMap(positionId, status);
+
+            try
+            {
+                TradeValidationShared.SaveState();
+            }
+            catch (Exception saveEx)
+            {
+                addOn.Print($"Error saving validation state: {saveEx.Message}");
+            }
 
             // Remove from unvalidated list
             unvalidatedPositions.RemoveAll(p => p.PositionId == positionId);

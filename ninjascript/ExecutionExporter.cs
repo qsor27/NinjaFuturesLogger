@@ -6,7 +6,6 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
-using System.Security;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -1423,6 +1422,15 @@ namespace NinjaTrader.NinjaScript.Indicators
             tracker.MarkValidated(positionId, "Valid");
             TradeValidationShared.SharedValidationMap.AddOrUpdate(positionId, "Valid", (key, oldValue) => "Valid");
 
+            try
+            {
+                TradeValidationShared.SaveState();
+            }
+            catch (Exception saveEx)
+            {
+                exporter.Print($"Error saving validation state: {saveEx.Message}");
+            }
+
             // Remove from queued positions if present
             if (ExecutionExporter.QueuedPositionsMap.TryRemove(positionId, out int queuedCount))
             {
@@ -1440,6 +1448,15 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             tracker.MarkValidated(positionId, "Invalid");
             TradeValidationShared.SharedValidationMap.AddOrUpdate(positionId, "Invalid", (key, oldValue) => "Invalid");
+
+            try
+            {
+                TradeValidationShared.SaveState();
+            }
+            catch (Exception saveEx)
+            {
+                exporter.Print($"Error saving validation state: {saveEx.Message}");
+            }
 
             // Remove from queued positions if present
             if (ExecutionExporter.QueuedPositionsMap.TryRemove(positionId, out int queuedCount))
