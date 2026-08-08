@@ -23,7 +23,9 @@ namespace NinjaTrader.NinjaScript.Indicators
 
 		// Owner-instance guard: exactly one live indicator instance holds the
 		// Account.All subscriptions; released on Terminated so a later instance
-		// can resubscribe (fixes the never-reset static isInitialized bug).
+		// can resubscribe (fixes the legacy never-reset static-init bug: the old
+		// one-shot guard was never cleared, so after the first instance
+		// terminated no new instance ever resubscribed until NT restart).
 		private static TradeFeedbackIndicator activeInstance;
 		private static readonly object activeInstanceLock = new object();
 
