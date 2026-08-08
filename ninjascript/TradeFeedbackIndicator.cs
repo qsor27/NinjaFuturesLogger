@@ -13,6 +13,7 @@ using NinjaTrader.Gui;
 using NinjaTrader.Gui.Chart;
 using NinjaTrader.Gui.Tools;
 using NinjaTrader.NinjaScript;
+using NinjaTrader.NinjaScript.NinjaFuturesLogger;
 #endregion
 
 //This namespace holds Indicators in this folder and is required. Do not change it.
@@ -23,19 +24,20 @@ namespace NinjaTrader.NinjaScript.Indicators
 	/// </summary>
 	public class TradeFeedbackIndicator : Indicator
 	{
-		private static PositionValidationTracker validationTracker;
-		private static string stateFilePath;
-		private static bool isInitialized = false;
+		private PositionValidationTracker validationTracker;
 		private readonly object lockObject = new object();
+
+		// Owner-instance guard: exactly one live indicator instance holds the
+		// Account.All subscriptions; released on Terminated so a later instance
+		// can resubscribe (fixes the never-reset static isInitialized bug).
+		private static TradeFeedbackIndicator activeInstance;
+		private static readonly object activeInstanceLock = new object();
 
 		// Settings
 		private bool enableOrderBlocking = true;
 		private int gracePeriodSeconds = 0;
 		private bool bypassAutomatedStrategies = true;
 		private bool enableEmergencyOverride = true;
-
-		// Shared static dictionary for ExecutionExporter integration
-		public static ConcurrentDictionary<string, string> SharedValidationMap = new ConcurrentDictionary<string, string>();
 
 		protected override void OnStateChange()
 		{
@@ -52,67 +54,73 @@ namespace NinjaTrader.NinjaScript.Indicators
 			}
 			else if (State == State.DataLoaded)
 			{
-				// Initialize only once (static singleton pattern)
-				if (!isInitialized)
+				lock (activeInstanceLock)
 				{
-					try
+					// Only one live instance owns the account subscriptions
+					if (activeInstance == null)
 					{
-						// Setup state file path
-						var myDocuments = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-						var baseDirectory = Path.Combine(myDocuments, "FuturesTradingLog");
-						Directory.CreateDirectory(baseDirectory);
-						stateFilePath = Path.Combine(baseDirectory, "trade_feedback_state.txt");
+						try
+						{
+							// Shared singleton: canonical state file, legacy migration on first touch
+							validationTracker = TradeValidationShared.Tracker;
 
-						// Initialize validation tracker
-						validationTracker = LoadState(stateFilePath);
+							// Subscribe to position update events for all accounts
+							if (Account.All != null)
+							{
+								foreach (Account account in Account.All)
+								{
+									if (account != null)
+									{
+										account.PositionUpdate += OnPositionUpdate;
+										account.OrderUpdate += OnOrderUpdate;
+										Print($"✓ Subscribed to events for account: {account.Name}");
+									}
+								}
+							}
 
-						// Subscribe to position update events for all accounts
+							activeInstance = this;
+
+							Print("✓ TradeFeedbackIndicator initialized successfully");
+							Print($"✓ State file: {TradeValidationShared.StateFilePath}");
+							Print($"✓ Order blocking: {(enableOrderBlocking ? "ENABLED" : "DISABLED")}");
+							Print("✓ Now tracking position closes...");
+						}
+						catch (Exception ex)
+						{
+							Print($"✗ TradeFeedbackIndicator Error: {ex.Message}");
+							Print($"✗ Stack trace: {ex.StackTrace}");
+						}
+					}
+				}
+			}
+			else if (State == State.Terminated)
+			{
+				lock (activeInstanceLock)
+				{
+					if (activeInstance == this)
+					{
+						// Save state before termination
+						if (validationTracker != null)
+						{
+							TradeValidationShared.SaveState();
+							Print("✓ TradeFeedbackIndicator: State saved");
+						}
+
+						// Unsubscribe from events
 						if (Account.All != null)
 						{
 							foreach (Account account in Account.All)
 							{
 								if (account != null)
 								{
-									account.PositionUpdate += OnPositionUpdate;
-									account.OrderUpdate += OnOrderUpdate;
-									Print($"✓ Subscribed to events for account: {account.Name}");
+									account.PositionUpdate -= OnPositionUpdate;
+									account.OrderUpdate -= OnOrderUpdate;
 								}
 							}
 						}
 
-						isInitialized = true;
-
-						Print("✓ TradeFeedbackIndicator initialized successfully");
-						Print($"✓ State file: {stateFilePath}");
-						Print($"✓ Order blocking: {(enableOrderBlocking ? "ENABLED" : "DISABLED")}");
-						Print("✓ Now tracking position closes...");
-					}
-					catch (Exception ex)
-					{
-						Print($"✗ TradeFeedbackIndicator Error: {ex.Message}");
-						Print($"✗ Stack trace: {ex.StackTrace}");
-					}
-				}
-			}
-			else if (State == State.Terminated)
-			{
-				// Save state before termination
-				if (isInitialized && validationTracker != null)
-				{
-					SaveState(validationTracker, stateFilePath);
-					Print("✓ TradeFeedbackIndicator: State saved");
-				}
-
-				// Unsubscribe from events
-				if (Account.All != null)
-				{
-					foreach (Account account in Account.All)
-					{
-						if (account != null)
-						{
-							account.PositionUpdate -= OnPositionUpdate;
-							account.OrderUpdate -= OnOrderUpdate;
-						}
+						// Release the claim so a later instance can resubscribe
+						activeInstance = null;
 					}
 				}
 			}
@@ -149,7 +157,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 					// For now, just mark it for validation
 					Print($"✓ POSITION CLOSED: {instrument} [{account}] - Adding to validation tracker");
 
-					var positionId = GeneratePositionId(DateTime.Now, instrument, account);
+					var positionId = TradeValidationShared.GeneratePositionId(DateTime.Now, instrument, account);
 
 					lock (lockObject)
 					{
@@ -185,14 +193,14 @@ namespace NinjaTrader.NinjaScript.Indicators
 				Print($"DEBUG: OrderUpdate - {e.Order.Instrument?.FullName} State: {e.OrderState}");
 
 				// Check for automated strategy bypass
-				if (bypassAutomatedStrategies && IsAutomatedOrder(e.Order))
+				if (bypassAutomatedStrategies && TradeValidationShared.IsAutomatedOrder(e.Order))
 				{
 					Print($"✓ Bypassing validation for automated order");
 					return;
 				}
 
 				// Check for emergency override
-				if (enableEmergencyOverride && IsEmergencyOverride())
+				if (enableEmergencyOverride && TradeValidationShared.IsEmergencyOverride())
 				{
 					Print($"✓ EMERGENCY OVERRIDE: Bypassing validation (Ctrl+Shift detected)");
 					return;
@@ -254,195 +262,8 @@ namespace NinjaTrader.NinjaScript.Indicators
 
 		#region Helper Methods
 
-		private string GeneratePositionId(DateTime timestamp, string instrument, string account)
-		{
-			return $"{timestamp:yyyy-MM-ddTHH:mm:ss}_{instrument}_{account}";
-		}
-
-		private bool IsAutomatedOrder(Order order)
-		{
-			if (order.IsBacktestOrder) return true;
-			if (!string.IsNullOrEmpty(order.Name) && order.Name.Contains("Strategy")) return true;
-			return false;
-		}
-
-		private bool IsEmergencyOverride()
-		{
-			try
-			{
-				return (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
-					   (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
-			}
-			catch
-			{
-				return false;
-			}
-		}
-
-		#endregion
-
-		#region State Persistence
-
-		private static void SaveState(PositionValidationTracker tracker, string filePath)
-		{
-			try
-			{
-				var state = tracker.SerializeToText();
-				File.WriteAllText(filePath, state, Encoding.UTF8);
-			}
-			catch (Exception ex)
-			{
-				System.Diagnostics.Debug.WriteLine($"Error saving state: {ex.Message}");
-			}
-		}
-
-		private static PositionValidationTracker LoadState(string filePath)
-		{
-			try
-			{
-				if (File.Exists(filePath))
-				{
-					var text = File.ReadAllText(filePath, Encoding.UTF8);
-					return PositionValidationTracker.DeserializeFromText(text);
-				}
-			}
-			catch (Exception ex)
-			{
-				System.Diagnostics.Debug.WriteLine($"Error loading state: {ex.Message}");
-			}
-
-			return new PositionValidationTracker();
-		}
-
 		#endregion
 	}
-
-	#region PositionValidationTracker Class
-
-	public class PositionValidationTracker
-	{
-		private Dictionary<string, PositionValidationEntry> positions;
-		private readonly object lockObject = new object();
-
-		public PositionValidationTracker()
-		{
-			positions = new Dictionary<string, PositionValidationEntry>();
-		}
-
-		public void AddPosition(string positionId, DateTime closeTimestamp, string instrument, decimal pnl, bool requiresValidation)
-		{
-			lock (lockObject)
-			{
-				if (!positions.ContainsKey(positionId))
-				{
-					positions[positionId] = new PositionValidationEntry
-					{
-						PositionId = positionId,
-						CloseTimestamp = closeTimestamp,
-						Instrument = instrument,
-						PnL = pnl,
-						RequiresValidation = requiresValidation,
-						ValidationStatus = null
-					};
-				}
-			}
-		}
-
-		public void MarkValidated(string positionId, string validationStatus)
-		{
-			lock (lockObject)
-			{
-				if (positions.ContainsKey(positionId))
-				{
-					positions[positionId].ValidationStatus = validationStatus;
-					positions[positionId].RequiresValidation = false;
-				}
-			}
-		}
-
-		public List<PositionValidationEntry> GetUnvalidated()
-		{
-			lock (lockObject)
-			{
-				return positions.Values
-					.Where(p => p.RequiresValidation)
-					.OrderByDescending(p => p.CloseTimestamp)
-					.ToList();
-			}
-		}
-
-		public List<PositionValidationEntry> GetUnvalidatedPositionsForInstrument(string instrument, int gracePeriodSeconds)
-		{
-			lock (lockObject)
-			{
-				DateTime now = DateTime.Now;
-				return positions.Values
-					.Where(p => p.RequiresValidation)
-					.Where(p => p.Instrument == instrument)
-					.Where(p => (now - p.CloseTimestamp).TotalSeconds >= gracePeriodSeconds)
-					.OrderByDescending(p => p.CloseTimestamp)
-					.ToList();
-			}
-		}
-
-		public string SerializeToText()
-		{
-			lock (lockObject)
-			{
-				StringBuilder sb = new StringBuilder();
-				foreach (var entry in positions.Values)
-				{
-					sb.AppendLine($"{entry.PositionId}|{entry.CloseTimestamp:o}|{entry.Instrument}|{entry.PnL}|{entry.ValidationStatus ?? "None"}|{entry.RequiresValidation}");
-				}
-				return sb.ToString();
-			}
-		}
-
-		public static PositionValidationTracker DeserializeFromText(string text)
-		{
-			var tracker = new PositionValidationTracker();
-
-			if (string.IsNullOrWhiteSpace(text))
-				return tracker;
-
-			string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-			foreach (string line in lines)
-			{
-				string[] parts = line.Split('|');
-				if (parts.Length == 6)
-				{
-					string positionId = parts[0];
-					DateTime closeTimestamp = DateTime.Parse(parts[1]);
-					string instrument = parts[2];
-					decimal pnl = (decimal)double.Parse(parts[3]);
-					bool requiresValidation = bool.Parse(parts[5]);
-
-					tracker.AddPosition(positionId, closeTimestamp, instrument, pnl, requiresValidation);
-
-					string validationStatus = parts[4];
-					if (!string.IsNullOrEmpty(validationStatus) && validationStatus != "None")
-					{
-						tracker.MarkValidated(positionId, validationStatus);
-					}
-				}
-			}
-
-			return tracker;
-		}
-	}
-
-	public class PositionValidationEntry
-	{
-		public string PositionId { get; set; }
-		public DateTime CloseTimestamp { get; set; }
-		public string Instrument { get; set; }
-		public decimal PnL { get; set; }
-		public bool RequiresValidation { get; set; }
-		public string ValidationStatus { get; set; }
-	}
-
-	#endregion
 }
 
 #region NinjaScript generated code. Neither change nor remove.
