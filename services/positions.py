@@ -104,12 +104,17 @@ def synthesize_fill(
     )
 
 
-def build_positions(
+def build_positions_and_fills(
     executions: Sequence[Execution],
-) -> tuple[list[Position], list[IntegrityIssue]]:
-    """Pure function: walk executions and emit positions."""
+) -> tuple[list[tuple[Position, list[Fill]]], list[IntegrityIssue]]:
+    """Pure function: walk executions and emit each position with its fills.
+
+    The Fill list is the position's walk-order view of its executions:
+    direction-reversing executions appear as synthesized `#close`/`#open`
+    sub-fills with split quantity and proportional commission.
+    """
     executions = order_executions_for_walk(executions)
-    positions: list[Position] = []
+    results: list[tuple[Position, list[Fill]]] = []
     issues: list[IntegrityIssue] = []
     current: list[Fill] = []
     running_qty = 0
@@ -136,7 +141,7 @@ def build_positions(
                 split_side=open_side,
             )
             current.append(sub_close)
-            positions.append(_make_position(current, is_open=False))
+            results.append((_make_position(current, is_open=False), current))
             current = [sub_open]
             running_qty = new_qty
             continue
@@ -145,11 +150,19 @@ def build_positions(
         running_qty = new_qty
 
         if running_qty == 0:
-            positions.append(_make_position(current, is_open=False))
+            results.append((_make_position(current, is_open=False), current))
             current = []
 
     if current:
-        positions.append(_make_position(current, is_open=True))
+        results.append((_make_position(current, is_open=True), current))
 
     issues.extend(cross_check_against_source_position_column(executions))
-    return positions, issues
+    return results, issues
+
+
+def build_positions(
+    executions: Sequence[Execution],
+) -> tuple[list[Position], list[IntegrityIssue]]:
+    """Pure function: walk executions and emit positions."""
+    results, issues = build_positions_and_fills(executions)
+    return [p for p, _fills in results], issues

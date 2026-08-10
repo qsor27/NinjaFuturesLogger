@@ -83,6 +83,83 @@ def test_executions_endpoint_exit_rows_have_pnl(app, tmp_config):
     assert exit_row["pnl_dollars_net"] == pytest.approx(2.0)
 
 
+def test_closing_fill_mislabeled_entry_in_csv_still_gets_pnl(app, tmp_config):
+    # NT sometimes labels a closing fill "Entry" when its own position
+    # tracking has drifted (seen in real data: MNQ SEP26 2026-07-13). The
+    # walk decides what closes a position — the CSV label must not blank
+    # the PnL columns on the detail page.
+    seed_executions(
+        tmp_config.db_path,
+        [
+            make_execution(
+                "a", account="Sim", timestamp=100, quantity=2, price=100.0,
+                position_after="2 L", imported_at=100,
+            ),
+            make_execution(
+                "b", account="Sim", timestamp=200, side="Sell", original_action="Sell",
+                quantity=1, price=101.0, entry_exit="Exit", position_after="1 L",
+                imported_at=200,
+            ),
+            make_execution(
+                "c", account="Sim", timestamp=300, side="Sell", original_action="Sell",
+                quantity=1, price=102.0, entry_exit="Entry", position_after="2 S",
+                imported_at=300,
+            ),
+        ],
+    )
+    resp = app.test_client().get("/api/positions/Sim/MNQ/a/executions")
+    assert resp.status_code == 200
+    rows = {e["nt_execution_id"]: e for e in resp.get_json()["executions"]}
+    assert rows["c"]["entry_exit"] == "Exit"
+    assert rows["c"]["avg_entry_price"] == pytest.approx(100.0)
+    assert rows["c"]["pnl_points"] == pytest.approx(2.0)
+    assert rows["c"]["pnl_dollars_net"] == pytest.approx(4.0)  # 2 pts × 2.0 multiplier
+
+
+def test_reversal_split_renders_suffixed_rows_with_split_quantities(app, tmp_config):
+    # Long 2, then Sell 5 reverses into Short 3. Doc 12 acceptance #6: the
+    # execution list shows #close/#open rows for split fills. The long
+    # position shows b#close (qty 2, proportional commission, PnL); the
+    # short position shows b#open (qty 3, no PnL — it's an entry).
+    seed_executions(
+        tmp_config.db_path,
+        [
+            make_execution(
+                "a", account="Sim", timestamp=100, quantity=2, price=100.0,
+                position_after="2 L", imported_at=100,
+            ),
+            make_execution(
+                "b", account="Sim", timestamp=200, side="Sell", original_action="Sell",
+                quantity=5, price=101.0, commission=5.0, entry_exit="Entry",
+                position_after="3 S", imported_at=200,
+            ),
+        ],
+    )
+    client = app.test_client()
+
+    resp = client.get("/api/positions/Sim/MNQ/a/executions")
+    assert resp.status_code == 200
+    long_rows = resp.get_json()["executions"]
+    assert [e["nt_execution_id"] for e in long_rows] == ["a", "b#close"]
+    close = long_rows[1]
+    assert close["quantity"] == 2
+    assert close["commission"] == pytest.approx(2.0)  # 5.0 × 2/5
+    assert close["entry_exit"] == "Exit"
+    assert close["pnl_points"] == pytest.approx(2.0)  # (101-100) × 2
+    assert close["pnl_dollars_net"] == pytest.approx(2.0)  # 2 × 2.0 mult − 2.0 comm
+
+    resp = client.get("/api/positions/Sim/MNQ/b%23open/executions")
+    assert resp.status_code == 200
+    short_rows = resp.get_json()["executions"]
+    assert [e["nt_execution_id"] for e in short_rows] == ["b#open"]
+    opener = short_rows[0]
+    assert opener["quantity"] == 3
+    assert opener["commission"] == pytest.approx(3.0)  # 5.0 × 3/5
+    assert opener["entry_exit"] == "Entry"
+    assert opener["pnl_points"] is None
+    assert opener["pnl_dollars_net"] is None
+
+
 def test_executions_endpoint_exit_pnl_uses_commission_fallback(app, tmp_config, tmp_path):
     import json
 

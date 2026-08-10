@@ -3,12 +3,12 @@ from pathlib import Path
 from db import read_conn
 from models.browsing import PageMeta, PositionListPage
 from models.execution import Execution
-from models.position import Position
+from models.position import Fill, Position
 from services.execution_db import load_executions
 from services.flags import list_flags_for_executions
 from services.notes import list_notes_for_executions
 from services.position_filters import PositionFilter, apply_filters, paginate
-from services.positions import build_positions
+from services.positions import build_positions, build_positions_and_fills
 
 
 def list_positions(
@@ -41,6 +41,23 @@ def get_position(
     for p in positions:
         if p.entry_execution_id == entry_execution_id:
             return p
+    return None
+
+
+def get_position_with_fills(
+    db_path: Path | str,
+    *,
+    account: str,
+    instrument: str,
+    entry_execution_id: str,
+) -> tuple[Position, list[Fill]] | None:
+    """Like get_position, but also returns the walk-order Fill list —
+    reversal executions appear as their #close/#open halves."""
+    executions = load_executions(db_path, account=account, instrument=instrument)
+    pairs, _issues = build_positions_and_fills(executions)
+    for p, fills in pairs:
+        if p.entry_execution_id == entry_execution_id:
+            return p, fills
     return None
 
 

@@ -113,9 +113,11 @@ function renderExecutions(executions, detail) {
     tr.dataset.executionId = e.nt_execution_id;
     tr.style.cursor = "pointer";
     tr.addEventListener("click", () => {
+      // Linking events are keyed by the un-suffixed id — the chart knows
+      // nothing about #close/#open sub-fills.
       document.dispatchEvent(
         new CustomEvent("executions-table:row-clicked", {
-          detail: { executionId: e.nt_execution_id },
+          detail: { executionId: stripSuffix(e.nt_execution_id) },
         }),
       );
     });
@@ -142,14 +144,20 @@ function renderExecutions(executions, detail) {
 }
 
 function flashRow(executionId) {
-  const tr = executionsRoot.querySelector(`tr[data-execution-id="${CSS.escape(executionId)}"]`);
-  if (!tr) return;
-  tr.scrollIntoView({ behavior: "smooth", block: "center" });
-  const prev = tr.style.background;
-  tr.style.background = "#FFD700";
-  setTimeout(() => {
-    tr.style.background = prev;
-  }, 1500);
+  // Match on the un-suffixed id: a reversal execution renders as a
+  // #close or #open row whose parent id is what the chart sends.
+  const rows = [...executionsRoot.querySelectorAll("tr[data-execution-id]")].filter(
+    (tr) => stripSuffix(tr.dataset.executionId) === executionId,
+  );
+  if (!rows.length) return;
+  rows[0].scrollIntoView({ behavior: "smooth", block: "center" });
+  for (const tr of rows) {
+    const prev = tr.style.background;
+    tr.style.background = "#FFD700";
+    setTimeout(() => {
+      tr.style.background = prev;
+    }, 1500);
+  }
 }
 
 document.addEventListener("chart:execution-clicked", (ev) => {

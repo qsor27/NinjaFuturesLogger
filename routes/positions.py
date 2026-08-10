@@ -17,6 +17,7 @@ from services.positions_service import (
     attach_metadata,
     get_filter_options,
     get_position,
+    get_position_with_fills,
     list_positions_page,
 )
 
@@ -168,29 +169,46 @@ def build_positions_blueprint() -> Blueprint:
 
     @bp.get("/api/positions/<account>/<instrument>/<entry_execution_id>/executions")
     def get_executions(account: str, instrument: str, entry_execution_id: str):
-        p = get_position(
+        pf = get_position_with_fills(
             _db_path(),
             account=account,
             instrument=instrument,
             entry_execution_id=entry_execution_id,
         )
-        if p is None:
+        if pf is None:
             return jsonify({"error": "not found"}), 404
+        p, fills = pf
+        # Rows come from the walk's Fill list, not raw executions: reversal
+        # executions appear as #close/#open halves with split quantity, and
+        # exit classification is by side — NT's CSV Entry/Exit label can be
+        # wrong when its own position tracking has drifted.
+        entry_side = "Buy" if p.side == "Long" else "Sell"
         sign = 1 if p.side == "Long" else -1
         multiplier = get_multiplier(p.instrument)
+        parents = {
+            ex.nt_execution_id: ex for ex in _position_executions(_db_path(), p)
+        }
         executions = []
-        for ex in _position_executions(_db_path(), p):
-            e = ex.model_dump()
-            if e["entry_exit"] == "Exit":
-                eff_comm = effective_commission(p.instrument, e["commission"], e["quantity"])
-                pnl_points = (e["price"] - p.entry_price) * e["quantity"] * sign
-                e["avg_entry_price"] = p.entry_price
-                e["pnl_points"] = round(pnl_points, 4)
-                e["pnl_dollars_net"] = round(pnl_points * multiplier - eff_comm, 2)
-            else:
+        for f in fills:
+            e = parents[strip_split_suffix(f.execution_id)].model_dump()
+            e["nt_execution_id"] = f.execution_id
+            e["timestamp"] = f.timestamp
+            e["side"] = f.side
+            e["quantity"] = f.quantity
+            e["price"] = f.price
+            e["commission"] = f.commission
+            if f.side == entry_side:
+                e["entry_exit"] = "Entry"
                 e["avg_entry_price"] = None
                 e["pnl_points"] = None
                 e["pnl_dollars_net"] = None
+            else:
+                e["entry_exit"] = "Exit"
+                eff_comm = effective_commission(p.instrument, f.commission, f.quantity)
+                pnl_points = (f.price - p.entry_price) * f.quantity * sign
+                e["avg_entry_price"] = p.entry_price
+                e["pnl_points"] = round(pnl_points, 4)
+                e["pnl_dollars_net"] = round(pnl_points * multiplier - eff_comm, 2)
             executions.append(e)
         return jsonify({"executions": executions})
 
