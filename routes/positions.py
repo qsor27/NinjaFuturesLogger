@@ -185,9 +185,7 @@ def build_positions_blueprint() -> Blueprint:
         entry_side = "Buy" if p.side == "Long" else "Sell"
         sign = 1 if p.side == "Long" else -1
         multiplier = get_multiplier(p.instrument)
-        parents = {
-            ex.nt_execution_id: ex for ex in _position_executions(_db_path(), p)
-        }
+        parents = {ex.nt_execution_id: ex for ex in _position_executions(_db_path(), p)}
         executions = []
         for f in fills:
             e = parents[strip_split_suffix(f.execution_id)].model_dump()

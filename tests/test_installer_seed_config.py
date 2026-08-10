@@ -80,6 +80,4 @@ def test_seed_template_static_lines_match_pages_pas():
             f"pages.pas no longer writes {fragment!r} — "
             "update SEED_TEMPLATE/STATIC_FRAGMENTS to match SeedAppJsonIfMissing"
         )
-        assert fragment in rendered, (
-            f"SEED_TEMPLATE dropped {fragment!r} — resync with pages.pas"
-        )
+        assert fragment in rendered, f"SEED_TEMPLATE dropped {fragment!r} — resync with pages.pas"
