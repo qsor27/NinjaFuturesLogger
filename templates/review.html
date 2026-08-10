@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Review — FuturesTradingLog{% endblock %}
+{% block content %}
+<h1>Review</h1>
+<div id="review-root">
+  <div id="review-status" aria-live="polite"></div>
+  <div id="review-card-meta"></div>
+  <div id="review-chart"></div>
+  <div id="review-controls">
+    <button id="review-valid" type="button" accesskey="v">Valid (V)</button>
+    <button id="review-invalid" type="button" accesskey="i">Invalid (I)</button>
+    <button id="review-next" type="button" hidden>Next (N)</button>
+    <button id="review-done" type="button">Done</button>
+  </div>
+  <div id="review-reveal" hidden></div>
+  <div id="review-summary" hidden></div>
+</div>
+{% endblock %}
+{% block scripts %}
+  <script type="module" src="{{ url_for('static', filename='js/review.js') }}"></script>
+{% endblock %}

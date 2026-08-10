@@ -23,6 +23,7 @@ from routes.nt_connection import build_nt_connection_blueprint
 from routes.ohlc import build_ohlc_blueprint
 from routes.pages import build_pages_blueprint
 from routes.positions import build_positions_blueprint
+from routes.review import build_review_blueprint
 from routes.settings import build_settings_blueprint
 from routes.stats import build_stats_blueprint
 from routes.support import build_support_blueprint
@@ -146,6 +147,7 @@ def create_app(
     app.register_blueprint(build_first_run_blueprint())
     app.register_blueprint(build_nt_connection_blueprint())
     app.register_blueprint(build_support_blueprint())
+    app.register_blueprint(build_review_blueprint())
 
     services.scheduler.add_job(
         lambda: pipeline.scan_inbox(config.inbox_dir),

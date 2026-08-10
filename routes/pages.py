@@ -34,6 +34,10 @@ def build_pages_blueprint() -> Blueprint:
     def calendar_page():
         return render_template("calendar.html")
 
+    @bp.get("/review")
+    def review_page():
+        return render_template("review.html")
+
     @bp.get("/imports")
     def imports_list():
         return render_template("imports.html")
