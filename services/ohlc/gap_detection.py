@@ -65,7 +65,8 @@ def expected_session_slots(
 ) -> list[int]:
     """Generate the timeframe-aligned slots in [start, end) that fall inside
     the instrument's trading session (i.e. NOT during the daily break).
-    Public since 2026-04-21 so services/mfe_mae.py can compute coverage."""
+    Public so callers outside gap detection (e.g. routes/monitoring.py) can
+    compute expected-bar counts."""
     stride = timeframe_seconds(timeframe)
     aligned_start = start - (start % stride)
     if aligned_start < start:

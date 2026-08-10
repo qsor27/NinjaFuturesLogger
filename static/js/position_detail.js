@@ -1,8 +1,7 @@
 import { fetchJSON, patchJSON, postJSON } from "./api.js";
-import { fmtMoney, formatTime, formatTimeOfDay, pnlClass, setText } from "./format.js";
+import { fmtMoney, formatTime, pnlClass, setText } from "./format.js";
 import { PriceChart } from "./PriceChart.js";
 import { mountCustomFields } from "./custom_fields_detail.js";
-import { pollJob, triggerFetch } from "./ohlc_jobs.js";
 
 const root = document.getElementById("detail-root");
 const { account, instrument, entryExecutionId } = root.dataset;
@@ -19,9 +18,6 @@ let priceChartPromise = null;
 const ENTRY_KEY = `${account}/${instrument}/${entryExecutionId}`;
 const DETAIL_URL = `/api/positions/${encodeURIComponent(account)}/${encodeURIComponent(instrument)}/${encodeURIComponent(entryExecutionId)}`;
 const EXECUTIONS_URL = `${DETAIL_URL}/executions`;
-const MFE_MAE_URL = `${DETAIL_URL}/mfe-mae`;
-
-const COVERAGE_DISPLAY_THRESHOLD = 0.8;
 
 function stripSuffix(eid) {
   for (const suf of ["#close", "#open"]) {
@@ -145,129 +141,6 @@ function renderExecutions(executions, detail) {
   executionsRoot.appendChild(table);
 }
 
-const excursionCardEl = document.getElementById("excursion-card");
-
-function renderExcursionCard(result, position) {
-  excursionCardEl.innerHTML = "";
-  const title = document.createElement("h2");
-  setText(title, "Excursion");
-  excursionCardEl.appendChild(title);
-
-  if (result === null) {
-    // Position still open.
-    const p = document.createElement("p");
-    setText(p, "Position still open — excursion data available after close.");
-    excursionCardEl.appendChild(p);
-    if (priceChartPromise) {
-      priceChartPromise.then((chart) => chart.setExcursionLines([])).catch(() => {});
-    }
-    return;
-  }
-  if (result.coverage < COVERAGE_DISPLAY_THRESHOLD) {
-    const status = document.createElement("p");
-    setText(status, `Incomplete bar data (${Math.round(result.coverage * 100)}% coverage).`);
-    excursionCardEl.appendChild(status);
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "coverage-cta";
-    setText(btn, "Fetch bars");
-    btn.addEventListener("click", () => triggerFetchBars(btn, position));
-    excursionCardEl.appendChild(btn);
-    if (priceChartPromise) {
-      priceChartPromise.then((chart) => chart.setExcursionLines([])).catch(() => {});
-    }
-    return;
-  }
-
-  const grid = document.createElement("div");
-  grid.className = "excursion-grid";
-  let effLabel = "—";
-  let effValue = "—";
-  if (result.capture_efficiency !== null) {
-    effLabel = "Capture";
-    effValue = `${Math.round(result.capture_efficiency * 100)}%`;
-  } else if (result.risk_efficiency !== null) {
-    effLabel = "Risk exit";
-    effValue = `${Math.round(result.risk_efficiency * 100)}%`;
-  }
-  const entries = [
-    ["MFE", fmtMoney(result.mfe_dollars, { decimals: 2 }), formatTimeOfDay(result.mfe_time)],
-    ["MAE", fmtMoney(result.mae_dollars, { decimals: 2 }), formatTimeOfDay(result.mae_time)],
-    ["Efficiency", effValue, effLabel],
-  ];
-  for (const [label, value, sub] of entries) {
-    const col = document.createElement("div");
-    col.className = "excursion-col";
-    const lab = document.createElement("div");
-    lab.className = "excursion-label";
-    setText(lab, label);
-    const val = document.createElement("div");
-    val.className = "excursion-value";
-    setText(val, value);
-    const subEl = document.createElement("div");
-    subEl.className = "excursion-sub";
-    setText(subEl, sub);
-    col.appendChild(lab);
-    col.appendChild(val);
-    col.appendChild(subEl);
-    grid.appendChild(col);
-  }
-  excursionCardEl.appendChild(grid);
-
-  const cov = document.createElement("div");
-  cov.className = "excursion-coverage";
-  setText(cov, `Coverage: ${Math.round(result.coverage * 100)}%`);
-  excursionCardEl.appendChild(cov);
-
-  if (priceChartPromise) {
-    const cs = getComputedStyle(document.documentElement);
-    const posColor = cs.getPropertyValue("--pos").trim() || "#22c55e";
-    const negColor = cs.getPropertyValue("--neg").trim() || "#ef4444";
-    priceChartPromise
-      .then((chart) => {
-        chart.setExcursionLines([
-          {
-            price: result.mfe_price,
-            color: posColor,
-            title: `MFE ${fmtMoney(result.mfe_dollars, { decimals: 2 })}`,
-            lineStyle: 2,
-            lineWidth: 1,
-          },
-          {
-            price: result.mae_price,
-            color: negColor,
-            title: `MAE ${fmtMoney(result.mae_dollars, { decimals: 2 })}`,
-            lineStyle: 2,
-            lineWidth: 1,
-          },
-        ]);
-      })
-      .catch(() => {
-        // chart didn't init; line drawing is a best-effort side effect
-      });
-  }
-}
-
-async function triggerFetchBars(btn, position) {
-  btn.disabled = true;
-  setText(btn, "Queuing...");
-  try {
-    // The fetch endpoint needs the exact window; use the position's
-    // entry/exit seconds (pad by 60s on each side for safety).
-    const start = Math.max(0, position.entry_time - 60);
-    const end = (position.exit_time ?? position.entry_time) + 60;
-    const jobId = await triggerFetch(position.instrument, "1m", start, end);
-    setText(btn, "Fetching...");
-    await pollJob(jobId);
-    const refreshed = await fetchJSON(MFE_MAE_URL);
-    renderExcursionCard(refreshed.result, position);
-  } catch (e) {
-    btn.disabled = false;
-    setText(btn, "Fetch bars");
-    console.error("fetch bars failed", e);
-  }
-}
-
 function flashRow(executionId) {
   const tr = executionsRoot.querySelector(`tr[data-execution-id="${CSS.escape(executionId)}"]`);
   if (!tr) return;
@@ -294,10 +167,9 @@ deleteBtn.addEventListener("click", async () => {
 
 (async () => {
   try {
-    const [detail, execs, mfeMae] = await Promise.all([
+    const [detail, execs] = await Promise.all([
       fetchJSON(DETAIL_URL),
       fetchJSON(EXECUTIONS_URL),
-      fetchJSON(MFE_MAE_URL),
     ]);
     renderHeader(detail);
     renderReviewedToggle(detail);
@@ -307,7 +179,6 @@ deleteBtn.addEventListener("click", async () => {
       mountCustomFields(cfContainer, detail, detail.position.entry_execution_id);
     }
     renderExecutions(execs.executions, detail);
-    renderExcursionCard(mfeMae.result, detail.position);
 
     // Mount the chart. PriceChart.init does its own fetches for markers,
     // bars, available timeframes, and source snapshots. It is fire-and-forget

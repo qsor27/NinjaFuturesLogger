@@ -133,17 +133,3 @@ class TradesPerDayBucket(StrictModel):
 
 class TradesPerDayResponse(StrictModel):
     buckets: list[TradesPerDayBucket]
-
-
-class EfficiencyHistogramBucket(StrictModel):
-    range_lo: float  # inclusive
-    range_hi: float  # exclusive (last bucket is inclusive at 1.0)
-    count: int
-
-
-class EfficiencyDistributionResponse(StrictModel):
-    capture_buckets: list[EfficiencyHistogramBucket]
-    risk_buckets: list[EfficiencyHistogramBucket]
-    n_winners: int
-    n_losers: int
-    n_below_coverage: int

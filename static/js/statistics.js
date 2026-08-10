@@ -4,7 +4,7 @@ import {
   renderFilterBar,
   STATS_TO_POSITIONS_PARAMS,
 } from "./stats_filter.js";
-import { mountLineChart, mountSimpleCountHistogram } from "./stats_charts.js";
+import { mountLineChart } from "./stats_charts.js";
 import { fetchJSON } from "./api.js";
 import { browserTz, escHtml, fmtMoney, pnlClass } from "./format.js";
 
@@ -17,7 +17,6 @@ const ENDPOINTS = [
   "by-hour",
   "by-day-of-week",
   "by-trades-per-day",
-  "efficiency-distribution",
 ];
 
 async function fetchAll(filter) {
@@ -304,30 +303,6 @@ function renderTradesPerDay(container, tpdData, filter) {
   wireDrilldownClicks(container);
 }
 
-function renderExitEfficiency(container, data) {
-  container.innerHTML = "";
-  const title = document.createElement("h2");
-  title.textContent = "Exit Efficiency";
-  container.appendChild(title);
-  const grid = document.createElement("div");
-  grid.className = "efficiency-histograms";
-  const capWrap = document.createElement("div");
-  capWrap.className = "efficiency-panel";
-  const riskWrap = document.createElement("div");
-  riskWrap.className = "efficiency-panel";
-  grid.appendChild(capWrap);
-  grid.appendChild(riskWrap);
-  container.appendChild(grid);
-
-  mountSimpleCountHistogram(capWrap, data.capture_buckets, "Capture (winners)");
-  mountSimpleCountHistogram(riskWrap, data.risk_buckets, "Risk exit (losers)");
-
-  const footer = document.createElement("div");
-  footer.className = "efficiency-footer";
-  footer.textContent = `${data.n_winners} winners · ${data.n_losers} losers · ${data.n_below_coverage} excluded`;
-  container.appendChild(footer);
-}
-
 async function refresh(filter) {
   document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "0.5"));
   try {
@@ -346,10 +321,6 @@ async function refresh(filter) {
       document.getElementById("stats-trades-per-day"),
       data["by-trades-per-day"],
       filter,
-    );
-    renderExitEfficiency(
-      document.getElementById("stats-exit-efficiency"),
-      data["efficiency-distribution"],
     );
 
     const equityCard = document.getElementById("stats-equity");
