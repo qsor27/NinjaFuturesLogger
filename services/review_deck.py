@@ -29,7 +29,8 @@ def crop_boundary(entry_ts: int) -> int:
 
 def net_pnl(position: Position) -> float:
     """Realized net PnL: gross dollars minus commissions. Closed positions only."""
-    assert position.dollars_pnl is not None
+    if position.dollars_pnl is None:
+        raise ValueError("net_pnl requires a closed position")
     return position.dollars_pnl - position.commission
 
 

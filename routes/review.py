@@ -56,6 +56,12 @@ def build_review_blueprint() -> Blueprint:
         timeframe = request.args.get("timeframe", "1m")
         if timeframe not in REVIEW_TIMEFRAMES:
             return jsonify({"error": f"unsupported timeframe: {timeframe}"}), 400
+        try:
+            sid = int(request.args.get("session_id", ""))
+        except ValueError:
+            return jsonify({"error": "session_id must be an integer"}), 400
+        if not session_exists(_db_path(), sid):
+            return jsonify({"error": "session not found"}), 404
         revealed = request.args.get("revealed") == "1"
         found = find_position(_db_path(), entry_execution_id)
         if found is None:
@@ -63,11 +69,10 @@ def build_review_blueprint() -> Blueprint:
         position, _fills = found
 
         if revealed:
-            try:
-                sid = int(request.args.get("session_id", ""))
-            except ValueError:
-                return jsonify({"error": "session_id must be an integer"}), 400
             if not has_attempt(_db_path(), sid, entry_execution_id):
+                log.warning(
+                    "reveal refused: no attempt for session=%s card=%s", sid, entry_execution_id
+                )
                 return jsonify({"error": "call first, then reveal"}), 403
             if position.exit_time is None:
                 return jsonify({"error": "position still open"}), 409

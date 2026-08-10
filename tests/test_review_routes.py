@@ -142,7 +142,123 @@ def test_end_session_returns_both_summaries(client, seeded):
     assert client.post("/api/review/sessions/999/end").status_code == 404
 
 
+def test_card_bars_bad_session_id_400(client, seeded):
+    resp = client.get("/api/review/cards/e1/bars?timeframe=1m&session_id=nope")
+    assert resp.status_code == 400
+
+
+def test_card_bars_unknown_session_404(client, seeded):
+    resp = client.get("/api/review/cards/e1/bars?timeframe=1m&session_id=999")
+    assert resp.status_code == 404
+
+
 def test_review_page_renders(client):
     resp = client.get("/review")
     assert resp.status_code == 200
     assert b"review" in resp.data.lower()
+
+
+def test_reversal_open_card_full_chain(client, app):
+    """A direction-reversing fill splits into synthesized #close/#open sub-fills
+    (services/positions.py). The #open sub-fill starts a second closed position
+    whose entry_execution_id is "<reversal_id>#open" — this exercises the review
+    deck end-to-end against that synthesized id, including the literal '#' in the
+    URL path (must be percent-encoded as %23 or the test client's URL parsing
+    treats it as a fragment separator, not part of the path)."""
+    db_path = app.config["FTL_DB_PATH"]
+
+    entry_ts = 300_040  # Buy 1 opens long
+    sell_ts = entry_ts + 300  # 300_340 — Sell 2 reverses long 1 -> short 1
+    close_ts = sell_ts + 300  # 300_640 — Buy 1 closes the resulting short
+
+    seed_executions(
+        db_path,
+        [
+            make_execution(
+                "e1",
+                timestamp=entry_ts,
+                side="Buy",
+                entry_exit="Entry",
+                quantity=1,
+                price=100.0,
+                position_after="1 L",
+            ),
+            make_execution(
+                "x1",
+                timestamp=sell_ts,
+                side="Sell",
+                entry_exit="Exit",
+                quantity=2,
+                price=101.0,
+                position_after="-1 S",
+            ),
+            make_execution(
+                "e2",
+                timestamp=close_ts,
+                side="Buy",
+                entry_exit="Exit",
+                quantity=1,
+                price=99.0,
+                position_after="-",
+            ),
+        ],
+    )
+
+    boundary1 = entry_ts - (entry_ts % 60)  # 300_000
+    boundary2 = sell_ts - (sell_ts % 60)  # 300_300
+
+    conn = connect(db_path)
+    try:
+        insert_many(
+            conn,
+            [make_bar(time=t) for t in range(boundary1 - 3600, close_ts + 1800, 60)],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    sid = _session(client)
+    open_card_id = "x1#open"
+
+    resp = client.get(f"/api/review/next-card?session_id={sid}")
+    assert resp.status_code == 200
+    card = resp.get_json()["card"]
+    if card["entry_execution_id"] != open_card_id:
+        # Only one other eligible card exists ("e1"); attempt it so the deck
+        # serves the #open card next.
+        client.post(
+            "/api/review/attempts",
+            json={
+                "session_id": sid,
+                "entry_execution_id": card["entry_execution_id"],
+                "call": "valid",
+            },
+        )
+        resp = client.get(f"/api/review/next-card?session_id={sid}")
+        assert resp.status_code == 200
+        card = resp.get_json()["card"]
+
+    assert card["entry_execution_id"] == open_card_id
+    assert card["side"] == "Short"
+
+    encoded_id = open_card_id.replace("#", "%23")
+    bars_url = f"/api/review/cards/{encoded_id}/bars?timeframe=1m&session_id={sid}"
+
+    resp = client.get(bars_url)
+    assert resp.status_code == 200
+    bars = resp.get_json()["bars"]
+    assert bars, "expected pre-call bars for the #open card"
+    assert max(b["time"] for b in bars) < boundary2
+
+    resp = client.post(
+        "/api/review/attempts",
+        json={"session_id": sid, "entry_execution_id": open_card_id, "call": "valid"},
+    )
+    assert resp.status_code == 201
+    reveal = resp.get_json()["reveal"]
+    assert reveal["exit_time"] == close_ts
+
+    resp = client.get(bars_url + "&revealed=1")
+    assert resp.status_code == 200
+    times = [b["time"] for b in resp.get_json()["bars"]]
+    assert max(times) > boundary2
