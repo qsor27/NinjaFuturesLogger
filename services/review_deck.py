@@ -1,9 +1,9 @@
 """Review deck: eligibility, ordering, and hindsight-free bar cropping.
 
-Pure functions live at the top (no sqlite, no Flask); DB glue is added at the
-bottom of this module in a later task. The load-bearing invariant: nothing
-returned by the card-serving helpers may include price data at or after the
-crop boundary (the start of the entry minute).
+The functions at the top of this module are pure (no I/O, no DB access); DB
+glue is appended below them. The load-bearing invariant: nothing returned by
+the card-serving helpers may include price data at or after the crop
+boundary (the start of the entry minute).
 """
 
 import random
@@ -83,3 +83,108 @@ def order_deck(
     rng.shuffle(fresh)
     seen.sort(key=lambda c: (stats[c.entry_execution_id][1], rng.random()))
     return fresh + seen
+
+
+# --- DB glue (appended below the pure core) ---------------------------------
+
+import sqlite3  # noqa: E402
+from collections import defaultdict  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from models.position import Fill  # noqa: E402
+from services.execution_db import load_executions  # noqa: E402
+from services.ohlc.store import read_range  # noqa: E402
+from services.positions import build_positions_and_fills  # noqa: E402
+
+
+def _coverage_count(conn: sqlite3.Connection, instrument: str, entry_ts: int) -> int:
+    boundary = crop_boundary(entry_ts)
+    row = conn.execute(
+        "SELECT COUNT(*) FROM bars"
+        " WHERE instrument = ? AND timeframe = '1m' AND time >= ? AND time < ?",
+        (instrument, boundary - COVERAGE_WINDOW_SECONDS, boundary),
+    ).fetchone()
+    return int(row[0])
+
+
+def _positions_with_fills(db_path: Path | str):
+    groups: dict[tuple[str, str], list] = defaultdict(list)
+    for ex in load_executions(db_path):
+        groups[(ex.account, ex.instrument)].append(ex)
+    for key in sorted(groups):
+        results, _issues = build_positions_and_fills(groups[key])
+        yield from results
+
+
+def eligible_cards(db_path: Path | str) -> list[ReviewCard]:
+    """Closed positions whose entry has 1m coverage. Recomputed live: the deck
+    grows as imports land and OHLC backfills — no deck table, no cache."""
+    from db import connect  # local import: keep the pure core import-light
+
+    conn = connect(db_path)
+    try:
+        cards: list[ReviewCard] = []
+        for position, _fills in _positions_with_fills(db_path):
+            if position.exit_time is None:
+                continue
+            if _coverage_count(conn, position.instrument, position.entry_time) < MIN_COVERAGE_BARS:
+                continue
+            cards.append(card_from_position(position))
+        return cards
+    finally:
+        conn.close()
+
+
+def find_position(
+    db_path: Path | str, entry_execution_id: str
+) -> tuple[Position, list[Fill]] | None:
+    for position, fills in _positions_with_fills(db_path):
+        if position.entry_execution_id == entry_execution_id:
+            return position, fills
+    return None
+
+
+def card_bars(
+    conn: sqlite3.Connection, *, instrument: str, timeframe: str, entry_ts: int
+) -> list[Bar]:
+    """Pre-call bars: completed bars strictly before the current bucket, plus
+    the forming bucket synthesized from pre-boundary 1m bars. Never returns a
+    bar whose interval contains or follows entry_ts."""
+    boundary = crop_boundary(entry_ts)
+    seconds = timeframe_seconds(timeframe)
+    bucket_start = boundary - (boundary % seconds)
+    full = read_range(
+        conn,
+        instrument=instrument,
+        timeframe=timeframe,
+        start=bucket_start - LOOKBACK_BARS * seconds,
+        end=bucket_start,
+    )
+    minutes = read_range(
+        conn, instrument=instrument, timeframe="1m", start=bucket_start, end=boundary
+    )
+    partial = synthesize_partial_bar(minutes, timeframe, boundary)
+    return full + ([partial] if partial is not None else [])
+
+
+def reveal_bars(
+    conn: sqlite3.Connection,
+    *,
+    instrument: str,
+    timeframe: str,
+    entry_ts: int,
+    exit_time: int,
+) -> list[Bar]:
+    """Post-call bars: the FULL window (lookback through close + buffer) so the
+    client can setData() wholesale, replacing any synthesized partial bar with
+    the real stored one."""
+    boundary = crop_boundary(entry_ts)
+    seconds = timeframe_seconds(timeframe)
+    bucket_start = boundary - (boundary % seconds)
+    return read_range(
+        conn,
+        instrument=instrument,
+        timeframe=timeframe,
+        start=bucket_start - LOOKBACK_BARS * seconds,
+        end=exit_time + REVEAL_BUFFER_BARS * seconds,
+    )
