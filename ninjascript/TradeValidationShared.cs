@@ -5,8 +5,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
-using System.Windows.Input;
 using NinjaTrader.Cbi;
 #endregion
 
@@ -127,15 +127,25 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger
             return false;
         }
 
-        // Modifier-flag variant (kept over the AddOn's four IsKeyDown probes): one
-        // device-state read, the flags cover left/right keys by definition, and it is
-        // the implementation both enforcing components already ran in production.
+        // Reads PHYSICAL key state via Win32 GetAsyncKeyState, which works from any
+        // thread. NT8 raises OrderUpdate on MTA worker threads, where the previous
+        // WPF Keyboard.Modifiers read always threw InvalidOperationException ("The
+        // calling thread must be STA") and the catch turned that into false — the
+        // override could never fire. GetAsyncKeyState reads the async key-state
+        // table directly, so it is immune to thread apartment and input-queue
+        // affinity; VK_CONTROL/VK_SHIFT cover the left and right keys.
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        private const int VK_SHIFT = 0x10;
+        private const int VK_CONTROL = 0x11;
+
         public static bool IsEmergencyOverride()
         {
             try
             {
-                return (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control &&
-                       (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+                return (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
+                       (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
             }
             catch
             {
