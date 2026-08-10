@@ -263,6 +263,7 @@ export class PriceChart {
     this.defaultTimeframe = "1m";
 
     this.state = "loading";
+    this.renderedBars = [];
     this.abortCtrl = null;
     this.lwChart = null;
     this.candleSeries = null;
@@ -563,6 +564,9 @@ export class PriceChart {
 
   _renderChart(bars) {
     this._teardownChart();
+    // The bars currently on the series. Callbacks below read this rather than
+    // closing over `bars` so an in-place data swap stays consistent.
+    this.renderedBars = bars;
     const lc = window.LightweightCharts;
     if (!lc) {
       this._setError(new Error("LightweightCharts global not loaded"));
@@ -652,6 +656,8 @@ export class PriceChart {
         from: visible.start,
         to: visible.end,
       });
+      // Post-reveal, widen so the exits stay on screen (no-op otherwise).
+      if (this.reviewRevealed) this._applyReviewRevealRange();
     }
 
     // Crosshair OHLC overlay (AC 15)
@@ -665,7 +671,11 @@ export class PriceChart {
         this.overlayEl.style.display = "none";
         return;
       }
-      const matching = bars.find((b) => b.time === data.time);
+      // Read through the instance field, not the `bars` argument: review mode
+      // swaps the dataset in place via setReviewData() without re-registering
+      // this handler, and a closed-over array would report volume 0 for every
+      // bar added on reveal.
+      const matching = this.renderedBars.find((b) => b.time === data.time);
       this.overlayEl.textContent = formatOhlcOverlay({ ...data, volume: matching?.volume ?? 0 });
       this.overlayEl.style.display = "block";
     });
@@ -688,6 +698,9 @@ export class PriceChart {
     // ResizeObserver re-applies the visible range so the entry stays centered.
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.lwChart) return;
+      // Post-reveal keep the entry→exit range rather than re-centering on the
+      // entry, which would push the exits back off screen.
+      if (this.reviewRevealed && this._applyReviewRevealRange()) return;
       const w = this.canvasEl.clientWidth || 800;
       const v = computeVisibleRange(this.position.entry_time, this.timeframe, w, 8);
       this.lwChart.timeScale().setVisibleRange({ from: v.start, to: v.end });
@@ -717,14 +730,14 @@ export class PriceChart {
   // Reveal: replace the full dataset (the server resends lookback + future so
   // the synthesized partial bar is replaced by the real stored bar) and swap
   // the entry marker onto its true bar plus exit markers.
-  setReviewData(bars, extraMarkers) {
+  setReviewData(bars, exitFills) {
     this.reviewRevealed = true;
-    this.reviewExitFills = extraMarkers || [];
+    this.reviewExitFills = exitFills || [];
     this.reviewBars = bars;
     if (!this.candleSeries) {
       // Pre-reveal produced the no-data placeholder (or an error); build the
       // chart from the revealed bars instead of throwing. _renderChart applies
-      // the revealed markers itself.
+      // the revealed markers and the reveal visible range itself.
       if (bars.length === 0) return;
       this._renderChart(bars);
       this._setState("ok");
@@ -738,6 +751,8 @@ export class PriceChart {
       close: b.close,
     }));
     this.candleSeries.setData(data);
+    // The crosshair overlay reads renderedBars for its volume lookup.
+    this.renderedBars = bars;
     if (this.volumeSeries) {
       this.volumeSeries.setData(
         bars.map((b) => ({
@@ -748,6 +763,10 @@ export class PriceChart {
       );
     }
     this._applyReviewMarkers(this.reviewExitFills);
+    this._applyReviewRevealRange();
+    // A sparse timeframe may have left the "No bar data for this card."
+    // placeholder up; revealed data must clear it.
+    this._setState("ok");
   }
 
   // One LWC marker in buildMarkersFromApi's shape for the card's entry.
@@ -781,12 +800,12 @@ export class PriceChart {
   // fill. Fill timestamps are execution instants, so snap each down to the
   // start of its bar — markers must land on an existing bar time. LWC requires
   // markers in ascending time order.
-  _applyReviewMarkers(extraMarkers) {
+  _applyReviewMarkers(exitFills) {
     if (!this.candleSeries) return;
     const stride = timeframeSeconds(this.timeframe);
     const snap = (t) => t - (t % stride);
     const markers = [this._reviewEntryMarker(snap(this.reviewCard.entry_time))];
-    for (const f of extraMarkers || []) {
+    for (const f of exitFills || []) {
       const isBuy = f.side === "Buy";
       markers.push({
         time: snap(f.time),
@@ -799,6 +818,30 @@ export class PriceChart {
     }
     markers.sort((a, b) => a.time - b.time);
     this.candleSeries.setMarkers(markers);
+  }
+
+  // Post-reveal the trade can run well past the entry-centered window, which
+  // would leave the exit markers off-screen. Widen to entry → last exit with a
+  // few bars of margin. Returns null when there is nothing to widen to (no
+  // exit fills, e.g. a still-open position) so callers leave the range alone.
+  _reviewRevealRange() {
+    if (!this.reviewCard || !this.reviewExitFills.length) return null;
+    const stride = timeframeSeconds(this.timeframe);
+    const snap = (t) => t - (t % stride);
+    const pad = 5 * stride;
+    const entryBar = snap(this.reviewCard.entry_time);
+    const exitBars = this.reviewExitFills.map((f) => snap(f.time));
+    const from = Math.min(entryBar, ...exitBars) - pad;
+    const to = Math.max(entryBar, ...exitBars) + pad;
+    return { from, to };
+  }
+
+  _applyReviewRevealRange() {
+    if (!this.lwChart) return false;
+    const range = this._reviewRevealRange();
+    if (!range) return false;
+    this.lwChart.timeScale().setVisibleRange(range);
+    return true;
   }
 
   _nearestMarker(time) {
