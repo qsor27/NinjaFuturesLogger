@@ -4,35 +4,27 @@ the 2x2 definition (won = net > 0, lost = net < 0, scratch = 0) in one place."""
 
 from pathlib import Path
 
-from db import connect
+from db import read_conn, transaction
 from models.review import ReviewCall, ReviewSummary, SummaryCell
 from services.notes import strip_split_suffix
 
 
 def create_session(db_path: Path | str, *, now: int) -> int:
-    conn = connect(db_path)
-    try:
+    with transaction(db_path) as conn:
         cur = conn.execute("INSERT INTO review_sessions (started_at) VALUES (?)", (now,))
-        conn.commit()
         return int(cur.lastrowid)
-    finally:
-        conn.close()
 
 
 def session_exists(db_path: Path | str, session_id: int) -> bool:
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         row = conn.execute(
             "SELECT 1 FROM review_sessions WHERE session_id = ?", (session_id,)
         ).fetchone()
-        return row is not None
-    finally:
-        conn.close()
+    return row is not None
 
 
 def end_session(db_path: Path | str, session_id: int, *, now: int) -> bool:
-    conn = connect(db_path)
-    try:
+    with transaction(db_path) as conn:
         if not conn.execute(
             "SELECT 1 FROM review_sessions WHERE session_id = ?", (session_id,)
         ).fetchone():
@@ -41,10 +33,7 @@ def end_session(db_path: Path | str, session_id: int, *, now: int) -> bool:
             "UPDATE review_sessions SET ended_at = COALESCE(ended_at, ?)" " WHERE session_id = ?",
             (now, session_id),
         )
-        conn.commit()
         return True
-    finally:
-        conn.close()
 
 
 def record_attempt(
@@ -58,8 +47,7 @@ def record_attempt(
     outcome_pnl: float,
     now: int,
 ) -> int:
-    conn = connect(db_path)
-    try:
+    with transaction(db_path) as conn:
         cur = conn.execute(
             "INSERT INTO review_attempts (session_id, account, instrument,"
             " entry_execution_id, real_execution_id, call, outcome_pnl, created_at)"
@@ -75,42 +63,32 @@ def record_attempt(
                 now,
             ),
         )
-        conn.commit()
         return int(cur.lastrowid)
-    finally:
-        conn.close()
 
 
 def has_attempt(db_path: Path | str, session_id: int, entry_execution_id: str) -> bool:
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         row = conn.execute(
             "SELECT 1 FROM review_attempts"
             " WHERE session_id = ? AND entry_execution_id = ? LIMIT 1",
             (session_id, entry_execution_id),
         ).fetchone()
-        return row is not None
-    finally:
-        conn.close()
+    return row is not None
 
 
 def attempt_stats(db_path: Path | str) -> dict[str, tuple[int, int]]:
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         rows = conn.execute(
             "SELECT entry_execution_id, COUNT(*), MAX(created_at)"
             " FROM review_attempts GROUP BY entry_execution_id"
         ).fetchall()
-        return {r[0]: (int(r[1]), int(r[2])) for r in rows}
-    finally:
-        conn.close()
+    return {r[0]: (int(r[1]), int(r[2])) for r in rows}
 
 
 def summary(db_path: Path | str, session_id: int | None = None) -> ReviewSummary:
     where = "WHERE session_id = ?" if session_id is not None else ""
     params = (session_id,) if session_id is not None else ()
-    conn = connect(db_path)
-    try:
+    with read_conn(db_path) as conn:
         rows = conn.execute(
             "SELECT call,"
             " CASE WHEN outcome_pnl > 0 THEN 'won'"
@@ -120,8 +98,6 @@ def summary(db_path: Path | str, session_id: int | None = None) -> ReviewSummary
             f" FROM review_attempts {where} GROUP BY call, bucket",
             params,
         ).fetchall()
-    finally:
-        conn.close()
 
     cells = {
         f"{call}_{bucket}": SummaryCell(count=int(n), net_pnl=float(total))
