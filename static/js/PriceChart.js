@@ -29,6 +29,11 @@ export const POLL_TIMEOUT_MS = 120000;
 
 export const CANONICAL_TIMEFRAMES = ["1m", "5m", "15m", "1h", "4h", "1d"];
 
+// Review mode offers a fixed, narrower ladder: the review API pre-materializes
+// exactly these timeframes per card, and there is no fetch-on-demand path to
+// fill in anything coarser.
+export const REVIEW_TIMEFRAMES = ["1m", "5m", "15m", "1h"];
+
 const TIMEFRAME_SECONDS = {
   "1m": 60,
   "5m": 300,
@@ -226,6 +231,23 @@ export class PriceChart {
     return chart;
   }
 
+  // Review mode: bars come from an injected provider (the review API), the
+  // position bootstrap fetches are skipped, and there is no fetch-on-demand
+  // CTA. Same chart, different data source — plan 13's "one implementation"
+  // rule is why this is an option here and not a second chart file.
+  static async initReview({ container, card, barsProvider }) {
+    const chart = new PriceChart({
+      container,
+      account: card.account,
+      instrument: card.instrument,
+      entryExecutionId: card.entry_execution_id,
+    });
+    chart.reviewCard = card;
+    chart.barsProvider = barsProvider;
+    await chart._bootReview();
+    return chart;
+  }
+
   constructor({ container, account, instrument, entryExecutionId }) {
     this.container = container;
     this.account = account;
@@ -248,6 +270,14 @@ export class PriceChart {
     this.priceLines = [];
     this.lwMarkers = null;
     this.resizeObserver = null;
+
+    // Review-mode state. All review branches below are gated on these being
+    // set, so the plain init() path is unchanged.
+    this.reviewCard = null;
+    this.barsProvider = null;
+    this.reviewRevealed = false;
+    this.reviewBars = [];
+    this.reviewExitFills = [];
 
     this._onTableRowClick = this._onTableRowClick.bind(this);
   }
@@ -286,6 +316,28 @@ export class PriceChart {
         this._setState("no-data");
         return;
       }
+      await this._loadBars();
+    } catch (e) {
+      this._setError(e);
+    }
+  }
+
+  async _bootReview() {
+    this._renderShell();
+    // No document-level executions-table listener in review mode.
+    this.position = {
+      entry_time: this.reviewCard.entry_time,
+      entry_price: this.reviewCard.entry_price,
+      side: this.reviewCard.side,
+      quantity: this.reviewCard.quantity,
+    };
+    this.executions = [];
+    this.availableTimeframes = new Set(REVIEW_TIMEFRAMES);
+    this.defaultTimeframe = "1m";
+    this.timeframe = "1m";
+    this.markers = [];
+    this._renderControls();
+    try {
       await this._loadBars();
     } catch (e) {
       this._setError(e);
@@ -407,7 +459,10 @@ export class PriceChart {
 
   _renderControls() {
     this.timeframeBarEl.innerHTML = "";
-    for (const tf of CANONICAL_TIMEFRAMES) {
+    // Review mode shows only the ladder the review API serves; no greyed-out
+    // 4h/1d buttons the user could never enable (there is no fetch CTA).
+    const ladder = this.reviewCard ? REVIEW_TIMEFRAMES : CANONICAL_TIMEFRAMES;
+    for (const tf of ladder) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = tf;
@@ -427,6 +482,11 @@ export class PriceChart {
     const ctrl = this.abortCtrl;
 
     this._setState("loading");
+
+    if (this.barsProvider) {
+      await this._loadReviewBars(ctrl);
+      return;
+    }
 
     const { start, end } = computeFetchRange(this.position.entry_time, this.timeframe);
 
@@ -461,6 +521,33 @@ export class PriceChart {
       this.bannerEl.style.display = "none";
     }
     this._setState(next);
+  }
+
+  // Review-mode counterpart of the second half of _loadBars: bars come from
+  // the injected provider (the review API, which serves a pre-materialized
+  // window per card), so there is no /api/ohlc/sources probe, no delayed
+  // banner, and no fetch-on-demand CTA.
+  async _loadReviewBars(ctrl) {
+    let payload;
+    try {
+      payload = await this.barsProvider(this.timeframe);
+    } catch (e) {
+      if (ctrl.signal.aborted) return;
+      this._setError(e);
+      return;
+    }
+    if (ctrl.signal.aborted) return;
+
+    const bars = payload?.bars ?? [];
+    this.reviewBars = bars;
+    if (bars.length === 0) {
+      this._renderPlaceholder({ message: "No bar data for this card." });
+      this._setState("no-data");
+      return;
+    }
+    this._renderChart(bars);
+    this.bannerEl.style.display = "none";
+    this._setState("ok");
   }
 
   async _fetchBars(timeframe, start, end, signal) {
@@ -529,13 +616,29 @@ export class PriceChart {
     }
 
     // Markers
-    const lwMarkers = buildMarkersFromApi(this.markers);
-    this.candleSeries.setMarkers(lwMarkers);
+    if (this.reviewCard) {
+      if (this.reviewRevealed) {
+        this._applyReviewMarkers(this.reviewExitFills);
+      } else {
+        // Pre-reveal there is no bar at the entry instant (the card stops just
+        // before it) and Lightweight Charts drops markers whose time does not
+        // coincide with a bar — so pin the entry arrow to the last bar shown.
+        const last = bars[bars.length - 1];
+        this.candleSeries.setMarkers(last ? [this._reviewEntryMarker(last.time)] : []);
+      }
+    } else {
+      const lwMarkers = buildMarkersFromApi(this.markers);
+      this.candleSeries.setMarkers(lwMarkers);
+    }
 
     // Price lines
-    const avg = this.position.entry_price;
-    for (const line of buildPriceLines(this.executions, avg, this.position.side)) {
-      this.priceLines.push(this.candleSeries.createPriceLine(line));
+    if (this.reviewCard) {
+      this.priceLines.push(this.candleSeries.createPriceLine(this._reviewEntryPriceLine()));
+    } else {
+      const avg = this.position.entry_price;
+      for (const line of buildPriceLines(this.executions, avg, this.position.side)) {
+        this.priceLines.push(this.candleSeries.createPriceLine(line));
+      }
     }
 
     // Visible range: as many bars as fit on screen, centered on entry_time.
@@ -611,6 +714,93 @@ export class PriceChart {
     );
   }
 
+  // Reveal: replace the full dataset (the server resends lookback + future so
+  // the synthesized partial bar is replaced by the real stored bar) and swap
+  // the entry marker onto its true bar plus exit markers.
+  setReviewData(bars, extraMarkers) {
+    this.reviewRevealed = true;
+    this.reviewExitFills = extraMarkers || [];
+    this.reviewBars = bars;
+    if (!this.candleSeries) {
+      // Pre-reveal produced the no-data placeholder (or an error); build the
+      // chart from the revealed bars instead of throwing. _renderChart applies
+      // the revealed markers itself.
+      if (bars.length === 0) return;
+      this._renderChart(bars);
+      this._setState("ok");
+      return;
+    }
+    const data = bars.map((b) => ({
+      time: b.time,
+      open: b.open,
+      high: b.high,
+      low: b.low,
+      close: b.close,
+    }));
+    this.candleSeries.setData(data);
+    if (this.volumeSeries) {
+      this.volumeSeries.setData(
+        bars.map((b) => ({
+          time: b.time,
+          value: b.volume,
+          color: b.close >= b.open ? COLORS.upCandle : COLORS.downCandle,
+        })),
+      );
+    }
+    this._applyReviewMarkers(this.reviewExitFills);
+  }
+
+  // One LWC marker in buildMarkersFromApi's shape for the card's entry.
+  // Long entries are Buys (arrow up, below the bar); shorts are Sells.
+  _reviewEntryMarker(time) {
+    const isLong = this.reviewCard.side === "Long";
+    return {
+      time,
+      position: isLong ? "belowBar" : "aboveBar",
+      color: isLong ? COLORS.buyMarker : COLORS.sellMarker,
+      shape: isLong ? "arrowUp" : "arrowDown",
+      text: "",
+      id: "entry",
+    };
+  }
+
+  // Solid entry line, same shape as buildPriceLines' avg line.
+  _reviewEntryPriceLine() {
+    const c = this.reviewCard;
+    return {
+      price: c.entry_price,
+      color: c.side === "Long" ? COLORS.buyMarker : COLORS.sellMarker,
+      lineStyle: 0, // LightweightCharts.LineStyle.Solid
+      lineWidth: 2,
+      axisLabelVisible: true,
+      title: `${c.side} ${c.quantity} @ ${c.entry_price.toFixed(2)}`,
+    };
+  }
+
+  // Post-reveal markers: the entry on its true bar plus one arrow per exit
+  // fill. Fill timestamps are execution instants, so snap each down to the
+  // start of its bar — markers must land on an existing bar time. LWC requires
+  // markers in ascending time order.
+  _applyReviewMarkers(extraMarkers) {
+    if (!this.candleSeries) return;
+    const stride = timeframeSeconds(this.timeframe);
+    const snap = (t) => t - (t % stride);
+    const markers = [this._reviewEntryMarker(snap(this.reviewCard.entry_time))];
+    for (const f of extraMarkers || []) {
+      const isBuy = f.side === "Buy";
+      markers.push({
+        time: snap(f.time),
+        position: isBuy ? "belowBar" : "aboveBar",
+        color: isBuy ? COLORS.buyMarker : COLORS.sellMarker,
+        shape: isBuy ? "arrowUp" : "arrowDown",
+        text: "",
+        id: `exit-${f.time}`,
+      });
+    }
+    markers.sort((a, b) => a.time - b.time);
+    this.candleSeries.setMarkers(markers);
+  }
+
   _nearestMarker(time) {
     let best = null;
     let bestDelta = Infinity;
@@ -656,6 +846,13 @@ export class PriceChart {
   _toggleVolume() {
     this.volumeVisible = !this.volumeVisible;
     this.volumeBtnEl.textContent = `Volume: ${this.volumeVisible ? "on" : "off"}`;
+    if (this.reviewCard && this.reviewRevealed && this.reviewBars.length > 0) {
+      // Post-reveal the provider would hand back the pre-reveal window again,
+      // which would un-reveal the card. Re-render the revealed bars instead.
+      this._renderChart(this.reviewBars);
+      this._setState("ok");
+      return;
+    }
     if (this.state === "ok" || this.state === "delayed") {
       // Re-render with current bars; we re-fetch is unnecessary because the
       // toggle does not change the data window. We simply teardown + rebuild.
@@ -722,12 +919,15 @@ export class PriceChart {
     const msg = document.createElement("div");
     msg.textContent = message;
     msg.style.color = COLORS.text;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = ctaLabel;
-    btn.addEventListener("click", onCta);
     this.placeholderEl.appendChild(msg);
-    this.placeholderEl.appendChild(btn);
+    // Review mode passes no CTA — there is no fetch-on-demand path there.
+    if (ctaLabel) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = ctaLabel;
+      btn.addEventListener("click", onCta);
+      this.placeholderEl.appendChild(btn);
+    }
     this.placeholderEl.style.display = "flex";
   }
 
@@ -753,6 +953,15 @@ export class PriceChart {
     if (next !== "no-data" && next !== "error") {
       this.placeholderEl.style.display = "none";
     }
+  }
+
+  // Release everything this instance owns. The review deck re-inits a chart
+  // per card, so the previous one must let go of its LWC chart, its
+  // ResizeObserver, and its document listener.
+  destroy() {
+    if (this.abortCtrl) this.abortCtrl.abort();
+    document.removeEventListener("executions-table:row-clicked", this._onTableRowClick);
+    this._teardownChart();
   }
 
   _teardownChart() {
