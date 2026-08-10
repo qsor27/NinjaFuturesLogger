@@ -22,7 +22,18 @@ const els = {
 let sessionId = null;
 let card = null;
 let chart = null;
-let phase = "loading"; // loading | calling | revealed | done
+let phase = "idle"; // idle | loading | calling | revealed | done
+
+// Generation token. Bumped by every loadNextCard/endSession call that takes
+// ownership of the card/chart. submitCall (and a stale loadNextCard/
+// endSession tail resuming after an await) captures the token at the start
+// and must re-check it after every await before touching `chart`, `card`,
+// `phase`, or review DOM: a mismatch means a newer operation already took
+// over and this continuation's remaining work is stale and must no-op.
+// This guards against e.g. pressing N while submitCall's reveal-bars fetch
+// is still in flight (phase is already "revealed" at that point, so the
+// key handler's phase check alone can't catch it).
+let generation = 0;
 
 // Buttons start disabled/hidden until the first card actually loads.
 els.valid.disabled = true;
@@ -45,7 +56,14 @@ function barsUrl(tf, revealed) {
   return `/api/review/cards/${encodeURIComponent(card.entry_execution_id)}/bars?${qs}`;
 }
 
-async function loadNextCard() {
+async function loadNextCard({ internal = false } = {}) {
+  // Entry gate: ignore a Next click / N keypress that arrives while another
+  // load, attempt, or end-session is already in flight. The internal 404-
+  // skip recursion below is exempt — it's a synchronous continuation of a
+  // load this same call already owns, not a new external trigger.
+  if (!internal && phase === "loading") return;
+  const gen = ++generation;
+
   phase = "loading";
   els.reveal.hidden = true;
   els.reveal.textContent = "";
@@ -66,9 +84,12 @@ async function loadNextCard() {
   try {
     result = await fetchJSON(`/api/review/next-card?session_id=${encodeURIComponent(sessionId)}`);
   } catch (e) {
+    if (gen !== generation) return;
     els.status.textContent = `Failed to load next card: ${errMessage(e)}`;
+    phase = "done"; // not stuck on "loading" — Done remains reachable
     return;
   }
+  if (gen !== generation) return;
   if (result === null) {
     // 204: deck is empty (no reviewable cards left, or none ever existed).
     els.status.textContent =
@@ -86,9 +107,14 @@ async function loadNextCard() {
   // PriceChart swallows barsProvider failures into its own error/placeholder
   // state rather than rejecting initReview(), so this is the only way for
   // the page to notice a coverage-gap 404 and skip the card silently.
+  //
+  // The resolved chart is held locally (not assigned into the module-level
+  // `chart` var) until we've confirmed this generation is still current —
+  // a stale generation must never clobber a newer generation's active chart.
   let lastBarsError = null;
+  let newChart;
   try {
-    chart = await PriceChart.initReview({
+    newChart = await PriceChart.initReview({
       container: els.chart,
       card,
       barsProvider: async (tf) => {
@@ -108,6 +134,14 @@ async function loadNextCard() {
     lastBarsError = e;
   }
 
+  if (gen !== generation) {
+    // Superseded while awaiting (a newer loadNextCard or endSession already
+    // took over). Release the orphaned chart and touch nothing else.
+    if (newChart) newChart.destroy();
+    return;
+  }
+  chart = newChart || null;
+
   if (
     chart &&
     chart.state === "error" &&
@@ -118,10 +152,11 @@ async function loadNextCard() {
     // bars route found nothing pre-entry): skip this card silently (spec).
     chart.destroy();
     chart = null;
-    return loadNextCard();
+    return loadNextCard({ internal: true });
   }
-  if (chart && chart.state === "error") {
+  if (!chart || chart.state === "error") {
     els.status.textContent = `Chart failed to load: ${lastBarsError ? errMessage(lastBarsError) : "unknown error"}`;
+    phase = "done"; // not stuck on "loading" — Done remains reachable
     return;
   }
 
@@ -133,6 +168,13 @@ async function loadNextCard() {
 
 async function submitCall(call) {
   if (phase !== "calling") return;
+  // Captured once, up front: if a newer loadNextCard/endSession takes over
+  // while we're awaiting below (e.g. the user presses N the instant reveal
+  // starts, before this function's own UI update reaches the Next button),
+  // `generation` will have moved past this value and every check below
+  // turns the rest of this call into a no-op instead of touching a chart or
+  // card that no longer belongs to us.
+  const gen = generation;
   phase = "loading";
   els.valid.disabled = true;
   els.invalid.disabled = true;
@@ -146,6 +188,7 @@ async function submitCall(call) {
       call,
     });
   } catch (e) {
+    if (gen !== generation) return;
     // Let the user retry the same card rather than getting stuck.
     phase = "calling";
     els.valid.disabled = false;
@@ -153,19 +196,26 @@ async function submitCall(call) {
     els.status.textContent = `Call failed: ${errMessage(e)}`;
     return;
   }
+  if (gen !== generation) return;
 
   // Flip to "revealed" before fetching the reveal window so the barsProvider
   // closure (and any timeframe switch the user fires mid-fetch) asks for
   // revealed=1 data — this is the only place `phase` becomes "revealed".
+  // From here on every await is re-checked against `gen` before touching
+  // `chart` or review DOM.
   phase = "revealed";
   const reveal = result.reveal;
 
+  let revealError = null;
   try {
     const data = await fetchJSON(barsUrl(chart.timeframe, true));
+    if (gen !== generation) return;
     chart.setReviewData(data.bars, reveal.exit_fills);
   } catch (e) {
-    els.status.textContent = `Reveal chart failed to load: ${errMessage(e)}`;
+    if (gen !== generation) return;
+    revealError = e;
   }
+  if (gen !== generation) return;
 
   els.reveal.hidden = false;
   els.reveal.textContent =
@@ -174,12 +224,21 @@ async function submitCall(call) {
   els.reveal.className = pnlClass(reveal.net_pnl);
   els.next.hidden = false;
   els.next.focus();
-  if (!els.status.textContent.startsWith("Reveal chart failed")) {
-    els.status.textContent = "";
-  }
+  els.status.textContent = revealError
+    ? `Reveal chart failed to load: ${errMessage(revealError)}`
+    : "";
 }
 
 async function endSession() {
+  // Entry gate, symmetric with loadNextCard: ignore a Done click while a
+  // load or an in-flight attempt call already owns "loading". Once past the
+  // gate, claim "loading" ourselves immediately — this is what stops a
+  // concurrent Next click / N keypress (both gated on phase) from starting a
+  // competing loadNextCard while we're ending the session.
+  if (phase === "loading") return;
+  const gen = ++generation;
+  const priorPhase = phase;
+  phase = "loading";
   els.done.disabled = true;
   if (chart) {
     chart.destroy();
@@ -191,10 +250,14 @@ async function endSession() {
   try {
     body = await postJSON(`/api/review/sessions/${sessionId}/end`, {});
   } catch (e) {
+    if (gen !== generation) return;
+    phase = priorPhase; // restore so a retry (Done again, or resuming review) makes sense
     els.done.disabled = false;
     els.status.textContent = `Failed to end session: ${errMessage(e)}`;
     return;
   }
+  if (gen !== generation) return;
+
   phase = "done";
   els.meta.textContent = "";
   els.reveal.hidden = true;
@@ -217,21 +280,36 @@ function summaryTable(title, s) {
     ["Called valid", cell(s.valid_won), cell(s.valid_lost)],
     ["Called invalid", cell(s.invalid_won), cell(s.invalid_lost)],
   ];
-  for (const r of rows) {
+  rows.forEach((r, rowIndex) => {
     const tr = document.createElement("tr");
-    for (const c of r) {
+    r.forEach((c, colIndex) => {
       const td = document.createElement("td");
       td.textContent = c;
+      // Row 2 = "Called invalid", column 1 = "Won": invalid entries that got
+      // paid anyway. The feature exists to make this cell confront the
+      // user, so it gets its own class regardless of scratch/zero state.
+      if (rowIndex === 2 && colIndex === 1) td.className = "review-summary-invalid-won";
       tr.appendChild(td);
-    }
+    });
     table.appendChild(tr);
-  }
+  });
   const scratches = s.valid_scratch.count + s.invalid_scratch.count;
   if (scratches > 0) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 3;
     td.textContent = `${scratches} scratch (exactly $0.00) not shown above`;
+    tr.appendChild(td);
+    table.appendChild(tr);
+  }
+  if (s.invalid_won.count > 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 3;
+    td.className = "review-summary-invalid-won-note";
+    td.textContent =
+      `Invalid entries that got paid anyway: ${s.invalid_won.count} for ` +
+      `${fmtMoney(s.invalid_won.net_pnl, { decimals: 2 })} — these wins train the habit.`;
     tr.appendChild(td);
     table.appendChild(tr);
   }
