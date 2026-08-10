@@ -17,5 +17,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/lightweight-charts.standalone.production.js') }}"></script>
   <script type="module" src="{{ url_for('static', filename='js/review.js') }}"></script>
 {% endblock %}

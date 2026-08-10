@@ -156,6 +156,9 @@ def test_review_page_renders(client):
     resp = client.get("/review")
     assert resp.status_code == 200
     assert b"review" in resp.data.lower()
+    # PriceChart.js reads window.LightweightCharts; the page must load the
+    # vendored standalone script before the review module or no chart renders.
+    assert b"vendor/lightweight-charts.standalone.production.js" in resp.data
 
 
 def test_reversal_open_card_full_chain(client, app):
