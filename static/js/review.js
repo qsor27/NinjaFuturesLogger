@@ -268,59 +268,95 @@ async function endSession() {
   renderSummary(body.session, body.all_time);
 }
 
-function summaryTable(title, s) {
-  const cell = (c) => `${c.count} · ${fmtMoney(c.net_pnl, { decimals: 2 })}`;
+function summaryCell(c) {
+  const td = document.createElement("td");
+  if (c.count === 0) {
+    td.textContent = "—";
+    return td;
+  }
+  const count = document.createElement("span");
+  count.className = "review-count";
+  count.textContent = `${c.count} × `;
+  const money = document.createElement("span");
+  money.className = pnlClass(c.net_pnl);
+  money.textContent = fmtMoney(c.net_pnl, { decimals: 2 });
+  td.append(count, money);
+  return td;
+}
+
+function summarySection(title, s) {
+  const frag = document.createDocumentFragment();
   const table = document.createElement("table");
   table.className = "review-summary-table";
   const caption = document.createElement("caption");
-  caption.textContent = `${title} (${s.attempts} attempts)`;
+  caption.textContent = `${title} — ${s.attempts} reviewed`;
   table.appendChild(caption);
-  const rows = [
-    ["", "Won", "Lost"],
-    ["Called valid", cell(s.valid_won), cell(s.valid_lost)],
-    ["Called invalid", cell(s.invalid_won), cell(s.invalid_lost)],
-  ];
-  rows.forEach((r, rowIndex) => {
-    const tr = document.createElement("tr");
-    r.forEach((c, colIndex) => {
-      const td = document.createElement("td");
-      td.textContent = c;
-      // Row 2 = "Called invalid", column 1 = "Won": invalid entries that got
-      // paid anyway. The feature exists to make this cell confront the
-      // user, so it gets its own class regardless of scratch/zero state.
-      if (rowIndex === 2 && colIndex === 1) td.className = "review-summary-invalid-won";
-      tr.appendChild(td);
-    });
-    table.appendChild(tr);
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["Your call", "Won", "Lost", "Net result"].forEach((h) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    headRow.appendChild(th);
   });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const rowFor = (label, won, lost, scratch) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.scope = "row";
+    th.textContent = label;
+    tr.appendChild(th);
+    tr.appendChild(summaryCell(won));
+    tr.appendChild(summaryCell(lost));
+    const netTd = document.createElement("td");
+    const total = won.count + lost.count + scratch.count;
+    const net = won.net_pnl + lost.net_pnl + scratch.net_pnl;
+    if (total === 0) {
+      netTd.textContent = "—";
+    } else {
+      netTd.className = pnlClass(net);
+      netTd.textContent = fmtMoney(net, { decimals: 2 });
+    }
+    tr.appendChild(netTd);
+    return tr;
+  };
+
+  const tbody = document.createElement("tbody");
+  const invalidRow = rowFor("Invalid", s.invalid_won, s.invalid_lost, s.invalid_scratch);
+  // The invalid/won cell is the one this feature exists to spotlight.
+  invalidRow.children[1].classList.add("review-summary-invalid-won");
+  tbody.appendChild(rowFor("Valid", s.valid_won, s.valid_lost, s.valid_scratch));
+  tbody.appendChild(invalidRow);
+  table.appendChild(tbody);
+  frag.appendChild(table);
+
   const scratches = s.valid_scratch.count + s.invalid_scratch.count;
   if (scratches > 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 3;
-    td.textContent = `${scratches} scratch (exactly $0.00) not shown above`;
-    tr.appendChild(td);
-    table.appendChild(tr);
+    const p = document.createElement("p");
+    p.className = "review-summary-scratch-note";
+    p.textContent =
+      `${scratches} scratch trade${scratches === 1 ? "" : "s"} (exactly $0.00) ` +
+      "counted in Net result but not in Won/Lost.";
+    frag.appendChild(p);
   }
   if (s.invalid_won.count > 0) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 3;
-    td.className = "review-summary-invalid-won-note";
-    td.textContent =
+    const p = document.createElement("p");
+    p.className = "review-summary-invalid-won-note";
+    p.textContent =
       `Invalid entries that got paid anyway: ${s.invalid_won.count} for ` +
       `${fmtMoney(s.invalid_won.net_pnl, { decimals: 2 })} — these wins train the habit.`;
-    tr.appendChild(td);
-    table.appendChild(tr);
+    frag.appendChild(p);
   }
-  return table;
+  return frag;
 }
 
 function renderSummary(session, allTime) {
   els.summary.hidden = false;
   els.summary.innerHTML = "";
-  els.summary.appendChild(summaryTable("This session", session));
-  els.summary.appendChild(summaryTable("All time", allTime));
+  els.summary.appendChild(summarySection("This session", session));
+  els.summary.appendChild(summarySection("All time", allTime));
 }
 
 function onKey(e) {
