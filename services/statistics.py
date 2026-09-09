@@ -44,10 +44,61 @@ from services.time_utils import session_date_of
 
 
 @dataclass(frozen=True)
-class _LoadResult:
+class LoadedPositions:
     closed_with_pnl: list[Position]
     closed_missing_multiplier: list[Position]
     open: list[Position]
+
+
+def _in_session_range(p: Position, from_date, to_date) -> bool:
+    sd = session_date_of(p)
+    if from_date is not None and sd < from_date:
+        return False
+    if to_date is not None and sd > to_date:
+        return False
+    return True
+
+
+def load_closed_positions(config: Config, filter: StatsFilter) -> LoadedPositions:
+    """Build positions for every (account, instrument) pair in scope and bucket them.
+
+    Shared by StatisticsService and SimulationService so both pages see the
+    same trades for the same filter. Pure over the DB read: no caching.
+    """
+    executions = load_executions(config.db_path, accounts=filter.accounts)
+    groups: dict[tuple[str, str], list[Execution]] = {}
+    for e in executions:
+        groups.setdefault((e.account, e.instrument), []).append(e)
+
+    closed_with_pnl: list[Position] = []
+    closed_missing_mult: list[Position] = []
+    open_positions: list[Position] = []
+    for _key, group in groups.items():
+        positions, _issues = build_positions(group)
+        for p in positions:
+            if p.exit_time is None:
+                open_positions.append(p)
+            elif p.dollars_pnl is None:
+                closed_missing_mult.append(p)
+            else:
+                closed_with_pnl.append(p)
+
+    if filter.from_date is not None or filter.to_date is not None:
+        rng = (filter.from_date, filter.to_date)
+        closed_with_pnl = [p for p in closed_with_pnl if _in_session_range(p, *rng)]
+        closed_missing_mult = [p for p in closed_missing_mult if _in_session_range(p, *rng)]
+        open_positions = [p for p in open_positions if _in_session_range(p, *rng)]
+
+    if filter.side is not None:
+        closed_with_pnl = [p for p in closed_with_pnl if p.side == filter.side]
+        closed_missing_mult = [p for p in closed_missing_mult if p.side == filter.side]
+        open_positions = [p for p in open_positions if p.side == filter.side]
+
+    return LoadedPositions(
+        closed_with_pnl=closed_with_pnl,
+        closed_missing_multiplier=closed_missing_mult,
+        open=open_positions,
+    )
 
 
 class StatisticsService:
@@ -56,64 +107,8 @@ class StatisticsService:
 
     # -- I/O --------------------------------------------------------------
 
-    def _load_closed_positions(self, filter: StatsFilter) -> _LoadResult:
-        executions = self._load_executions(accounts=filter.accounts)
-        groups: dict[tuple[str, str], list[Execution]] = {}
-        for e in executions:
-            groups.setdefault((e.account, e.instrument), []).append(e)
-
-        closed_with_pnl: list[Position] = []
-        closed_missing_mult: list[Position] = []
-        open_positions: list[Position] = []
-        for _key, group in groups.items():
-            positions, _issues = build_positions(group)
-            for p in positions:
-                if p.exit_time is None:
-                    open_positions.append(p)
-                elif p.dollars_pnl is None:
-                    closed_missing_mult.append(p)
-                else:
-                    closed_with_pnl.append(p)
-
-        if filter.from_date is not None or filter.to_date is not None:
-            closed_with_pnl = [
-                p
-                for p in closed_with_pnl
-                if self._in_session_range(p, filter.from_date, filter.to_date)
-            ]
-            closed_missing_mult = [
-                p
-                for p in closed_missing_mult
-                if self._in_session_range(p, filter.from_date, filter.to_date)
-            ]
-            open_positions = [
-                p
-                for p in open_positions
-                if self._in_session_range(p, filter.from_date, filter.to_date)
-            ]
-
-        if filter.side is not None:
-            closed_with_pnl = [p for p in closed_with_pnl if p.side == filter.side]
-            closed_missing_mult = [p for p in closed_missing_mult if p.side == filter.side]
-            open_positions = [p for p in open_positions if p.side == filter.side]
-
-        return _LoadResult(
-            closed_with_pnl=closed_with_pnl,
-            closed_missing_multiplier=closed_missing_mult,
-            open=open_positions,
-        )
-
-    @staticmethod
-    def _in_session_range(p: Position, from_date, to_date) -> bool:
-        sd = session_date_of(p)
-        if from_date is not None and sd < from_date:
-            return False
-        if to_date is not None and sd > to_date:
-            return False
-        return True
-
-    def _load_executions(self, *, accounts: tuple[str, ...]) -> list:
-        return load_executions(self._config.db_path, accounts=accounts)
+    def _load_closed_positions(self, filter: StatsFilter) -> LoadedPositions:
+        return load_closed_positions(self._config, filter)
 
     # -- Public methods ---------------------------------------------------
 

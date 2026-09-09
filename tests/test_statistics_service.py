@@ -338,3 +338,17 @@ def test_by_trades_per_day(migrated_db):
     assert b.total_trades == 1
     assert b.wins == 1
     assert b.win_rate == 1.0
+
+
+def test_module_level_loader_matches_service_method(migrated_db):
+    from config import Config
+    from services.statistics import LoadedPositions, load_closed_positions
+
+    _seed(migrated_db, account="A")
+    svc = _service(migrated_db)  # existing helper in this file
+    cfg = svc._config
+    via_fn = load_closed_positions(cfg, StatsFilter(accounts=("A",)))
+    via_method = svc._load_closed_positions(StatsFilter(accounts=("A",)))
+    assert isinstance(via_fn, LoadedPositions)
+    assert via_fn == via_method
+    assert isinstance(cfg, Config)
