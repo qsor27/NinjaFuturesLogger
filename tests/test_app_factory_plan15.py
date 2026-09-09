@@ -44,3 +44,22 @@ def test_static_stats_assets_are_served(app):
         resp = client.get(path)
         assert resp.status_code == 200, f"{path} returned {resp.status_code}"
         assert sentinel in resp.data, f"{path} missing sentinel {sentinel!r}"
+
+
+def test_simulations_page_renders(app):
+    resp = app.test_client().get("/simulations")
+    assert resp.status_code == 200
+    for sentinel in (
+        b"sim-root",
+        b"sim-rules",
+        b"sim-results",
+        b"simulations.css",
+        b"simulations.js",
+    ):
+        assert sentinel in resp.data, sentinel
+    assert b"lightweight-charts.standalone.production.js" in resp.data
+
+
+def test_nav_links_to_simulations(app):
+    resp = app.test_client().get("/statistics")
+    assert b'href="/simulations"' in resp.data

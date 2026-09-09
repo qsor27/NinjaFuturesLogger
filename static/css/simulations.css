@@ -1,0 +1,52 @@
+/* Simulation Analysis page. Reuses stats.css tokens (bento-*, section-label, pnl-*). */
+.sim-page {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.sim-rail { position: sticky; top: 12px; }
+.sim-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.sim-list li {
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.sim-list li:hover { background: var(--row-hover-bg); }
+.sim-list li.selected { background: var(--accent-soft); color: var(--accent); }
+.sim-list .empty-state { padding: 8px; }
+.sim-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.sim-help { color: var(--text-secondary); margin: 0 0 8px; }
+.sim-name-label { display: block; margin: 12px 0; color: var(--text-secondary); }
+.sim-name-label input { display: block; width: 100%; max-width: 420px; margin-top: 4px; }
+.sim-rules { display: flex; flex-direction: column; gap: 8px; }
+.rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+}
+.rule-row.has-error { border-color: var(--neg); }
+.rule-row .rule-word { color: var(--text-muted); }
+.rule-row input[type="number"] { width: 6.5em; }
+.rule-row input[type="time"] { width: 7.5em; }
+.rule-row .rule-remove { margin-left: auto; }
+.rule-error { flex-basis: 100%; color: var(--neg-text); font-size: 0.9em; }
+.sim-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.sim-status { color: var(--text-muted); }
+.sim-status.dirty { color: var(--accent); }
+.sim-error { margin: 8px 0 0; }
+.sim-table { width: 100%; border-collapse: collapse; }
+.sim-table th, .sim-table td { padding: 4px 8px; text-align: right; white-space: nowrap; }
+.sim-table th:first-child, .sim-table td:first-child { text-align: left; }
+.sim-table tbody tr:hover { background: var(--row-hover-bg); }
+.sim-table-wrap { overflow-x: auto; }
+.sim-rollup { color: var(--text-secondary); margin: 4px 0 8px; }
+@media (max-width: 900px) {
+  .sim-page { grid-template-columns: 1fr; }
+  .sim-rail { position: static; }
+}

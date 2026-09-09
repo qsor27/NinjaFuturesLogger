@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Simulations — FuturesTradingLog{% endblock %}
+{% block extra_styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/stats.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/multiselect.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/simulations.css') }}">
+{% endblock %}
+{% block content %}
+  <div id="sim-root" class="sim-page">
+    <aside id="sim-rail" class="sim-rail bento-cell">
+      <p class="section-label">Saved simulations</p>
+      <button id="sim-new" type="button">New simulation</button>
+      <ul id="sim-list" class="sim-list"></ul>
+    </aside>
+    <div class="sim-main">
+      <section class="bento-cell sim-builder">
+        <p class="section-label">Simulation Analysis</p>
+        <p class="sim-help">Replay your closed trades and skip the ones these rules would have prevented. Counters only count trades the simulation took.</p>
+        <div id="sim-filter-bar"></div>
+        <label class="sim-name-label">Name
+          <input id="sim-name" type="text" maxlength="80" placeholder="e.g. Two losses and done">
+        </label>
+        <div id="sim-rules" class="sim-rules"></div>
+        <div class="sim-actions">
+          <button id="sim-add-rule" type="button">Add rule</button>
+          <button id="sim-run" type="button" class="primary">Run</button>
+          <button id="sim-save" type="button">Save</button>
+          <button id="sim-delete" type="button" hidden>Delete</button>
+          <span id="sim-status" class="sim-status"></span>
+        </div>
+        <p id="sim-error" class="sim-error pnl-neg" hidden></p>
+      </section>
+      <div id="sim-results" class="bento-grid" hidden>
+        <section id="sim-summary" class="bento-cell bento-2x1"></section>
+        <section id="sim-equity" class="bento-cell bento-2x1"></section>
+        <section id="sim-attribution" class="bento-cell bento-1x1"></section>
+        <section id="sim-by-day" class="bento-cell bento-1x1"></section>
+        <section id="sim-skipped" class="bento-cell bento-2x1"></section>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+{% block scripts %}
+  <script src="{{ url_for('static', filename='vendor/lightweight-charts.standalone.production.js') }}"></script>
+  <script type="module" src="{{ url_for('static', filename='js/simulations.js') }}"></script>
+{% endblock %}

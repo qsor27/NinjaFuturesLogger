@@ -30,6 +30,10 @@ def build_pages_blueprint() -> Blueprint:
     def statistics_page():
         return render_template("statistics.html")
 
+    @bp.get("/simulations")
+    def simulations_page():
+        return render_template("simulations.html")
+
     @bp.get("/calendar")
     def calendar_page():
         return render_template("calendar.html")
