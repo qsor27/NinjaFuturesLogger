@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -171,3 +171,124 @@ def test_inputs_echo_filter_and_tz():
     assert r.inputs.side == "Long"
     assert r.inputs.display_tz == "America/Chicago"
     assert r.inputs.rules[0].label.startswith("losses in session")
+
+
+def test_scratch_resets_loss_streak():
+    rule = _rule(metric="consecutive_losses")
+    no_fire = _run(_seq([-10, 0.0, -10, 20]), [rule])
+    assert _skipped_ids(no_fire) == []
+    fire = _run(_seq([-10, -10, 20]), [rule])
+    assert _skipped_ids(fire) == ["e2"]
+
+
+def test_consecutive_wins():
+    r = _run(_seq([10, 10, 10, 10, -5]), [_rule(metric="consecutive_wins", threshold=3)])
+    assert _skipped_ids(r) == ["e3", "e4"]
+
+
+def test_net_pnl_floor():
+    r = _run(_seq([-10, -10, 50]), [_rule(metric="net_pnl", comparator="<=", threshold=-15)])
+    assert _skipped_ids(r) == ["e2"]
+
+
+def test_net_pnl_ceiling_locks_in_gains():
+    r = _run(_seq([30, 30, -50]), [_rule(metric="net_pnl", threshold=50)])
+    assert _skipped_ids(r) == ["e2"]
+    assert r.simulated.summary.total_pnl == 60
+
+
+def test_drawdown_from_scope_peak():
+    ps = _seq([50, -20, -15, 10])  # net: 50, 30, 15 -> dd 35 after e2
+    dd = _run(ps, [_rule(metric="drawdown", threshold=30)])
+    assert _skipped_ids(dd) == ["e3"]
+    floor = _run(ps, [_rule(metric="net_pnl", comparator="<=", threshold=-30)])
+    assert _skipped_ids(floor) == []  # net never negative; drawdown is the distinct signal
+
+
+def test_week_scope_and_stop_week():
+    d1 = [_pos(0, -10, T0)]
+    d2 = [_pos(1, -10, T0 + DAY), _pos(2, 5, T0 + DAY + 600)]
+    d3 = [_pos(3, 5, T0 + 2 * DAY)]
+    next_week = [_pos(4, 7, T0 + WEEK)]
+    r = _run(d1 + d2 + d3 + next_week, [_rule(scope="week", action="stop_week")])
+    assert _skipped_ids(r) == ["e2", "e3"]
+    assert r.simulated.summary.total_pnl == -10 - 10 + 7
+
+
+def test_all_scope_carries_streak_across_days():
+    ps = [_pos(0, -10, T0), _pos(1, -10, T0 + DAY), _pos(2, 5, T0 + DAY + 600)]
+    across = _run(ps, [_rule(metric="consecutive_losses", scope="all")])
+    assert _skipped_ids(across) == ["e2"]
+    per_session = _run(ps, [_rule(metric="consecutive_losses", scope="session")])
+    assert _skipped_ids(per_session) == []
+
+
+def test_pause_minutes_expires():
+    ps = [
+        _pos(0, -10, T0),  # exits T0+60 -> pause until T0+60+1800
+        _pos(1, 5, T0 + 600),  # inside the pause
+        _pos(2, 5, T0 + 60 + 1800),  # exactly at expiry -> allowed
+    ]
+    r = _run(ps, [_rule(threshold=1, action="pause_minutes", action_param=30)])
+    assert _skipped_ids(r) == ["e1"]
+    assert r.skipped[0].rule_index == 0
+
+
+def test_pause_survives_nothing_but_time():
+    # A pause is not cleared by a session rollover; only its timestamp matters.
+    late = T0 + 6 * 3600 + 55 * 60  # 15:55 CDT, exits 15:56
+    ps = [_pos(0, -10, late), _pos(1, 5, late + 10 * 60)]  # 16:05 CDT, new session
+    r = _run(ps, [_rule(threshold=1, action="pause_minutes", action_param=30)])
+    assert _skipped_ids(r) == ["e1"]
+
+
+def test_overlapping_positions_use_exit_for_outcome():
+    a = _pos(0, -10, T0, T0 + 1200)
+    b = _pos(1, -10, T0 + 300, T0 + 400)
+    c = _pos(2, 5, T0 + 1500)
+    r = _run([a, b, c], [_rule(threshold=1)])
+    assert _skipped_ids(r) == ["e2"]  # b entered before any loss was known
+    assert r.simulated.summary.total_pnl == -20
+    assert r.rule_attribution[0].fires == 2  # b's exit and a's exit both satisfy losses >= 1
+
+
+def test_time_of_day_gate_in_display_tz():
+    ps = [
+        _pos(0, 5, T0),  # 09:00 CDT
+        _pos(1, 5, T0 + 2 * 3600),  # 11:00 CDT -> fires
+        _pos(2, 5, T0 + 2 * 3600 + 1800),  # 11:30 halted
+        _pos(3, 5, T0 + DAY),  # next day 09:00 -> taken
+    ]
+    r = _run(ps, [_rule(metric="time_of_day", threshold="11:00")])
+    assert _skipped_ids(r) == ["e1", "e2"]
+    assert r.rule_attribution[0].fires == 1
+
+
+def test_time_of_day_across_dst_boundary():
+    ny = ZoneInfo("America/New_York")
+    pre = int(datetime(2026, 3, 2, 15, 30, tzinfo=UTC).timestamp())  # 10:30 EST
+    post = int(datetime(2026, 3, 9, 15, 30, tzinfo=UTC).timestamp())  # 11:30 EDT
+    ps = [_pos(0, 5, pre), _pos(1, 5, post)]
+    r = _run(ps, [_rule(metric="time_of_day", threshold="11:00")], tz=ny)
+    assert _skipped_ids(r) == ["e1"]
+
+
+def test_multi_rule_same_exit_strongest_action_wins():
+    rules = [
+        _rule(threshold=1, action="pause_minutes", action_param=30),
+        _rule(threshold=1, action="stop_session"),
+    ]
+    ps = [_pos(0, -10, T0), _pos(1, 5, T0 + 600), _pos(2, 5, T0 + 3 * 3600)]
+    r = _run(ps, rules)
+    assert _skipped_ids(r) == ["e1", "e2"]
+    assert [s.rule_index for s in r.skipped] == [1, 1]
+    assert [a.fires for a in r.rule_attribution] == [1, 1]
+    assert [a.skipped_trades for a in r.rule_attribution] == [0, 2]
+
+
+def test_multiple_accounts_share_one_stream():
+    a = _pos(0, -10, T0, account="A")
+    b = _pos(1, -10, T0 + 600, account="B")
+    c = _pos(2, 5, T0 + 1200, account="A")
+    r = _run([a, b, c], [_rule()])
+    assert _skipped_ids(r) == ["e2"]
