@@ -124,6 +124,14 @@ def test_run_unsaved_bad_date_400(client):
     assert resp.status_code == 400
 
 
+def test_run_unsaved_400_details_locate_the_bad_rule(client):
+    resp = client.post("/api/simulations/run", json={"rules": [_rule(), _rule(threshold=-1)]})
+    assert resp.status_code == 400
+    details = resp.get_json()["details"]
+    assert any(d["loc"][:2] == ["rules", "1"] for d in details)
+    assert resp.get_json()["error"].startswith("rules.1")
+
+
 def test_run_saved_with_query_filter(client, seeded):
     sid = client.post("/api/simulations", json={"name": "P", "rules": [_rule()]}).get_json()[
         "simulation_id"

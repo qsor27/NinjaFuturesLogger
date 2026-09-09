@@ -126,9 +126,8 @@ def build_simulations_blueprint() -> Blueprint:
             side = body.get("side") or None
             if side not in (None, "Long", "Short"):
                 raise ValueError("side must be 'Long' or 'Short'")
-            rules = [SimulationRule.model_validate(r) for r in body.get("rules") or []]
             req = SimulationRunRequest(
-                rules=rules,
+                rules=body.get("rules"),
                 accounts=tuple(accounts),
                 from_date=_parse_date(body.get("from")),
                 to_date=_parse_date(body.get("to")),
