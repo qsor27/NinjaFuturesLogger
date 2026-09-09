@@ -72,8 +72,8 @@ function markDirty() {
   setStatus("Unsaved changes", true);
 }
 
-function select(options, value, onchange) {
-  const s = el("select", { onchange });
+function select(options, value, onchange, ariaLabel) {
+  const s = el("select", { onchange, "aria-label": ariaLabel });
   for (const o of options) {
     const opt = el("option", { value: o.value, text: o.label });
     if (o.value === value) opt.selected = true;
@@ -92,7 +92,12 @@ function thresholdInput(rule) {
     markDirty();
   };
   if (kind === "time") {
-    return el("input", { type: "time", value: rule.threshold ?? "11:00", onchange: commit });
+    return el("input", {
+      type: "time",
+      value: rule.threshold ?? "11:00",
+      onchange: commit,
+      "aria-label": "Threshold",
+    });
   }
   return el("input", {
     type: "number",
@@ -100,6 +105,7 @@ function thresholdInput(rule) {
     min: kind === "count" ? "0" : null,
     value: rule.threshold ?? "",
     onchange: commit,
+    "aria-label": "Threshold",
   });
 }
 
@@ -111,40 +117,60 @@ function renderRuleRow(rule, idx) {
   const row = el("div", { class: "rule-row", "data-index": String(idx) });
   row.appendChild(el("span", { class: "rule-word", text: `${idx + 1}. When` }));
   row.appendChild(
-    select(state.vocab.metrics, rule.metric, (e) => {
-      rule.metric = e.target.value;
-      const kind = metricInfo(rule.metric).threshold_type;
-      rule.threshold = kind === "time" ? "11:00" : kind === "count" ? 2 : 0;
-      markDirty();
-      renderRules();
-    }),
+    select(
+      state.vocab.metrics,
+      rule.metric,
+      (e) => {
+        rule.metric = e.target.value;
+        const kind = metricInfo(rule.metric).threshold_type;
+        rule.threshold = kind === "time" ? "11:00" : kind === "count" ? 2 : 0;
+        markDirty();
+        renderRules();
+      },
+      "Metric",
+    ),
   );
   if (info.threshold_type !== "time") {
     row.appendChild(el("span", { class: "rule-word", text: "in" }));
     row.appendChild(
-      select(scopeOptions, rule.scope, (e) => {
-        rule.scope = e.target.value;
-        markDirty();
-      }),
+      select(
+        scopeOptions,
+        rule.scope,
+        (e) => {
+          rule.scope = e.target.value;
+          markDirty();
+        },
+        "Scope",
+      ),
     );
   }
   row.appendChild(el("span", { class: "rule-word", text: "is" }));
   row.appendChild(
-    select(state.vocab.comparators, rule.comparator, (e) => {
-      rule.comparator = e.target.value;
-      markDirty();
-    }),
+    select(
+      state.vocab.comparators,
+      rule.comparator,
+      (e) => {
+        rule.comparator = e.target.value;
+        markDirty();
+      },
+      "Comparator",
+    ),
   );
   row.appendChild(thresholdInput(rule));
   row.appendChild(el("span", { class: "rule-word", text: "then" }));
   row.appendChild(
-    select(state.vocab.actions, rule.action, (e) => {
-      rule.action = e.target.value;
-      const needs = state.vocab.actions.find((a) => a.value === rule.action).needs_param;
-      rule.action_param = needs ? rule.action_param ?? 30 : null;
-      markDirty();
-      renderRules();
-    }),
+    select(
+      state.vocab.actions,
+      rule.action,
+      (e) => {
+        rule.action = e.target.value;
+        const needs = state.vocab.actions.find((a) => a.value === rule.action).needs_param;
+        rule.action_param = needs ? rule.action_param ?? 30 : null;
+        markDirty();
+        renderRules();
+      },
+      "Action",
+    ),
   );
   const action = state.vocab.actions.find((a) => a.value === rule.action);
   if (action.needs_param) {
@@ -159,6 +185,7 @@ function renderRuleRow(rule, idx) {
           rule.action_param = e.target.value === "" ? null : parseInt(e.target.value, 10);
           markDirty();
         },
+        "aria-label": "Pause minutes",
       }),
     );
     row.appendChild(el("span", { class: "rule-word", text: "minutes" }));
@@ -171,6 +198,7 @@ function renderRuleRow(rule, idx) {
       onclick: () => {
         state.rules.splice(idx, 1);
         markDirty();
+        clearErrors();
         renderRules();
       },
     }),
@@ -491,6 +519,7 @@ async function init() {
   $("sim-add-rule").addEventListener("click", () => {
     state.rules.push({ ...EXAMPLE_RULE });
     markDirty();
+    clearErrors();
     renderRules();
   });
   $("sim-run").addEventListener("click", run);
