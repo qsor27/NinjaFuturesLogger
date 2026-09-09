@@ -40,6 +40,7 @@ def test_static_stats_assets_are_served(app):
         ("/static/js/stats_charts.js", b"mountCalendarHeatmap"),
         ("/static/js/statistics.js", b"renderSummary"),
         ("/static/js/calendar.js", b"isoWeekToDate"),
+        ("/static/js/simulations.js", b"renderRuleRow"),
     ]:
         resp = client.get(path)
         assert resp.status_code == 200, f"{path} returned {resp.status_code}"

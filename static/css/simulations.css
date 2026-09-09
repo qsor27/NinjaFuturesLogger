@@ -13,7 +13,7 @@
   cursor: pointer;
   color: var(--text-primary);
 }
-.sim-list li:hover { background: var(--row-hover-bg); }
+.sim-list li:hover { background: var(--row-hover-bg, rgba(255, 255, 255, 0.04)); }
 .sim-list li.selected { background: var(--accent-soft); color: var(--accent); }
 .sim-list .empty-state { padding: 8px; }
 .sim-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -43,7 +43,7 @@
 .sim-table { width: 100%; border-collapse: collapse; }
 .sim-table th, .sim-table td { padding: 4px 8px; text-align: right; white-space: nowrap; }
 .sim-table th:first-child, .sim-table td:first-child { text-align: left; }
-.sim-table tbody tr:hover { background: var(--row-hover-bg); }
+.sim-table tbody tr:hover { background: var(--row-hover-bg, rgba(255, 255, 255, 0.04)); }
 .sim-table-wrap { overflow-x: auto; }
 .sim-rollup { color: var(--text-secondary); margin: 4px 0 8px; }
 @media (max-width: 900px) {
