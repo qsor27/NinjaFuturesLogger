@@ -32,7 +32,18 @@ from services.statistics_aggregations import compute_summary, cumulative_equity
 from services.time_utils import compute_session_date, session_date_of
 
 _ACTION_STRENGTH = {"pause_minutes": 0, "stop_session": 1, "stop_week": 2}
-_ENTRY, _EXIT = 1, 0  # sort order: exits before entries at equal timestamps
+_ENTRY, _EXIT = 1, 0  # event kind marker
+
+# Event ordering at equal timestamps: another position's exit (with exit_time >
+# entry_time, i.e. non-zero duration) is processed before any entry, so a closing
+# trade updates counters before a same-second entry is evaluated against them. But
+# a position's own entry always precedes its own exit -- otherwise a zero-duration
+# position (exit_time == entry_time, reachable since NinjaTrader timestamps are
+# whole seconds) would have its exit discarded (key not yet in taken_keys) and its
+# outcome would never feed any counter. Concretely: sort by
+# (ts, cross_order, key, intra_order) where cross_order is 0 for a normal-duration
+# exit (sorts first) and 1 for everything else (entries and zero-duration exits),
+# and intra_order is 0 for entry / 1 for exit so a same-key pair keeps entry first.
 
 PositionKey = tuple[str, str, str]
 
@@ -189,7 +200,17 @@ def run_simulation(
     for p in positions:
         events.append((p.entry_time, _ENTRY, _key(p), p))
         events.append((int(p.exit_time or 0), _EXIT, _key(p), p))
-    events.sort(key=lambda e: e[:3])
+
+    def _sort_key(e: tuple[int, int, PositionKey, Position]) -> tuple[int, int, PositionKey, int]:
+        ts, kind, key, p = e
+        if kind == _EXIT and (p.exit_time or 0) > p.entry_time:
+            cross_order = 0  # normal-duration exit: ahead of any entry at this ts
+        else:
+            cross_order = 1  # entry, or a zero-duration position's own exit
+        intra_order = 0 if kind == _ENTRY else 1
+        return (ts, cross_order, key, intra_order)
+
+    events.sort(key=_sort_key)
 
     entry_rules = [i for i, r in enumerate(rules) if r.metric == "time_of_day"]
     exit_rules = [i for i, r in enumerate(rules) if r.metric != "time_of_day"]

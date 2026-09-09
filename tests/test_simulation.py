@@ -97,6 +97,15 @@ def test_session_rollover_at_1600_chicago():
     ps = [_pos(0, -10, before), _pos(1, -10, before + 120), _pos(2, 5, after)]
     r = _run(ps, [_rule()])
     assert _skipped_ids(r) == []  # halt cleared by the rollover
+    assert r.rule_attribution[0].fires == 1
+
+
+def test_zero_duration_position_feeds_counters():
+    ps = [_pos(0, -10, T0, T0), _pos(1, -10, T0 + 600, T0 + 600), _pos(2, 5, T0 + 1200)]
+    r = _run(ps, [_rule()])  # losses >= 2 -> stop session
+    assert _skipped_ids(r) == ["e2"]
+    assert r.rule_attribution[0].fires == 1
+    assert r.simulated.summary.total_positions == 2
 
 
 def test_trades_count_metric():
