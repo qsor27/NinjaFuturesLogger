@@ -23,7 +23,7 @@ from services.simulation_store import (
     create_definition,
     delete_definition,
     get_definition,
-    list_definitions,
+    list_definitions_tolerant,
     update_definition,
 )
 
@@ -65,8 +65,12 @@ def build_simulations_blueprint() -> Blueprint:
 
     @bp.get("/api/simulations")
     def list_all():
+        valid, invalid = list_definitions_tolerant(_db_path())
         return jsonify(
-            {"simulations": [d.model_dump(mode="json") for d in list_definitions(_db_path())]}
+            {
+                "simulations": [d.model_dump(mode="json") for d in valid],
+                "invalid": invalid,
+            }
         )
 
     @bp.post("/api/simulations")
@@ -86,7 +90,10 @@ def build_simulations_blueprint() -> Blueprint:
 
     @bp.get("/api/simulations/<int:simulation_id>")
     def get_one(simulation_id: int):
-        d = get_definition(_db_path(), simulation_id)
+        try:
+            d = get_definition(_db_path(), simulation_id)
+        except ValidationError:
+            return jsonify({"error": f"simulation {simulation_id} has an invalid rule set"}), 409
         if d is None:
             return jsonify({"error": "simulation not found"}), 404
         return jsonify(d.model_dump(mode="json"))
@@ -144,7 +151,10 @@ def build_simulations_blueprint() -> Blueprint:
 
     @bp.get("/api/simulations/<int:simulation_id>/run")
     def run_saved(simulation_id: int):
-        d = get_definition(_db_path(), simulation_id)
+        try:
+            d = get_definition(_db_path(), simulation_id)
+        except ValidationError:
+            return jsonify({"error": f"simulation {simulation_id} has an invalid rule set"}), 409
         if d is None:
             return jsonify({"error": "simulation not found"}), 404
         try:

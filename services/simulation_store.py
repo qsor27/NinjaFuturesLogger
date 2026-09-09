@@ -10,6 +10,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from db import read_conn, transaction
 from models.simulation import SimulationDefinition, SimulationDefinitionInput, SimulationRule
 
@@ -42,6 +44,33 @@ def list_definitions(db_path: Path | str) -> list[SimulationDefinition]:
             f"SELECT {_COLS} FROM simulations ORDER BY name COLLATE NOCASE"
         ).fetchall()
     return [_row_to_definition(r) for r in rows]
+
+
+def list_definitions_tolerant(
+    db_path: Path | str,
+) -> tuple[list[SimulationDefinition], list[dict]]:
+    """Like list_definitions, but a row whose rules_json fails validation is
+    reported in the second list instead of raising, so one corrupt row
+    doesn't take down the whole rail.
+    """
+    with read_conn(db_path) as conn:
+        rows = conn.execute(
+            f"SELECT {_COLS} FROM simulations ORDER BY name COLLATE NOCASE"
+        ).fetchall()
+    valid: list[SimulationDefinition] = []
+    invalid: list[dict] = []
+    for row in rows:
+        try:
+            valid.append(_row_to_definition(row))
+        except (ValidationError, ValueError, TypeError) as e:
+            invalid.append(
+                {
+                    "simulation_id": int(row["simulation_id"]),
+                    "name": row["name"],
+                    "error": str(e),
+                }
+            )
+    return valid, invalid
 
 
 def get_definition(db_path: Path | str, simulation_id: int) -> SimulationDefinition | None:

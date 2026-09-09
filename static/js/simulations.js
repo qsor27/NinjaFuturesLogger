@@ -2,14 +2,10 @@
 // Builder (vocabulary-driven rule rows) + run + saved definitions + results.
 // No math here: every number rendered arrives precomputed from the API.
 
-import {
-  filterToQueryString,
-  parseFilterFromUrl,
-  renderFilterBar,
-} from "./stats_filter.js";
+import { parseFilterFromUrl, renderFilterBar } from "./stats_filter.js";
 import { mountLineChart } from "./stats_charts.js";
 import { HttpError, deleteJSON, fetchJSON, postJSON, putJSON } from "./api.js";
-import { fmtMoney, formatTime, pnlClass, setText } from "./format.js";
+import { fmtMoney, pnlClass, setText } from "./format.js";
 
 const EXAMPLE_RULE = {
   metric: "losses",
@@ -23,9 +19,10 @@ const EXAMPLE_RULE = {
 const state = {
   vocab: null,
   saved: [],
+  invalid: [],
   selectedId: null,
   name: "",
-  rules: [],
+  rules: [{ ...EXAMPLE_RULE }],
   filter: parseFilterFromUrl(),
   dirty: false,
   ruleErrors: {}, // rule index -> message
@@ -57,6 +54,21 @@ function fmtPercent(v) {
 function fmtNum(v, digits = 2) {
   if (v === null || v === undefined) return "—";
   return Number(v).toFixed(digits);
+}
+
+// Format a unix timestamp in the engine's own display timezone (result.inputs.display_tz),
+// which may differ from the page-wide body[data-display-tz] attribute that formatTime uses.
+function fmtEngineTime(unixSeconds, tz) {
+  if (unixSeconds === null || unixSeconds === undefined) return "—";
+  return new Date(unixSeconds * 1000).toLocaleString(undefined, {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 // ---------- builder ----------
@@ -264,6 +276,7 @@ function showError(err) {
 // ---------- run / save / delete ----------
 
 async function run() {
+  if (!state.rules.length) return;
   clearErrors();
   setStatus("Running…", state.dirty);
   try {
@@ -319,19 +332,30 @@ async function remove() {
 async function loadSaved() {
   const body = await fetchJSON("/api/simulations");
   state.saved = body.simulations || [];
+  state.invalid = body.invalid || [];
   renderRail();
 }
 
 function renderRail() {
   const list = $("sim-list");
   list.innerHTML = "";
-  if (!state.saved.length) {
+  if (!state.saved.length && !state.invalid.length) {
     list.appendChild(el("li", { class: "empty-state", text: "Nothing saved yet" }));
     return;
   }
   for (const d of state.saved) {
     const li = el("li", { text: d.name, onclick: () => selectSaved(d.simulation_id) });
     if (d.simulation_id === state.selectedId) li.classList.add("selected");
+    list.appendChild(li);
+  }
+  for (const inv of state.invalid) {
+    const li = el("li", {
+      text: `${inv.name} (invalid)`,
+      title: inv.error,
+      onclick: () => selectInvalid(inv),
+    });
+    li.classList.add("has-error");
+    if (inv.simulation_id === state.selectedId) li.classList.add("selected");
     list.appendChild(li);
   }
 }
@@ -354,6 +378,18 @@ async function selectSaved(id) {
   if (!def) return;
   loadDefinition(def);
   await run();
+}
+
+// A saved row whose rules_json failed validation. Select it (so Delete works)
+// and surface the error, but there is nothing valid to run.
+function selectInvalid(entry) {
+  state.selectedId = entry.simulation_id;
+  state.name = entry.name;
+  $("sim-name").value = entry.name;
+  $("sim-delete").hidden = false;
+  $("sim-results").hidden = true;
+  renderRail();
+  showError(new Error(`${entry.name}: ${entry.error}`));
 }
 
 function newSimulation() {
@@ -427,7 +463,7 @@ function renderSummary(container, result) {
 function renderEquity(container, result) {
   container.innerHTML = "";
   container.appendChild(el("p", { class: "section-label", text: "Equity: actual vs simulated" }));
-  const chartHost = el("div", { class: "chart-container" });
+  const chartHost = el("div", {});
   container.appendChild(chartHost);
   mountLineChart(chartHost, [
     { account: "Actual", points: result.actual.equity },
@@ -485,7 +521,7 @@ function renderSkipped(container, result) {
     const href = `/positions/${encodeURIComponent(s.account)}/${encodeURIComponent(
       s.instrument,
     )}/${encodeURIComponent(s.entry_execution_id)}`;
-    const link = el("a", { href, text: formatTime(s.entry_time) });
+    const link = el("a", { href, text: fmtEngineTime(s.entry_time, result.inputs.display_tz) });
     return el("tr", {}, [
       el("td", {}, [link]),
       cell(s.account),
@@ -511,10 +547,6 @@ function renderResults(result) {
 
 async function init() {
   state.vocab = await fetchJSON("/api/simulations/vocabulary");
-  renderFilterBar($("sim-filter-bar"), state.filter, (next) => {
-    state.filter = next;
-    run();
-  });
   $("sim-new").addEventListener("click", newSimulation);
   $("sim-add-rule").addEventListener("click", () => {
     state.rules.push({ ...EXAMPLE_RULE });
@@ -531,10 +563,14 @@ async function init() {
   });
   await loadSaved();
   newSimulation();
+  renderFilterBar($("sim-filter-bar"), state.filter, (next) => {
+    state.filter = next;
+    run();
+  });
   setText($("sim-status"), "");
 }
 
 init().catch(showError);
 
 // Exposed for the static-sentinel test and for debugging in the console.
-export { renderRuleRow, filterToQueryString };
+export { renderRuleRow };

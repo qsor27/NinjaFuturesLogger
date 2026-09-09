@@ -1,5 +1,8 @@
+import json
+
 import pytest
 
+from db import transaction
 from tests.conftest import make_execution, seed_executions
 
 E0 = 1776070800  # 2026-04-13 session
@@ -48,7 +51,7 @@ def test_vocabulary(client):
 
 
 def test_crud_lifecycle(client):
-    assert client.get("/api/simulations").get_json() == {"simulations": []}
+    assert client.get("/api/simulations").get_json() == {"simulations": [], "invalid": []}
     resp = client.post("/api/simulations", json={"name": "Plan A", "rules": [_rule()]})
     assert resp.status_code == 201
     created = resp.get_json()
@@ -145,3 +148,29 @@ def test_run_saved_with_query_filter(client, seeded):
     assert empty.get_json()["actual"]["summary"]["total_positions"] == 0
     assert client.get("/api/simulations/999/run").status_code == 404
     assert client.get(f"/api/simulations/{sid}/run?side=Sideways").status_code == 400
+
+
+def test_corrupt_saved_row_does_not_brick_the_rail(client, app):
+    good = client.post("/api/simulations", json={"name": "Good", "rules": [_rule()]}).get_json()
+    bad = client.post("/api/simulations", json={"name": "Bad", "rules": [_rule()]}).get_json()
+    db_path = app.config["FTL_DB_PATH"]
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE simulations SET rules_json = ? WHERE simulation_id = ?",
+            (json.dumps([{"metric": "bogus"}]), bad["simulation_id"]),
+        )
+
+    listed = client.get("/api/simulations")
+    assert listed.status_code == 200
+    body = listed.get_json()
+    assert [d["name"] for d in body["simulations"]] == ["Good"]
+    assert len(body["invalid"]) == 1
+    assert body["invalid"][0]["simulation_id"] == bad["simulation_id"]
+    assert body["invalid"][0]["name"] == "Bad"
+    assert "error" in body["invalid"][0]
+
+    assert client.get(f"/api/simulations/{bad['simulation_id']}").status_code == 409
+    assert client.get(f"/api/simulations/{bad['simulation_id']}/run").status_code == 409
+    assert client.get(f"/api/simulations/{good['simulation_id']}").status_code == 200
+
+    assert client.delete(f"/api/simulations/{bad['simulation_id']}").status_code == 204
