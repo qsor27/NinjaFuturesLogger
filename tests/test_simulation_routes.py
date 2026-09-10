@@ -174,3 +174,26 @@ def test_corrupt_saved_row_does_not_brick_the_rail(client, app):
     assert client.get(f"/api/simulations/{good['simulation_id']}").status_code == 200
 
     assert client.delete(f"/api/simulations/{bad['simulation_id']}").status_code == 204
+
+
+def test_malformed_json_saved_row_returns_409_not_500(client, app):
+    bad = client.post("/api/simulations", json={"name": "Bad", "rules": [_rule()]}).get_json()
+    db_path = app.config["FTL_DB_PATH"]
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE simulations SET rules_json = ? WHERE simulation_id = ?",
+            ("{not json", bad["simulation_id"]),
+        )
+    sid = bad["simulation_id"]
+    assert client.get(f"/api/simulations/{sid}").status_code == 409
+    assert client.get(f"/api/simulations/{sid}/run").status_code == 409
+    listed = client.get("/api/simulations").get_json()
+    assert [i["simulation_id"] for i in listed["invalid"]] == [sid]
+    # a non-mapping rule element raises TypeError in the store; same contract
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE simulations SET rules_json = ? WHERE simulation_id = ?",
+            (json.dumps(["not-a-rule"]), sid),
+        )
+    assert client.get(f"/api/simulations/{sid}").status_code == 409
+    assert client.delete(f"/api/simulations/{sid}").status_code == 204

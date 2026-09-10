@@ -92,7 +92,11 @@ def build_simulations_blueprint() -> Blueprint:
     def get_one(simulation_id: int):
         try:
             d = get_definition(_db_path(), simulation_id)
-        except ValidationError:
+        except (ValidationError, ValueError, TypeError):
+            # Same failure classes list_definitions_tolerant reports: schema-invalid
+            # rules, malformed JSON (JSONDecodeError is a ValueError), or a
+            # non-mapping rule element. DELETE never parses rules, so the row
+            # stays removable.
             return jsonify({"error": f"simulation {simulation_id} has an invalid rule set"}), 409
         if d is None:
             return jsonify({"error": "simulation not found"}), 404
@@ -153,7 +157,11 @@ def build_simulations_blueprint() -> Blueprint:
     def run_saved(simulation_id: int):
         try:
             d = get_definition(_db_path(), simulation_id)
-        except ValidationError:
+        except (ValidationError, ValueError, TypeError):
+            # Same failure classes list_definitions_tolerant reports: schema-invalid
+            # rules, malformed JSON (JSONDecodeError is a ValueError), or a
+            # non-mapping rule element. DELETE never parses rules, so the row
+            # stays removable.
             return jsonify({"error": f"simulation {simulation_id} has an invalid rule set"}), 409
         if d is None:
             return jsonify({"error": "simulation not found"}), 404
