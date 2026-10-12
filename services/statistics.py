@@ -16,9 +16,9 @@ from models.position import ENTRY_METHODS, Position
 from models.statistics import (
     DayOfWeekResponse,
     DistributionResponse,
-    EquityCurveResponse,
     EntryMethodBreakdown,
     EntryMethodStats,
+    EquityCurveResponse,
     EquitySeries,
     HourBucketResponse,
     InstrumentBreakdown,
