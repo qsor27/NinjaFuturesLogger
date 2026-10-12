@@ -20,6 +20,7 @@ class Execution(StrictModel):
     entry_exit: EntryExit
     position_after: str | None
     source_order_id: str | None
+    order_name: str | None = None
     source_filename: str
     imported_at: int
 

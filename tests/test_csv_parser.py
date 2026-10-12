@@ -172,3 +172,24 @@ def test_parse_dash_position_after_is_preserved_verbatim():
     )
     e = _parse(line)
     assert e.position_after == "-"
+
+
+def test_parse_stores_order_name():
+    line = (
+        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,g1,Entry,1 L,"
+        "12345,GateMktNextOpen,$0.50,1,Sim101,Apex,"
+    )
+    assert _parse(line).order_name == "GateMktNextOpen"
+
+
+def test_parse_strips_order_name_whitespace():
+    line = (
+        "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,g2,Entry,1 L,"
+        "12345, GateLmtNextOpen ,$0.50,1,Sim101,Apex,"
+    )
+    assert _parse(line).order_name == "GateLmtNextOpen"
+
+
+def test_parse_blank_order_name_is_none():
+    line = "MNQ,Buy,1,4237.75,1/15/2025 2:45:30 PM,g3,Entry,1 L,12345,  ,$0.50,1,Sim101,Apex,"
+    assert _parse(line).order_name is None

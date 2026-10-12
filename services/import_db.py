@@ -9,8 +9,8 @@ _INSERT_EXECUTION_SQL = (
     "INSERT INTO executions ("
     " nt_execution_id, account, instrument, timestamp, side,"
     " original_action, quantity, price, commission, entry_exit,"
-    " position_after, source_order_id, source_filename, imported_at"
-    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING"
+    " position_after, source_order_id, source_filename, imported_at, order_name"
+    ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING"
 )
 
 
@@ -75,6 +75,7 @@ def bulk_insert_executions(
                 e.source_order_id,
                 e.source_filename,
                 e.imported_at,
+                e.order_name,
             ),
         )
         if conn.total_changes > before:

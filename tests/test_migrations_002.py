@@ -37,6 +37,7 @@ def test_executions_table_columns(tmp_path: Path):
             "source_order_id",
             "source_filename",
             "imported_at",
+            "order_name",
         }
     finally:
         conn.close()

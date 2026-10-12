@@ -46,7 +46,7 @@ def parse_execution_row(
         entry_exit,
         position,
         order_id,
-        _name,
+        name,
         commission_s,
         _rate,
         account,
@@ -104,6 +104,7 @@ def parse_execution_row(
         entry_exit=entry_exit,
         position_after=(position or None),
         source_order_id=(order_id or None),
+        order_name=(name.strip() or None),
         source_filename=source_filename,
         imported_at=imported_at,
     )

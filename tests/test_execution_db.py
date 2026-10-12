@@ -38,7 +38,7 @@ def _seed(db_path, executions):
         conn.close()
 
 
-def test_execution_columns_is_the_14_column_list():
+def test_execution_columns_is_the_15_column_list():
     cols = [c.strip() for c in EXECUTION_COLUMNS.split(",")]
     assert cols == [
         "nt_execution_id",
@@ -55,11 +55,12 @@ def test_execution_columns_is_the_14_column_list():
         "source_order_id",
         "source_filename",
         "imported_at",
+        "order_name",
     ]
 
 
 def test_execution_from_row_round_trips(migrated_db):
-    original = _ex("e1", source_order_id="o1")
+    original = _ex("e1", source_order_id="o1", order_name="GateMktNextOpen")
     _seed(migrated_db, [original])
     conn = connect(migrated_db)
     try:

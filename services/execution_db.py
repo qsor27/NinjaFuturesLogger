@@ -14,7 +14,7 @@ from services.notes import strip_split_suffix
 EXECUTION_COLUMNS: str = (
     "nt_execution_id, account, instrument, timestamp, side,"
     " original_action, quantity, price, commission, entry_exit,"
-    " position_after, source_order_id, source_filename, imported_at"
+    " position_after, source_order_id, source_filename, imported_at, order_name"
 )
 
 
@@ -35,6 +35,7 @@ def execution_from_row(row: sqlite3.Row) -> Execution:
         source_order_id=row["source_order_id"],
         source_filename=row["source_filename"],
         imported_at=row["imported_at"],
+        order_name=row["order_name"],
     )
 
 
