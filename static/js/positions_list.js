@@ -20,7 +20,7 @@ const PAGE_SIZE = 50;
 const backToStats = document.getElementById("back-to-stats");
 
 const FILTER_NAMES = [
-  "instrument", "side", "outcome",
+  "instrument", "side", "entry_method", "outcome",
   "session_date_from", "session_date_to",
   "day_of_week", "hour_of_day", "hour_tz", "trades_per_day",
 ];
@@ -163,6 +163,7 @@ const POSITIONS_URL_KEYS = [
   "account",
   "instrument",
   "side",
+  "entry_method",
   "outcome",
   "session_date_from",
   "session_date_to",
@@ -383,7 +384,8 @@ function renderBackToStats() {
   const hasDrilldown =
     params.has("day_of_week") ||
     params.has("hour_of_day") ||
-    params.has("trades_per_day");
+    params.has("trades_per_day") ||
+    params.has("entry_method");
   if (!hasDrilldown) {
     backToStats.hidden = true;
     backToStats.textContent = "";

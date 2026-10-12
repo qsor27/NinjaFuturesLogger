@@ -11,6 +11,7 @@ import { browserTz, escHtml, fmtMoney, pnlClass } from "./format.js";
 const ENDPOINTS = [
   "summary",
   "by-side",
+  "by-entry-method",
   "equity-curve",
   "by-instrument",
   "by-day",             // drives summary avg win-day / avg loss-day
@@ -173,6 +174,38 @@ function renderBySide(container, breakdown) {
   `;
 }
 
+const ENTRY_METHOD_LABELS = {
+  market_next_open: "Market on next open",
+  limit_next_open: "Limit on next open",
+  manual: "Manual",
+  unknown: "Unknown",
+};
+
+function renderByEntryMethod(container, breakdown, filter) {
+  const rowsHtml = breakdown.rows
+    .map((r) => {
+      const href = positionsUrl(filter, { entry_method: r.entry_method });
+      const label = ENTRY_METHOD_LABELS[r.entry_method] || r.entry_method;
+      return `
+      <tr data-drilldown data-href="${escHtml(href)}">
+        <td><a href="${escHtml(href)}">${escHtml(label)}</a></td>
+        <td>${r.position_count}</td>
+        <td class="${pnlClass(r.total_pnl)}">${fmtMoney(r.total_pnl)}</td>
+        <td>${fmtPercent(r.win_rate)}</td>
+        <td>${fmtNum(r.profit_factor, 2)}</td>
+      </tr>`;
+    })
+    .join("");
+  container.innerHTML = `
+    <p class="section-label">By Entry Method</p>
+    <table class="instrument-table">
+      <thead><tr><th>Entry</th><th>Trades</th><th>Total P&amp;L</th><th>Win Rate</th><th>PF</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+  wireDrilldownClicks(container);
+}
+
 function renderInstrumentTable(container, breakdown) {
   if (!breakdown.rows.length) {
     container.innerHTML =
@@ -314,6 +347,11 @@ async function refresh(filter) {
       data["by-day"].buckets,
     );
     renderBySide(document.getElementById("stats-by-side"), data["by-side"]);
+    renderByEntryMethod(
+      document.getElementById("stats-by-entry-method"),
+      data["by-entry-method"],
+      filter,
+    );
     renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);
     renderDayOfWeek(document.getElementById("stats-by-dow"), data["by-day-of-week"], filter);
     renderByHour(document.getElementById("stats-by-hour"), data["by-hour"], filter);
