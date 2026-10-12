@@ -21,20 +21,36 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 
     public static class ExtremeTracker
     {
-        /// <summary>
-        /// The trader's price is pinned until a closed 1m bar trades beyond it; from then on the
-        /// extreme follows the most extreme price traded. Bars closed at or before SetAt are ignored.
-        /// </summary>
-        public static ExtremeTrack Track(GateSide side, ExtremeInput input, IList<GateBar> oneMinuteBars)
-        {
-            if (input == null) return null;
+        public static ExtremeTrack Track(GateSide side, ExtremeInput input, IList<GateBar> oneMinuteBars) =>
+            input == null ? null : Track(side, new[] { input }, oneMinuteBars);
 
-            double value = input.Price;
+        /// <summary>
+        /// Replays every edit of the extreme (ascending SetAt). Each edit pins the trader's price
+        /// until a closed 1m bar trades beyond it; from then on the extreme follows the most
+        /// extreme price traded. Breaks found under earlier edits are kept, so editing the
+        /// extreme never erases the history a dead level was judged on. Bars closed at or before
+        /// the first edit are ignored.
+        /// </summary>
+        public static ExtremeTrack Track(GateSide side, IReadOnlyList<ExtremeInput> edits, IList<GateBar> oneMinuteBars)
+        {
+            if (edits == null || edits.Count == 0) return null;
+
+            double value = edits[0].Price;
             var mode = ExtremeMode.Pinned;
+            int nextEdit = 1;
             var breaks = new List<long>();
+            long lastEnd = long.MinValue;
             foreach (var bar in oneMinuteBars)
             {
-                if (bar.EndTime <= input.SetAt) continue;
+                if (bar.EndTime <= edits[0].SetAt) continue;
+                if (bar.EndTime <= lastEnd) continue; // duplicate or out-of-order bar
+                lastEnd = bar.EndTime;
+                while (nextEdit < edits.Count && edits[nextEdit].SetAt < bar.EndTime)
+                {
+                    value = edits[nextEdit].Price;
+                    mode = ExtremeMode.Pinned;
+                    nextEdit++;
+                }
                 double traded = SideMath.ExtremeOf(side, bar);
                 if (SideMath.IsBeyond(side, traded, value))
                 {
@@ -42,6 +58,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                     mode = ExtremeMode.Auto;
                     breaks.Add(bar.EndTime);
                 }
+            }
+            if (nextEdit < edits.Count)
+            {
+                value = edits[edits.Count - 1].Price;
+                mode = ExtremeMode.Pinned;
             }
             return new ExtremeTrack(value, mode, breaks);
         }

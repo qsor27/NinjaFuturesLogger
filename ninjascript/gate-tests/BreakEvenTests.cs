@@ -46,6 +46,20 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void Long_OffGridEntry_RoundsUpNeverBelowEntry()
+        {
+            var r = BreakEven.StopPrice(GateSide.Long, 100.1, 0, 0.25, 101.0);
+            Assert.That(r.Price, Is.EqualTo(100.25).Within(1e-9));
+        }
+
+        [Test]
+        public void Short_OffGridEntry_RoundsDownNeverAboveEntry()
+        {
+            var r = BreakEven.StopPrice(GateSide.Short, 100.1, 0, 0.25, 99.0);
+            Assert.That(r.Price, Is.EqualTo(100.0).Within(1e-9));
+        }
+
+        [Test]
         public void RoundToTick_SnapsToGrid()
         {
             Assert.That(BreakEven.RoundToTick(30880.63, 0.25), Is.EqualTo(30880.75).Within(1e-9));

@@ -8,7 +8,25 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 {
     public sealed class SideInputs
     {
-        public ExtremeInput Extreme { get; set; }
+        private readonly List<ExtremeInput> extremeEdits = new List<ExtremeInput>();
+
+        /// <summary>
+        /// Every edit of the low (Long) or high (Short), oldest first. The full history is kept and
+        /// replayed by ExtremeTracker so editing the extreme can never revive a dead level.
+        /// </summary>
+        public IReadOnlyList<ExtremeInput> ExtremeEdits => extremeEdits;
+
+        /// <summary>The latest edit, or null when the trader hasn't set one.</summary>
+        public ExtremeInput Extreme => extremeEdits.Count == 0 ? null : extremeEdits[extremeEdits.Count - 1];
+
+        public void EditExtreme(ExtremeInput edit)
+        {
+            if (edit == null) throw new ArgumentNullException(nameof(edit));
+            if (extremeEdits.Count > 0 && edit.SetAt < Extreme.SetAt)
+                throw new ArgumentException("Extreme edits must be in time order.", nameof(edit));
+            extremeEdits.Add(edit);
+        }
+
         public Dictionary<GateTimeframe, LevelInput> Levels { get; } = new Dictionary<GateTimeframe, LevelInput>();
     }
 
@@ -40,16 +58,20 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 
     public sealed class GateStateLoad
     {
-        public GateStateLoad(GateStateFile state, bool wasCorrupt, string backupPath)
+        public GateStateLoad(GateStateFile state, bool wasCorrupt, string backupPath, string error)
         {
             State = state;
             WasCorrupt = wasCorrupt;
             BackupPath = backupPath;
+            Error = error;
         }
 
         public GateStateFile State { get; }
         public bool WasCorrupt { get; }
         public string BackupPath { get; }
+
+        /// <summary>Set when the file exists but couldn't be read (locked, no access). State is empty.</summary>
+        public string Error { get; }
     }
 
     /// <summary>Line-based, culture-invariant persistence of trader inputs (spec §10, §11).</summary>
@@ -67,11 +89,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                 foreach (GateSide side in new[] { GateSide.Long, GateSide.Short })
                 {
                     var inputs = pair.Value.For(side);
-                    if (inputs.Extreme != null)
+                    foreach (var edit in inputs.ExtremeEdits)
                     {
                         sb.Append("E|").Append(pair.Key).Append('|').Append(side).Append('|')
-                          .Append(inputs.Extreme.Price.ToString("R", Inv)).Append('|')
-                          .Append(inputs.Extreme.SetAt.ToString(Inv)).AppendLine();
+                          .Append(edit.Price.ToString("R", Inv)).Append('|')
+                          .Append(edit.SetAt.ToString(Inv)).AppendLine();
                     }
                     foreach (var level in inputs.Levels)
                     {
@@ -94,19 +116,50 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 
         public static GateStateLoad Load(string path)
         {
-            if (!File.Exists(path)) return new GateStateLoad(new GateStateFile(), false, null);
+            if (!File.Exists(path)) return new GateStateLoad(new GateStateFile(), false, null, null);
+
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(path, Encoding.UTF8);
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                return new GateStateLoad(new GateStateFile(), false, null, "Could not read " + path + ": " + e.Message);
+            }
 
             try
             {
-                return new GateStateLoad(Parse(File.ReadAllLines(path, Encoding.UTF8)), false, null);
+                return new GateStateLoad(Parse(lines), false, null, null);
             }
             catch (FormatException)
             {
-                string backup = path + ".bad";
-                if (File.Exists(backup)) File.Delete(backup);
-                File.Move(path, backup);
-                return new GateStateLoad(new GateStateFile(), true, backup);
+                return new GateStateLoad(new GateStateFile(), true, BackUp(path), null);
             }
+        }
+
+        /// <summary>Moves a corrupt file aside; returns where it went, or null if it couldn't be moved.</summary>
+        private static string BackUp(string path)
+        {
+            string[] candidates =
+            {
+                path + ".bad",
+                path + ".bad-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff", Inv),
+            };
+            foreach (string candidate in candidates)
+            {
+                try
+                {
+                    if (File.Exists(candidate)) File.Delete(candidate);
+                    File.Move(path, candidate);
+                    return candidate;
+                }
+                catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+                {
+                    // try the next name
+                }
+            }
+            return null;
         }
 
         private static GateStateFile Parse(string[] lines)
@@ -121,8 +174,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                 string[] f = line.Split('|');
                 if (f[0] == "E" && f.Length == 5)
                 {
-                    state.GetOrAdd(f[1]).For(ParseEnum<GateSide>(f[2])).Extreme =
-                        new ExtremeInput(ParseDouble(f[3]), ParseLong(f[4]));
+                    var side = state.GetOrAdd(f[1]).For(ParseEnum<GateSide>(f[2]));
+                    try
+                    {
+                        side.EditExtreme(new ExtremeInput(ParseDouble(f[3]), ParseLong(f[4])));
+                    }
+                    catch (ArgumentException e)
+                    {
+                        throw new FormatException("bad line " + (i + 1) + ": " + e.Message);
+                    }
                 }
                 else if (f[0] == "L" && f.Length == 7)
                 {

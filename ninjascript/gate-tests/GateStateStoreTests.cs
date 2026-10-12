@@ -19,17 +19,22 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [TearDown]
-        public void TearDown() => Directory.Delete(dir, true);
+        public void TearDown()
+        {
+            foreach (var f in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                File.SetAttributes(f, FileAttributes.Normal);
+            Directory.Delete(dir, true);
+        }
 
         private static GateStateFile Sample()
         {
             var s = new GateStateFile();
             var mnq = s.GetOrAdd("MNQ 12-26");
-            mnq.Long.Extreme = new ExtremeInput(30868.75, 1760000000);
+            mnq.Long.EditExtreme(new ExtremeInput(30868.75, 1760000000));
             mnq.Long.Levels[GateTimeframe.M1] = new LevelInput(30888.5, 1760000060, 0);
             mnq.Long.Levels[GateTimeframe.H1] = new LevelInput(30905.0, 1760000120, 1759990000);
             mnq.Short.Levels[GateTimeframe.H4] = new LevelInput(31000.25, 1760000180, 0);
-            s.GetOrAdd("MES 12-26").Short.Extreme = new ExtremeInput(6800.5, 1760000200);
+            s.GetOrAdd("MES 12-26").Short.EditExtreme(new ExtremeInput(6800.5, 1760000200));
             return s;
         }
 
@@ -68,6 +73,55 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void ExtremeEditHistoryRoundTrips()
+        {
+            var s = new GateStateFile();
+            s.GetOrAdd("MNQ 12-26").Long.EditExtreme(new ExtremeInput(100.0, 10));
+            s.GetOrAdd("MNQ 12-26").Long.EditExtreme(new ExtremeInput(97.25, 20));
+            GateStateStore.Save(path, s);
+
+            var edits = GateStateStore.Load(path).State.Instruments["MNQ 12-26"].Long.ExtremeEdits;
+            Assert.That(edits.Count, Is.EqualTo(2));
+            Assert.That(edits[0].Price, Is.EqualTo(100.0));
+            Assert.That(edits[1].Price, Is.EqualTo(97.25));
+        }
+
+        [Test]
+        public void EditExtreme_RejectsEditsOlderThanTheLast()
+        {
+            var side = new SideInputs();
+            side.EditExtreme(new ExtremeInput(100.0, 20));
+            Assert.Throws<System.ArgumentException>(() => side.EditExtreme(new ExtremeInput(99.0, 10)));
+            Assert.That(side.Extreme.Price, Is.EqualTo(100.0));
+        }
+
+        [Test]
+        public void LockedFile_ReportsFailureWithoutThrowing()
+        {
+            GateStateStore.Save(path, Sample());
+            using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var load = GateStateStore.Load(path);
+                Assert.That(load.Error, Is.Not.Null);
+                Assert.That(load.State.Instruments, Is.Empty);
+            }
+        }
+
+        [Test]
+        public void CorruptWithReadOnlyBackup_FallsBackToTimestampedBackup()
+        {
+            File.WriteAllText(path + ".bad", "old");
+            File.SetAttributes(path + ".bad", FileAttributes.ReadOnly);
+            File.WriteAllText(path, "garbage");
+
+            var load = GateStateStore.Load(path);
+            Assert.That(load.WasCorrupt, Is.True);
+            Assert.That(load.BackupPath, Is.Not.Null);
+            Assert.That(load.BackupPath, Is.Not.EqualTo(path + ".bad"));
+            Assert.That(File.ReadAllText(load.BackupPath), Is.EqualTo("garbage"));
+        }
+
+        [Test]
         public void MissingFile_IsEmptyAndNotCorrupt()
         {
             var load = GateStateStore.Load(path);
@@ -103,7 +157,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         {
             GateStateStore.Save(path, Sample());
             var smaller = new GateStateFile();
-            smaller.GetOrAdd("MNQ 12-26").Long.Extreme = new ExtremeInput(1.25, 5);
+            smaller.GetOrAdd("MNQ 12-26").Long.EditExtreme(new ExtremeInput(1.25, 5));
             GateStateStore.Save(path, smaller);
 
             var load = GateStateStore.Load(path);

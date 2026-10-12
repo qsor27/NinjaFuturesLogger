@@ -24,17 +24,28 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             double tickSize, double lastPrice)
         {
             double offset = offsetTicks * tickSize;
-            double stop = RoundToTick(side == GateSide.Long ? averageEntry + offset : averageEntry - offset, tickSize);
+            // Round away from a loss: up for a long's sell stop, down for a short's buy stop, so an
+            // off-tick average entry never yields a "break-even" stop on the losing side of entry.
+            double stop = side == GateSide.Long
+                ? CeilToTick(averageEntry + offset, tickSize)
+                : FloorToTick(averageEntry - offset, tickSize);
 
             if (side == GateSide.Long && stop >= lastPrice)
-                return new BreakEvenResult(RoundToTick(lastPrice - tickSize, tickSize), true);
+                return new BreakEvenResult(FloorToTick(lastPrice - tickSize, tickSize), true);
             if (side == GateSide.Short && stop <= lastPrice)
-                return new BreakEvenResult(RoundToTick(lastPrice + tickSize, tickSize), true);
+                return new BreakEvenResult(CeilToTick(lastPrice + tickSize, tickSize), true);
             return new BreakEvenResult(stop, false);
         }
 
         public static double RoundToTick(double price, double tickSize) =>
             Math.Round(price / tickSize, MidpointRounding.AwayFromZero) * tickSize;
+
+        // The epsilon keeps prices already on the grid (e.g. 100.25 / 0.25) from moving a tick.
+        private static double CeilToTick(double price, double tickSize) =>
+            Math.Ceiling(price / tickSize - 1e-9) * tickSize;
+
+        private static double FloorToTick(double price, double tickSize) =>
+            Math.Floor(price / tickSize + 1e-9) * tickSize;
 
         /// <summary>Plain-language settings text, e.g. "entry + 1 tick ($0.50 on MNQ)".</summary>
         public static string Describe(int offsetTicks, double tickSize, double pointValue, string instrumentRoot)

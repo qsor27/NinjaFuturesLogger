@@ -75,6 +75,32 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void ExitPriceChange_AllowedEvenWhenPositionSnapshotIsSmaller()
+        {
+            // A 2-lot stop after a partial fill or a 1-lot manual reduce: dragging it must never cancel it.
+            Assert.That(OrderGate.Decide(new OrderIntent(false, 2, false, true, 2), 1).Allowed, Is.True);
+            Assert.That(OrderGate.Decide(new OrderIntent(true, 2, false, true, 2), -1).Allowed, Is.True);
+        }
+
+        [Test]
+        public void ExitSizeReduction_Allowed()
+        {
+            Assert.That(OrderGate.Decide(new OrderIntent(false, 1, false, true, 3), 1).Allowed, Is.True);
+        }
+
+        [Test]
+        public void ChangeInAddingDirection_Cancelled()
+        {
+            Assert.That(OrderGate.Decide(new OrderIntent(true, 1, false, true, 1), 2).Allowed, Is.False);
+        }
+
+        [Test]
+        public void ChangeWhileFlat_Cancelled()
+        {
+            Assert.That(OrderGate.Decide(new OrderIntent(false, 1, false, true, 1), 0).Allowed, Is.False);
+        }
+
+        [Test]
         public void NonPositiveQuantity_Cancelled()
         {
             Assert.That(OrderGate.Decide(Manual(false, 0), 2).Allowed, Is.False);

@@ -195,6 +195,73 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void EditingTheLowNeverRevivesADeadLevel()
+        {
+            var bars = new List<GateBar> { Break60, Bar(120, 103, 106, 106), Bar(180, 103, 106, 104), Bar(240, 103, 106, 104),
+                Bar(360, 96, 104, 104), Bar(420, 103, 107, 106), Bar(480, 105, 108, 107) };
+            var edits = new List<ExtremeInput> { new ExtremeInput(100.0, 0), new ExtremeInput(97.0, 290) };
+            var track = ExtremeTracker.Track(GateSide.Long, edits, bars);
+            var e = SetupEngine.Evaluate(GateSide.Long, Level(), track, bars);
+            Assert.That(e.State, Is.EqualTo(SetupState.Dead));
+            Assert.That(e.DeadAt, Is.EqualTo(240));
+        }
+
+        [Test]
+        public void EditingTheLowKeepsALiveSetup()
+        {
+            var bars = new List<GateBar> { Break60, Bar(120, 103, 106, 106), Bar(180, 105, 108, 107) };
+            var edits = new List<ExtremeInput> { new ExtremeInput(100.0, 0), new ExtremeInput(98.0, 150) };
+            var track = ExtremeTracker.Track(GateSide.Long, edits, bars);
+            var e = SetupEngine.Evaluate(GateSide.Long, Level(), track, bars);
+            Assert.That(e.State, Is.EqualTo(SetupState.Confirmed));
+            Assert.That(e.TriggeredOnLastClose, Is.True);
+        }
+
+        [Test]
+        public void DuplicateBarIsCountedOnce()
+        {
+            var e = RunLong(Level(), Break60, Bar(120, 103, 106, 106), Bar(120, 103, 106, 106));
+            Assert.That(e.State, Is.EqualTo(SetupState.OneClose));
+            Assert.That(e.TriggeredOnLastClose, Is.False);
+        }
+
+        [Test]
+        public void ReplacingAReplacementLevelKeepsTheDeathRequirement()
+        {
+            var bars = new List<GateBar> { Break60, Bar(120, 103, 106, 106), Bar(180, 103, 106, 104), Bar(240, 103, 106, 104),
+                Bar(390, 103, 107, 106), Bar(450, 104, 108, 107) };
+            var track = ExtremeTracker.Track(GateSide.Long, new ExtremeInput(100.0, 0), bars);
+            var l1 = Level();
+            var e1 = SetupEngine.Evaluate(GateSide.Long, l1, track, bars);
+            Assert.That(e1.DeadAt, Is.EqualTo(240));
+
+            var l2 = LevelInput.Replace(l1, e1, 106.0, 300);
+            Assert.That(l2.RequireBreakAfter, Is.EqualTo(240));
+            var e2 = SetupEngine.Evaluate(GateSide.Long, l2, track, bars);
+
+            var l3 = LevelInput.Replace(l2, e2, 105.5, 330);
+            Assert.That(l3.RequireBreakAfter, Is.EqualTo(240));
+            Assert.That(SetupEngine.Evaluate(GateSide.Long, l3, track, bars).State, Is.EqualTo(SetupState.WaitingForBreak));
+        }
+
+        [Test]
+        public void ReplacingADeadLevelWithoutReplayData_RequiresBreakAfterNow()
+        {
+            var l2 = LevelInput.Replace(Level(), new SetupEvaluation(SetupState.Dead, false, 0), 106.0, 500);
+            Assert.That(l2.RequireBreakAfter, Is.EqualTo(500));
+            Assert.That(l2.SetAt, Is.EqualTo(500));
+            Assert.That(l2.Price, Is.EqualTo(106.0));
+        }
+
+        [Test]
+        public void ReplacingALiveLevelKeepsItsRequirement()
+        {
+            var l2 = LevelInput.Replace(new LevelInput(105.0, 0, 77), new SetupEvaluation(SetupState.Broken, false, 0), 106.0, 300);
+            Assert.That(l2.RequireBreakAfter, Is.EqualTo(77));
+            Assert.That(LevelInput.Replace(null, null, 106.0, 300).RequireBreakAfter, Is.EqualTo(0));
+        }
+
+        [Test]
         public void IsValidLevel_LongAboveExtreme_ShortBelow()
         {
             Assert.That(SetupEngine.IsValidLevel(GateSide.Long, 105, 100), Is.True);

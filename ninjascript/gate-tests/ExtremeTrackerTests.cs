@@ -58,9 +58,40 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void EditHistoryKeepsEarlierBreaks()
+        {
+            var bars = new List<GateBar> { Bar(60, 99.0, 101), Bar(360, 96.0, 99) };
+            var edits = new List<ExtremeInput> { new ExtremeInput(100.0, 0), new ExtremeInput(97.0, 290) };
+            var t = ExtremeTracker.Track(GateSide.Long, edits, bars);
+            Assert.That(t.BreakTimes, Is.EqualTo(new long[] { 60, 360 }));
+            Assert.That(t.Value, Is.EqualTo(96.0));
+            Assert.That(t.Mode, Is.EqualTo(ExtremeMode.Auto));
+        }
+
+        [Test]
+        public void EditRepinsWithoutAddingABreak()
+        {
+            var bars = new List<GateBar> { Bar(60, 99.0, 101), Bar(360, 98.0, 99) };
+            var edits = new List<ExtremeInput> { new ExtremeInput(100.0, 0), new ExtremeInput(97.0, 290) };
+            var t = ExtremeTracker.Track(GateSide.Long, edits, bars);
+            Assert.That(t.BreakTimes, Is.EqualTo(new long[] { 60 }));
+            Assert.That(t.Value, Is.EqualTo(97.0));
+            Assert.That(t.Mode, Is.EqualTo(ExtremeMode.Pinned));
+        }
+
+        [Test]
+        public void DuplicateAndOutOfOrderBarsAreSkipped()
+        {
+            var bars = new List<GateBar> { Bar(60, 99.0, 101), Bar(60, 98.0, 101), Bar(30, 97.0, 101) };
+            var t = ExtremeTracker.Track(GateSide.Long, new ExtremeInput(100.0, 0), bars);
+            Assert.That(t.BreakTimes, Is.EqualTo(new long[] { 60 }));
+            Assert.That(t.Value, Is.EqualTo(99.0));
+        }
+
+        [Test]
         public void NullInputReturnsNull()
         {
-            Assert.That(ExtremeTracker.Track(GateSide.Long, null, new List<GateBar>()), Is.Null);
+            Assert.That(ExtremeTracker.Track(GateSide.Long, (ExtremeInput)null, new List<GateBar>()), Is.Null);
         }
     }
 }

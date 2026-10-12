@@ -45,9 +45,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 
             bool triggered = false;
             long deadAt = 0;
+            long lastEnd = long.MinValue;
             foreach (var bar in bars)
             {
                 if (bar.EndTime <= level.SetAt) continue;
+                if (bar.EndTime <= lastEnd) continue; // a duplicate close must never count twice
+                lastEnd = bar.EndTime;
 
                 while (next < breaks.Count && breaks[next] <= bar.EndTime)
                 {

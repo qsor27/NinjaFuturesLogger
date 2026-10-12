@@ -58,6 +58,13 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             }
 
             if (positionQty == 0) return GateDecision.Cancel("Entries are only allowed through an armed setup.");
+
+            // Spec §7: price changes are always allowed and nothing blocks an exit. A stop whose
+            // quantity is unchanged (partial fill, manual reduce, lagging position snapshot) or
+            // smaller is never cancelled for being larger than the current position.
+            if (order.IsChange && order.Quantity <= order.PreviousQuantity && Reduces(order.IsBuy, positionQty))
+                return GateDecision.Allow();
+
             return CheckExit(order.IsBuy, order.Quantity, positionQty);
         }
 
@@ -65,14 +72,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public static GateDecision CheckExit(bool isBuy, int quantity, int positionQty)
         {
             if (quantity <= 0) return GateDecision.Cancel("Order quantity must be positive.");
-            bool reduces = positionQty > 0 ? !isBuy : isBuy;
-            if (!reduces) return GateDecision.Cancel("Adding to a position isn't allowed.");
+            if (!Reduces(isBuy, positionQty)) return GateDecision.Cancel("Adding to a position isn't allowed.");
             int held = Math.Abs(positionQty);
             if (quantity > held)
                 return GateDecision.Cancel(
                     "Exit size " + quantity + " is larger than the position (" + held + ") — reversing isn't allowed.");
             return GateDecision.Allow();
         }
+
+        private static bool Reduces(bool isBuy, int positionQty) => positionQty > 0 ? !isBuy : isBuy;
     }
 
     /// <summary>A leader entry the gate allowed; followers may copy it within the window.</summary>

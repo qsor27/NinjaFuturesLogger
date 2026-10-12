@@ -1,3 +1,5 @@
+using System;
+
 namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 {
     // Pure Setup Gate core (spec: docs/superpowers/specs/2026-10-12-setup-gate-design.md).
@@ -50,8 +52,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 
     /// <summary>
     /// The trader's level for one timeframe. A break of the extreme only counts toward this
-    /// level if it happened after RequireBreakAfter: the previous level's death time when the
-    /// level replaced a dead one, otherwise 0.
+    /// level if it happened after RequireBreakAfter. Always build replacements with
+    /// <see cref="Replace"/> so a death requirement is never dropped.
     /// </summary>
     public sealed class LevelInput
     {
@@ -65,6 +67,23 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public double Price { get; }
         public long SetAt { get; }
         public long RequireBreakAfter { get; }
+
+        /// <summary>
+        /// A new level for a timeframe that may already have one. RequireBreakAfter carries the
+        /// previous level's requirement forward and, if the previous level is Dead, moves it to
+        /// the death time (or to now when the death time is unknown because replay data is
+        /// missing). Re-dragging a replacement level therefore never skips "new extreme after death".
+        /// </summary>
+        public static LevelInput Replace(LevelInput previous, SetupEvaluation previousEvaluation, double price, long now)
+        {
+            long requireBreakAfter = previous != null ? previous.RequireBreakAfter : 0;
+            if (previousEvaluation != null && previousEvaluation.State == SetupState.Dead)
+            {
+                long deathTime = previousEvaluation.DeadAt > 0 ? previousEvaluation.DeadAt : now;
+                requireBreakAfter = Math.Max(requireBreakAfter, deathTime);
+            }
+            return new LevelInput(price, now, requireBreakAfter);
+        }
     }
 
     /// <summary>Direction helpers so every rule is written once for both sides.</summary>
