@@ -20,8 +20,11 @@ that differs. Times are your chart times.
 - [ ] Open a 1-minute chart of the front month (e.g. `MNQ 12-26`) with Chart Trader shown. Add the
       **SetupGate** indicator (Indicators → SetupGate).
 - [ ] Top-left of the chart shows the status strip: the TREND line, the **Lines** checkbox, and LONG and
-      SHORT rows of 1m/3m/1h/4h icons. Chart Trader shows a **SETUP GATE** panel under its normal
-      controls (if it isn't there it appears bottom-right on the chart instead — note which).
+      SHORT rows of 1m/3m/1h/4h icons. Chart Trader shows a **SETUP GATE · <instrument>** panel under
+      its normal controls (if it isn't there it appears bottom-right on the chart instead — note which).
+      If the strip itself is missing, tell me — the GATE OFFLINE banner lives in the same place.
+- [ ] With two tabs in one chart window (e.g. MNQ and ES, SetupGate on both), switching tabs swaps
+      Chart Trader's SETUP GATE panel to the selected tab's instrument.
 - [ ] The hourly trend window opens for this instrument with ~24 hourly candles.
 - [ ] After any F5 recompile, the strip shows "offline" and the red **GATE OFFLINE** banner for at most a
       second or two, then recovers by itself.
@@ -42,12 +45,19 @@ that differs. Times are your chart times.
       `▲ LOW … pinned` line appears where you clicked.
 - [ ] Choose **1m**, press **Set Level**, click above the low: a blue `▲ 1m LVL …` line appears. A level
       clicked below the low is refused with the reason in the panel.
-- [ ] Drag the 1m line up a few ticks: it follows the mouse and stays at the new price; the panel's 1m
-      box shows it.
+- [ ] Drag the 1m line **by its label** (right side) up a few ticks: it follows the mouse and stays at
+      the new price; the panel's 1m box shows it. Clicking the line away from its label does nothing
+      (NinjaTrader handles that click as usual).
+- [ ] With an ATM stop sitting just under the LOW line, drag the stop: the stop moves, the LOW line
+      does not.
+- [ ] Click into the Low box, wait for a new low to move the auto low, then click into the 1m box
+      without typing: the low stays **auto** (nothing is saved unless you typed).
 - [ ] Type a price into the 3m box and press Enter: a purple `▲ 3m LVL` line appears. Put a 1h level at
       the same price as the 1m level: both labels show, stacked.
-- [ ] Untick **Lines**: lines disappear; tick it: they return. Press **Set Level** then **Esc**: the
-      prompt clears and the next click is an ordinary chart click.
+- [ ] Untick **Lines**: lines disappear; tick it: they return. Press **Set Level** then **Esc** (or
+      press **Set Level** again): the prompt says "Placement cancelled." and the next click is an
+      ordinary chart click.
+- [ ] In click mode, clicking a lower panel (e.g. Volume) or the price axis does nothing.
 - [ ] Watch the 1m icon as candles close: red → green outline after one close above → solid green after
       two; the panel status line explains each step ("Waiting for a new low." → "Waiting for a 1m close
       back above the level." → "Ready to arm long.").
@@ -56,7 +66,8 @@ that differs. Times are your chart times.
 - [ ] With **no ATM strategy** selected in Chart Trader, press **ARM MARKET**: refused ("Choose an ATM
       strategy in Chart Trader…").
 - [ ] Select account Sim101, your ATM template and quantity 1 in Chart Trader. At "Ready to arm long."
-      press **ARM MARKET**: the strip's LONG row and the panel show "ARMED MKT · <template> · 1 ct".
+      press **ARM MARKET**: the message says "Armed LONG on Sim101." and the strip's LONG row and the
+      panel show "ARMED MKT · <template> · 1 ct".
 - [ ] On the second consecutive 1m close above the level, a market buy fills at the next candle's first
       tick with the ATM's stop and target attached (Stop1/Target1 are **not** cancelled).
 - [ ] The gate's own entry is **not** cancelled: `gate_log.csv` has a `Fire` row and no `Cancel` row for

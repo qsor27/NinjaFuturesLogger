@@ -102,6 +102,28 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             return lines;
         }
 
+        private const double LabelMarginPixels = 3;
+
+        /// <summary>
+        /// The line whose drawn label contains the point (with a small margin), or null. Only labels
+        /// are grabbable, so clicks on the line elsewhere — where the trader's own stops, orders and
+        /// drawings sit — always reach NinjaTrader.
+        /// </summary>
+        public static ChartLine LabelAt(IEnumerable<LabelBox> boxes, double x, double y)
+        {
+            foreach (var box in boxes)
+            {
+                if (x >= box.Left - LabelMarginPixels && x <= box.Right + LabelMarginPixels
+                    && y >= box.Top - LabelMarginPixels && y <= box.Bottom + LabelMarginPixels)
+                    return box.Line;
+            }
+            return null;
+        }
+
+        /// <summary>True when the point is inside the price panel (not a lower panel or an axis).</summary>
+        public static bool IsInside(double x, double y, double left, double top, double width, double height) =>
+            x >= left && x <= left + width && y >= top && y <= top + height;
+
         /// <summary>The line closest to y (pixels) within tolerance, or null — used to start a drag.</summary>
         public static ChartLine NearestWithin(IReadOnlyList<ChartLine> lines, Func<double, double> yOfPrice, double y, double tolerance)
         {
@@ -118,6 +140,21 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             }
             return best;
         }
+    }
+
+    /// <summary>A drawn label's rectangle in chart pixels; only labels are grabbable.</summary>
+    public sealed class LabelBox
+    {
+        public LabelBox(ChartLine line, double left, double top, double right, double bottom)
+        {
+            Line = line; Left = left; Top = top; Right = right; Bottom = bottom;
+        }
+
+        public ChartLine Line { get; }
+        public double Left { get; }
+        public double Top { get; }
+        public double Right { get; }
+        public double Bottom { get; }
     }
 
     public enum ClickTarget { None, Level, Extreme }
@@ -143,6 +180,23 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         }
 
         public void Cancel() => Target = ClickTarget.None;
+
+        /// <summary>
+        /// A Set Level / Set Low press: starts click mode, or cancels it when the same button is
+        /// pressed again (Esc may not reach the chart while Chart Trader has focus). Returns true
+        /// when click mode is now on.
+        /// </summary>
+        public bool Press(ClickTarget target, GateSide side, GateTimeframe tf)
+        {
+            if (Target == target)
+            {
+                Cancel();
+                return false;
+            }
+            if (target == ClickTarget.Level) BeginLevel(side, tf);
+            else BeginExtreme(side);
+            return true;
+        }
 
         public string Prompt
         {

@@ -23,7 +23,6 @@ namespace NinjaTrader.NinjaScript.Indicators
     /// </summary>
     public class SetupGate : Indicator
     {
-        private const double DragTolerancePixels = 6;
         private static readonly GateTimeframe[] AllTimeframes =
             { GateTimeframe.M1, GateTimeframe.M3, GateTimeframe.H1, GateTimeframe.H4 };
 
@@ -31,6 +30,8 @@ namespace NinjaTrader.NinjaScript.Indicators
         private readonly Dictionary<GateTimeframe, RadioButton> timeframeButtons = new Dictionary<GateTimeframe, RadioButton>();
         private readonly Dictionary<GateTimeframe, TextBox> levelBoxes = new Dictionary<GateTimeframe, TextBox>();
         private readonly List<RowDefinition> traderRows = new List<RowDefinition>();
+        private readonly List<LabelBox> labelBoxes = new List<LabelBox>();
+        private readonly HashSet<TextBox> editedBoxes = new HashSet<TextBox>();
 
         private string instrumentName;
         private GateRuntime runtime;
@@ -41,7 +42,14 @@ namespace NinjaTrader.NinjaScript.Indicators
         private double dragPrice;
         private bool showLines = true;
         private bool uiBuilt;
+        private bool terminated;
         private ChartControl hostControl;
+        private ChartControl chartControlRef;
+        private NinjaTrader.Gui.Chart.Chart chartWindow;
+        private float panelLeft;
+        private float panelTop;
+        private float panelWidth;
+        private float panelHeight;
 
         private DispatcherTimer timer;
         private Grid chartGrid;
@@ -52,6 +60,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         private StackPanel stripShort;
         private TextBlock banner;
         private Border gatePanel;
+        private TextBlock panelHeader;
         private RadioButton longButton;
         private RadioButton shortButton;
         private TextBlock extremeCaption;
@@ -76,16 +85,23 @@ namespace NinjaTrader.NinjaScript.Indicators
             else if (State == State.DataLoaded)
             {
                 instrumentName = Instrument != null ? Instrument.FullName : null;
+                chartControlRef = ChartControl;
             }
             else if (State == State.Historical)
             {
                 var control = ChartControl;
-                if (control != null) control.Dispatcher.InvokeAsync(() => BuildUi(control));
+                if (control != null)
+                {
+                    chartControlRef = control;
+                    control.Dispatcher.InvokeAsync(() => Guard(() => BuildUi(control)));
+                }
             }
             else if (State == State.Terminated)
             {
-                var control = hostControl;
-                if (control != null) control.Dispatcher.InvokeAsync(TearDownUi);
+                // Set before anything is queued so a BuildUi still waiting in the dispatcher never runs.
+                terminated = true;
+                var control = hostControl ?? chartControlRef;
+                if (control != null) control.Dispatcher.InvokeAsync(() => Guard(TearDownUi));
             }
         }
 
@@ -97,6 +113,11 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             base.OnRender(chartControl, chartScale);
             lastScale = chartScale;
+            panelLeft = ChartPanel.X;
+            panelTop = ChartPanel.Y;
+            panelWidth = ChartPanel.W;
+            panelHeight = ChartPanel.H;
+            labelBoxes.Clear();
             if (!showLines || chartLines.Count == 0 || RenderTarget == null) return;
 
             float left = ChartPanel.X;
@@ -105,13 +126,16 @@ namespace NinjaTrader.NinjaScript.Indicators
             {
                 double price = ReferenceEquals(line, dragging) ? dragPrice : line.Price;
                 float y = chartScale.GetYByValue(price);
+                if (!ChartLines.IsInside(left, y, panelLeft, panelTop, panelWidth, panelHeight)) continue;
                 using (var brush = new SharpDX.Direct2D1.SolidColorBrush(RenderTarget, ToColor(line.ColorHex, line.IsActiveSide ? 1f : 0.35f)))
                 using (var format = new SharpDX.DirectWrite.TextFormat(NinjaTrader.Core.Globals.DirectWriteFactory, "Arial", 11f))
                 using (var layout = new SharpDX.DirectWrite.TextLayout(NinjaTrader.Core.Globals.DirectWriteFactory, line.Label, format, 320f, 14f))
                 {
                     RenderTarget.DrawLine(new SharpDX.Vector2(left, y), new SharpDX.Vector2(right, y), brush, line.IsExtreme ? 2f : 1f);
                     float x = right - layout.Metrics.Width - 6f;
-                    RenderTarget.DrawTextLayout(new SharpDX.Vector2(x, y - 14f - line.StackIndex * 13f), layout, brush);
+                    float top = y - 14f - line.StackIndex * 13f;
+                    RenderTarget.DrawTextLayout(new SharpDX.Vector2(x, top), layout, brush);
+                    labelBoxes.Add(new LabelBox(line, x, top, x + layout.Metrics.Width, top + 14f));
                 }
             }
         }
@@ -139,7 +163,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             if (instrument != instrumentName) return;
             var control = hostControl;
-            if (control != null) control.Dispatcher.InvokeAsync(RefreshSnapshot);
+            if (control != null) control.Dispatcher.InvokeAsync(() => Guard(RefreshSnapshot));
         }
 
         private void RefreshSnapshot()
@@ -157,10 +181,11 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         private void BuildUi(ChartControl control)
         {
-            if (uiBuilt) return;
+            if (uiBuilt || terminated) return;
             uiBuilt = true;
             hostControl = control;
             chartGrid = control.Parent as Grid;
+            chartWindow = Window.GetWindow(control) as NinjaTrader.Gui.Chart.Chart;
 
             BuildStrip();
             BuildBanner();
@@ -170,10 +195,18 @@ namespace NinjaTrader.NinjaScript.Indicators
             control.PreviewMouseLeftButtonDown += OnMouseDown;
             control.PreviewMouseMove += OnMouseMove;
             control.PreviewMouseLeftButtonUp += OnMouseUp;
-            control.PreviewKeyDown += OnKeyDown;
+            control.LostMouseCapture += OnLostMouseCapture;
+            // Esc must work while focus is in Chart Trader (where Set Level was pressed), so listen
+            // on the whole chart window.
+            if (chartWindow != null)
+            {
+                chartWindow.PreviewKeyDown += OnKeyDown;
+                if (chartWindow.MainTabControl != null) chartWindow.MainTabControl.SelectionChanged += OnTabChanged;
+            }
+            UpdatePanelVisibility();
 
             timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            timer.Tick += (s, e) => Attach();
+            timer.Tick += (s, e) => Guard(Attach);
             timer.Start();
             Attach();
         }
@@ -192,7 +225,12 @@ namespace NinjaTrader.NinjaScript.Indicators
                 control.PreviewMouseLeftButtonDown -= OnMouseDown;
                 control.PreviewMouseMove -= OnMouseMove;
                 control.PreviewMouseLeftButtonUp -= OnMouseUp;
-                control.PreviewKeyDown -= OnKeyDown;
+                control.LostMouseCapture -= OnLostMouseCapture;
+            }
+            if (chartWindow != null)
+            {
+                chartWindow.PreviewKeyDown -= OnKeyDown;
+                if (chartWindow.MainTabControl != null) chartWindow.MainTabControl.SelectionChanged -= OnTabChanged;
             }
             if (chartGrid != null)
             {
@@ -270,7 +308,8 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             string group = "SetupGate" + GetHashCode().ToString(CultureInfo.InvariantCulture);
             var root = new StackPanel { Margin = new Thickness(4, 8, 4, 4) };
-            root.Children.Add(Text("SETUP GATE", 12, Colors.SkyBlue, true));
+            panelHeader = Text("SETUP GATE · " + (instrumentName ?? ""), 12, Colors.SkyBlue, true);
+            root.Children.Add(panelHeader);
 
             longButton = Radio("Long", group + "side", true);
             shortButton = Radio("Short", group + "side", false);
@@ -417,13 +456,15 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         private void BeginClick(ClickTarget target)
         {
-            if (target == ClickTarget.Level) clickMode.BeginLevel(SelectedSide(), SelectedTimeframe());
-            else clickMode.BeginExtreme(SelectedSide());
-            messageText.Text = clickMode.Prompt;
+            bool started = clickMode.Press(target, SelectedSide(), SelectedTimeframe());
+            messageText.Text = started ? clickMode.Prompt + " (Press the button again to cancel.)" : "Placement cancelled.";
         }
 
         private void CommitBox(GateTimeframe? tf, TextBox box)
         {
+            // Only save what the trader actually typed: a focused box can hold a stale value while the
+            // extreme auto-tracks or a line is dragged, and leaving it must not write that back.
+            if (!editedBoxes.Remove(box)) return;
             if (runtime == null || snapshot == null) return;
             double price;
             if (!TryPrice(box.Text, out price)) return;
@@ -466,7 +507,10 @@ namespace NinjaTrader.NinjaScript.Indicators
             GateSide side = SideMath.ActiveSide(snapshot.Trend) ?? SelectedSide();
             var arm = new PendingArm(side, kind, kind == EntryKind.Limit ? Round(limit) : 0,
                 trader.AtmStrategy.Template, trader.Account.Name, trader.Quantity);
-            Show(runtime.Arm(instrumentName, arm), "Armed.");
+            string armed = "Armed " + side.ToString().ToUpperInvariant() + " on " + trader.Account.Name + ".";
+            if (side != SelectedSide())
+                armed += " The hourly trend is " + snapshot.Trend + ", so the " + side.ToString().ToLowerInvariant() + " side was armed.";
+            Show(runtime.Arm(instrumentName, arm), armed);
         }
 
         private void Disarm()
@@ -482,10 +526,15 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         // ---------------- mouse ----------------
 
-        private void OnMouseDown(object sender, MouseButtonEventArgs e)
+        private void OnMouseDown(object sender, MouseButtonEventArgs e) => Guard(() => MouseDown(e));
+
+        private void MouseDown(MouseButtonEventArgs e)
         {
             if (lastScale == null || runtime == null || hostControl == null) return;
+            int x = PixelX(e);
             int y = PixelY(e);
+            // Lower panels and the axes belong to NinjaTrader: never place or grab there.
+            if (!ChartLines.IsInside(x, y, panelLeft, panelTop, panelWidth, panelHeight)) return;
             if (clickMode.Target != ClickTarget.None)
             {
                 double price = Round(lastScale.GetValueByY(y));
@@ -500,8 +549,9 @@ namespace NinjaTrader.NinjaScript.Indicators
                 return;
             }
             if (!showLines) return;
-            var scale = lastScale;
-            var hit = ChartLines.NearestWithin(chartLines, p => scale.GetYByValue(p), y, DragTolerancePixels);
+            // Only a line's label is grabbable, so the trader's own stops, orders and drawings near
+            // a gate line keep working.
+            var hit = ChartLines.LabelAt(labelBoxes, x, y);
             if (hit == null) return;
             dragging = hit;
             dragPrice = hit.Price;
@@ -512,12 +562,47 @@ namespace NinjaTrader.NinjaScript.Indicators
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
             if (dragging == null || lastScale == null) return;
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                CancelDrag();
+                return;
+            }
             dragPrice = Round(lastScale.GetValueByY(PixelY(e)));
             ForceRefresh();
             e.Handled = true;
         }
 
-        private void OnMouseUp(object sender, MouseButtonEventArgs e)
+        private void OnMouseUp(object sender, MouseButtonEventArgs e) => Guard(() => MouseUp(e));
+
+        private void OnLostMouseCapture(object sender, MouseEventArgs e)
+        {
+            if (dragging != null) CancelDrag();
+        }
+
+        private void CancelDrag()
+        {
+            dragging = null;
+            ForceRefresh();
+        }
+
+        private void OnTabChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (chartWindow != null && ReferenceEquals(e.OriginalSource, chartWindow.MainTabControl)) Guard(UpdatePanelVisibility);
+        }
+
+        /// <summary>
+        /// Chart Trader is shared by every tab of a chart window: only the selected tab's panel shows.
+        /// </summary>
+        private void UpdatePanelVisibility()
+        {
+            if (gatePanel == null || traderGrid == null || chartWindow == null || chartWindow.MainTabControl == null) return;
+            var selected = chartWindow.MainTabControl.SelectedItem as TabItem;
+            var tab = selected != null ? selected.Content as ChartTab : null;
+            bool mine = tab == null || ReferenceEquals(tab.ChartControl, hostControl);
+            gatePanel.Visibility = mine ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void MouseUp(MouseButtonEventArgs e)
         {
             if (dragging == null) return;
             var line = dragging;
@@ -541,6 +626,23 @@ namespace NinjaTrader.NinjaScript.Indicators
             clickMode.Cancel();
             messageText.Text = "";
             e.Handled = true;
+        }
+
+        private int PixelX(MouseEventArgs e) =>
+            ChartingExtensions.ConvertToHorizontalPixels(e.GetPosition(hostControl as IInputElement).X, hostControl);
+
+        /// <summary>UI event handlers never let an exception escape onto NinjaTrader's dispatcher.</summary>
+        private void Guard(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                if (messageText != null) messageText.Text = "Setup Gate error: " + ex.Message;
+                Print("SetupGate indicator error: " + ex);
+            }
         }
 
         private int PixelY(MouseEventArgs e) =>
@@ -587,10 +689,15 @@ namespace NinjaTrader.NinjaScript.Indicators
             box.KeyDown += (s, e) =>
             {
                 if (e.Key != Key.Enter) return;
-                CommitBox(tf, box);
+                Guard(() => CommitBox(tf, box));
                 e.Handled = true;
             };
-            box.LostFocus += (s, e) => CommitBox(tf, box);
+            box.LostFocus += (s, e) => Guard(() => CommitBox(tf, box));
+            box.GotKeyboardFocus += (s, e) => editedBoxes.Remove(box);
+            box.TextChanged += (s, e) =>
+            {
+                if (box.IsKeyboardFocusWithin) editedBoxes.Add(box);
+            };
         }
 
         private static FrameworkElement Icon(GateIcon icon)
