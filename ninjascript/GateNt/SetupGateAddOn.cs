@@ -26,8 +26,10 @@ namespace NinjaTrader.NinjaScript.AddOns
                 Name = "SetupGateAddOn";
                 Description = "Setup Gate: entries only from an armed level-regain setup in the hourly trend direction.";
             }
-            else if (State == State.DataLoaded)
+            else if (State == State.Active)
             {
+                // AddOns use the Active state; they never pass through DataLoaded/Historical/Realtime.
+                if (runtime != null) return;
                 runtime = new GateRuntime(Print);
                 runtime.TrendPromptRequested += instrument => OnUi(() => GateTrendWindow.Prompt(instrument));
                 runtime.AlertRaised += message => OnUi(() => GateAlertWindow.Raise(message));
