@@ -17,6 +17,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public const string LevelSet = "LevelSet";
         public const string ExtremeSet = "ExtremeSet";
         public const string Transition = "Transition";
+        public const string BreakEven = "BreakEven";
     }
 
     /// <summary>Append-only CSV log of everything the gate decides.</summary>
