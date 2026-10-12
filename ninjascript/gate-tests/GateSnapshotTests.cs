@@ -12,7 +12,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             var g = new InstrumentGate("MNQ 12-26", new InstrumentInputs());
             g.SetExtreme(GateSide.Long, 100.0, 0);
             g.SetLevel(GateSide.Long, GateTimeframe.M1, 105.0, 0);
-            g.AnswerTrend(GateTrend.Up);
+            g.AnswerTrend(GateTrend.Up, g.LatestHourEnd);
             return g;
         }
 
@@ -48,6 +48,26 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             g.ArmEntry(new PendingArm(GateSide.Long, EntryKind.Market, 0, "4ptSL-20ptTP", "Sim101", 1));
             Assert.That(g.StatusLine(),
                 Is.EqualTo("ARMED MKT · 4ptSL-20ptTP · 1 ct — fires at the open after the second close."));
+        }
+
+        [Test]
+        public void StatusShowsALiveArmEvenWhenTheNewHourIsUnanswered()
+        {
+            var g = LongSetup();
+            g.OnBarClosed(GateTimeframe.M1, M1(3480, 99, 104, 104));
+            g.OnBarClosed(GateTimeframe.M1, M1(3540, 103, 106, 106));
+            g.ArmEntry(new PendingArm(GateSide.Long, EntryKind.Market, 0, "4ptSL-20ptTP", "Sim101", 1));
+            g.OnBarClosed(GateTimeframe.H1, new GateBar(0, 3600, 100, 101, 99, 100));
+            Assert.That(g.StatusLine(), Is.EqualTo(
+                "ARMED MKT · 4ptSL-20ptTP · 1 ct — fires at the open after the second close. Confirm the hourly trend to arm again."));
+        }
+
+        [Test]
+        public void StatusOneMinuteDataDown()
+        {
+            var g = LongSetup();
+            g.SetOneMinuteFeed(false);
+            Assert.That(g.StatusLine(), Is.EqualTo("1m data is down — entries are blocked."));
         }
 
         [Test]

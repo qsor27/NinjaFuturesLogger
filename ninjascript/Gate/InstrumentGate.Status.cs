@@ -11,8 +11,13 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         /// <summary>Spec §9: why an entry is or isn't possible right now, in plain English.</summary>
         public string StatusLine()
         {
+            if (!OneMinuteFeedHealthy) return "1m data is down — entries are blocked.";
+            if (Arm != null)
+            {
+                return Arm.Describe() + " — fires at the open after the second close."
+                    + (NeedsTrendAnswer ? " Confirm the hourly trend to arm again." : "");
+            }
             if (NeedsTrendAnswer) return "Confirm the hourly trend first.";
-            if (Arm != null) return Arm.Describe() + " — fires at the open after the second close.";
             if (GateEntryWorking) return "Gate entry working — cancel it to re-arm.";
             if (LeaderPositionQty != 0) return "In a position — exits only.";
 

@@ -23,7 +23,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             var g = new InstrumentGate("MNQ 12-26", new InstrumentInputs());
             Assert.That(g.SetExtreme(GateSide.Long, 100.0, 0).Ok, Is.True);
             Assert.That(g.SetLevel(GateSide.Long, GateTimeframe.M1, 105.0, 0).Ok, Is.True);
-            Assert.That(g.AnswerTrend(GateTrend.Up).Ok, Is.True);
+            Assert.That(g.AnswerTrend(GateTrend.Up, g.LatestHourEnd).Ok, Is.True);
             return g;
         }
 
@@ -151,7 +151,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         {
             var g = LongAtOneClose();
             g.ArmEntry(MarketArm());
-            var r = g.AnswerTrend(GateTrend.Down);
+            g.OnBarClosed(GateTimeframe.H1, H1(3600));
+            var r = g.AnswerTrend(GateTrend.Down, g.LatestHourEnd);
+            Assert.That(r.Ok, Is.True);
             Assert.That(Has(r.Actions, GateActionKind.CancelArm), Is.True);
             Assert.That(g.Arm, Is.Null);
         }
@@ -161,7 +163,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         {
             var g = LongAtOneClose();
             g.ArmEntry(MarketArm());
-            var r = g.AnswerTrend(GateTrend.Up);
+            var r = g.AnswerTrend(GateTrend.Up, g.LatestHourEnd);
             Assert.That(Has(r.Actions, GateActionKind.CancelArm), Is.False);
             Assert.That(g.Arm, Is.Not.Null);
         }
@@ -178,7 +180,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             Assert.That(Has(hour, GateActionKind.PromptTrend), Is.True);
             Assert.That(g.NeedsTrendAnswer, Is.True);
 
-            var close = g.OnBarClosed(GateTimeframe.M1, M1(3660, 105, 108, 107));
+            var close = g.OnBarClosed(GateTimeframe.M1, M1(3600, 105, 108, 107));
             Assert.That(Has(close, GateActionKind.FireEntry), Is.True);
         }
 
@@ -190,7 +192,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             Assert.That(g.OnBarClosed(GateTimeframe.H1, H1(3600)), Is.Empty);
             Assert.That(Has(g.OnBarClosed(GateTimeframe.H1, H1(7200)), GateActionKind.PromptTrend), Is.True);
 
-            g.AnswerTrend(GateTrend.Up);
+            g.AnswerTrend(GateTrend.Up, g.LatestHourEnd);
             Assert.That(g.NeedsTrendAnswer, Is.False);
             Assert.That(Has(g.OnBarClosed(GateTimeframe.H1, H1(10800)), GateActionKind.PromptTrend), Is.True);
         }
@@ -228,7 +230,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         public void LoadHistoryEmitsNothingAndBaselines()
         {
             var g = LongSetup();
-            g.LoadHistory(GateTimeframe.M1, new[] { M1(60, 99, 104, 104), M1(120, 103, 106, 106) });
+            var loaded = g.LoadHistory(GateTimeframe.M1, new[] { M1(60, 99, 104, 104), M1(120, 103, 106, 106) });
+            Assert.That(loaded, Is.Empty);
             Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.OneClose));
 
             var actions = g.OnBarClosed(GateTimeframe.M1, M1(180, 105, 108, 107));
@@ -274,10 +277,84 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void GapFillWhileArmedCancelsTheArm()
+        {
+            var g = LongAtOneClose();
+            g.ArmEntry(MarketArm());
+            var actions = g.LoadHistory(GateTimeframe.M1, new[] { M1(180, 103, 106, 104), M1(240, 103, 106, 106) });
+            Assert.That(Has(actions, GateActionKind.CancelArm), Is.True);
+            Assert.That(g.Arm, Is.Null);
+            Assert.That(Has(g.OnBarClosed(GateTimeframe.M1, M1(300, 105, 108, 107)), GateActionKind.FireEntry), Is.False);
+        }
+
+        [Test]
+        public void MissingOneMinuteBarCancelsInsteadOfFiring()
+        {
+            var g = LongAtOneClose();
+            g.ArmEntry(MarketArm());
+            // Bar 180 never arrived: the 240 bar starts at 180, after the last close at 120.
+            var actions = g.OnBarClosed(GateTimeframe.M1, M1(240, 105, 108, 107));
+            Assert.That(Has(actions, GateActionKind.FireEntry), Is.False);
+            Assert.That(actions.Single(a => a.Kind == GateActionKind.CancelArm).Detail, Does.Contain("missing"));
+        }
+
+        [Test]
+        public void OneMinuteFeedDownCancelsAndBlocksArming()
+        {
+            var g = LongAtOneClose();
+            g.ArmEntry(MarketArm());
+            var down = g.SetOneMinuteFeed(false);
+            Assert.That(Has(down.Actions, GateActionKind.CancelArm), Is.True);
+            Assert.That(g.ArmEntry(MarketArm()).Error, Does.Contain("1m data"));
+
+            g.SetOneMinuteFeed(true);
+            Assert.That(g.ArmEntry(MarketArm()).Ok, Is.True);
+        }
+
+        [Test]
+        public void MidHourFlipIsRejected()
+        {
+            var g = LongSetup();
+            Assert.That(g.AnswerTrend(GateTrend.Down, g.LatestHourEnd).Error, Does.Contain("already Up"));
+            Assert.That(g.AnswerTrend(GateTrend.Up, g.LatestHourEnd).Ok, Is.True);
+            Assert.That(g.Trend.Trend, Is.EqualTo(GateTrend.Up));
+        }
+
+        [Test]
+        public void AnswerForAStaleHourIsRejected()
+        {
+            var g = LongSetup();
+            g.OnBarClosed(GateTimeframe.H1, H1(3600));
+            Assert.That(g.AnswerTrend(GateTrend.Up, 0).Error, Does.Contain("new hour"));
+            Assert.That(g.AnswerTrend(GateTrend.Up, 3600).Ok, Is.True);
+        }
+
+        [Test]
+        public void LoadHistoryPromptsWhenTheTrendIsUnanswered()
+        {
+            var g = new InstrumentGate("MNQ 12-26", new InstrumentInputs());
+            Assert.That(Has(g.LoadHistory(GateTimeframe.H1, new[] { H1(3600) }), GateActionKind.PromptTrend), Is.True);
+            Assert.That(g.LoadHistory(GateTimeframe.M1, new[] { M1(3600, 99, 101, 100) }), Is.Empty);
+            Assert.That(Has(g.LoadHistory(GateTimeframe.H1, new[] { H1(7200) }), GateActionKind.PromptTrend), Is.True);
+
+            g.AnswerTrend(GateTrend.Up, g.LatestHourEnd);
+            Assert.That(g.LoadHistory(GateTimeframe.M1, new[] { M1(7200, 99, 101, 100) }), Is.Empty);
+        }
+
+        [Test]
+        public void LoadHistorySortsBars()
+        {
+            var g = LongSetup();
+            g.LoadHistory(GateTimeframe.M1, new[] { M1(180, 105, 108, 107), M1(120, 103, 106, 106), M1(60, 99, 104, 104) });
+            Assert.That(g.BarsFor(GateTimeframe.M1).Count, Is.EqualTo(3));
+            Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.Confirmed));
+        }
+
+        [Test]
         public void AnswerTrendRejectsUnconfirmed()
         {
             var g = LongSetup();
-            Assert.That(g.AnswerTrend(GateTrend.Unconfirmed).Error, Does.Contain("Up or Down"));
+            Assert.That(g.AnswerTrend(GateTrend.Unconfirmed, g.LatestHourEnd).Error, Does.Contain("Up or Down"));
         }
     }
 }

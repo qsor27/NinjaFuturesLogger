@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 
 namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 {
@@ -8,7 +9,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
     /// Spec §§4–6 runtime model for one instrument contract. Holds closed bars per timeframe,
     /// derives every setup state from the trader's inputs (never stores it), owns the single arm,
     /// and turns each bar close or trader command into actions for the NinjaTrader shell. Pure:
-    /// no clock, no IO, no NinjaTrader types.
+    /// no clock, no IO, no NinjaTrader types. Not thread-safe: the shell must serialize every call
+    /// (bar updates, order events and UI commands arrive on different NinjaTrader threads).
     /// </summary>
     public sealed partial class InstrumentGate
     {
@@ -41,6 +43,18 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public bool GateEntryWorking { get; set; }
 
         public long LatestHourEnd => latestHourEnd;
+
+        /// <summary>False while the shell's 1m feed is disconnected or reloading.</summary>
+        public bool OneMinuteFeedHealthy { get; private set; } = true;
+
+        public GateCommandResult SetOneMinuteFeed(bool healthy)
+        {
+            OneMinuteFeedHealthy = healthy;
+            if (healthy || Arm == null) return GateCommandResult.Done();
+            var arm = Arm;
+            Arm = null;
+            return GateCommandResult.Done(new[] { GateAction.CancelArmed(arm, "1m data is down — the arm was cancelled.") });
+        }
         public bool NeedsTrendAnswer => !Trend.IsConfirmed(latestHourEnd);
 
         /// <summary>True after a level or extreme changed; the shell saves state and calls MarkInputsSaved.</summary>
@@ -60,24 +74,44 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             return SetupEngine.Evaluate(side, level, TrackExtreme(side), bars[tf]);
         }
 
-        /// <summary>Startup or reconnect: append closed history without emitting any action.</summary>
-        public void LoadHistory(GateTimeframe tf, IEnumerable<GateBar> history)
+        /// <summary>
+        /// Startup or reconnect: append closed history (any order) without transition logs. Filling
+        /// in 1m bars while armed cancels the arm — the fire/cancel decision for those closes was
+        /// never made live (spec §11, fail closed). Prompts for the trend if the latest hour is
+        /// unanswered and hasn't been prompted yet.
+        /// </summary>
+        public IReadOnlyList<GateAction> LoadHistory(GateTimeframe tf, IEnumerable<GateBar> history)
         {
-            foreach (var bar in history) Append(tf, bar);
-            if (tf == GateTimeframe.H1) promptedForHourEnd = Math.Max(promptedForHourEnd, latestHourEnd);
+            var actions = new List<GateAction>();
+            int appended = 0;
+            foreach (var bar in history.OrderBy(b => b.EndTime))
+            {
+                if (Append(tf, bar)) appended++;
+            }
+            if (tf == GateTimeframe.M1 && appended > 0 && Arm != null)
+            {
+                actions.Add(GateAction.CancelArmed(Arm, "1m bars were filled in after a data gap — re-arm to trade."));
+                Arm = null;
+            }
             Rebaseline();
+            AddPromptIfNeeded(actions);
+            return actions;
         }
 
         public IReadOnlyList<GateAction> OnBarClosed(GateTimeframe tf, GateBar bar)
         {
             var actions = new List<GateAction>();
+            var oneMinute = bars[GateTimeframe.M1];
+            long previousOneMinuteEnd = tf == GateTimeframe.M1 && oneMinute.Count > 0
+                ? oneMinute[oneMinute.Count - 1].EndTime
+                : long.MinValue;
             if (!Append(tf, bar)) return actions;
 
-            if (tf == GateTimeframe.H1 && !Trend.IsConfirmed(latestHourEnd) && promptedForHourEnd < latestHourEnd)
-            {
-                promptedForHourEnd = latestHourEnd;
-                actions.Add(GateAction.Prompt());
-            }
+            // A 1m bar that starts after the previous close means closes are missing (dropped feed,
+            // session break, weekend): never fire on that, cancel instead (spec §11, fail closed).
+            bool oneMinuteGap = previousOneMinuteEnd != long.MinValue && bar.StartTime > previousOneMinuteEnd;
+
+            if (tf == GateTimeframe.H1) AddPromptIfNeeded(actions);
 
             // A 1m close can break the shared extreme, which moves every timeframe.
             var affected = tf == GateTimeframe.M1 ? Timeframes : new[] { tf };
@@ -103,7 +137,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                 }
             }
 
-            if (armedAfter != null)
+            if (armedAfter != null && oneMinuteGap)
+            {
+                actions.Add(GateAction.CancelArmed(Arm, "1m bars are missing before this close — re-arm to trade."));
+                Arm = null;
+            }
+            else if (armedAfter != null)
             {
                 switch (ArmRules.OnClose(armedBefore, armedAfter))
                 {
@@ -127,6 +166,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             if (arm.Quantity <= 0) return GateCommandResult.Rejected("Order quantity must be positive.");
             if (arm.Kind == EntryKind.Limit && !(arm.LimitPrice > 0)) return GateCommandResult.Rejected("Enter a limit price.");
             if (Arm != null) return GateCommandResult.Rejected("Already armed — disarm first.");
+            if (!OneMinuteFeedHealthy) return GateCommandResult.Rejected("1m data is down — entries are blocked.");
 
             string reason = ArmRules.CanArm(arm.Side, Trend.Trend, Trend.IsConfirmed(latestHourEnd),
                 Evaluate(arm.Side, GateTimeframe.M1).State, LeaderPositionQty, GateEntryWorking);
@@ -144,9 +184,16 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             return GateCommandResult.Done(new[] { GateAction.LogEvent(GateEvents.Disarm, arm.Describe()) });
         }
 
-        public GateCommandResult AnswerTrend(GateTrend trend)
+        public GateCommandResult AnswerTrend(GateTrend trend, long forHourEnd)
         {
             if (trend == GateTrend.Unconfirmed) return GateCommandResult.Rejected("Choose Up or Down.");
+            if (forHourEnd != latestHourEnd)
+                return GateCommandResult.Rejected("A new hour closed — answer for the latest hour.");
+            if (Trend.IsConfirmed(latestHourEnd) && Trend.Trend != trend)
+            {
+                return GateCommandResult.Rejected("This hour is already " + Trend.Trend
+                    + " — the trend can change at the next hourly close.");
+            }
 
             Trend.Answer(trend, latestHourEnd);
             var actions = new List<GateAction>
@@ -245,6 +292,13 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public static string ExtremeWord(GateSide side) => side == GateSide.Long ? "low" : "high";
 
         public static string FormatPrice(double price) => price.ToString("0.00##", CultureInfo.InvariantCulture);
+
+        private void AddPromptIfNeeded(List<GateAction> actions)
+        {
+            if (!NeedsTrendAnswer || promptedForHourEnd >= latestHourEnd) return;
+            promptedForHourEnd = latestHourEnd;
+            actions.Add(GateAction.Prompt());
+        }
 
         private bool Append(GateTimeframe tf, GateBar bar)
         {
