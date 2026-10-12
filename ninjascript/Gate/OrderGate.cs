@@ -21,13 +21,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
     /// <summary>An order seen on submit (IsChange false) or on change (IsChange true).</summary>
     public sealed class OrderIntent
     {
-        public OrderIntent(bool isBuy, int quantity, bool isGateEntry, bool isChange, int previousQuantity)
+        public OrderIntent(bool isBuy, int quantity, bool isGateEntry, bool isChange, int previousQuantity,
+            bool isAtmBracket = false)
         {
             IsBuy = isBuy;
             Quantity = quantity;
             IsGateEntry = isGateEntry;
             IsChange = isChange;
             PreviousQuantity = previousQuantity;
+            IsAtmBracket = isAtmBracket;
         }
 
         public bool IsBuy { get; }
@@ -35,6 +37,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public bool IsGateEntry { get; }
         public bool IsChange { get; }
         public int PreviousQuantity { get; }
+
+        /// <summary>An ATM Stop1…/Target1… order: always an exit of the entry that started the ATM.</summary>
+        public bool IsAtmBracket { get; }
     }
 
     /// <summary>Spec §7 order table for a gated leader account.</summary>
@@ -57,7 +62,14 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                     : GateDecision.Cancel("Already in a position — adding isn't allowed.");
             }
 
-            if (positionQty == 0) return GateDecision.Cancel("Entries are only allowed through an armed setup.");
+            // ATM brackets are submitted right after the entry fill, sometimes before the position
+            // reports it; cancelling them would strip a fresh entry's protection.
+            if (positionQty == 0)
+            {
+                return order.IsAtmBracket
+                    ? GateDecision.Allow()
+                    : GateDecision.Cancel("Entries are only allowed through an armed setup.");
+            }
 
             // Spec §7: price changes are always allowed and nothing blocks an exit. A stop whose
             // quantity is unchanged (partial fill, manual reduce, lagging position snapshot) or
