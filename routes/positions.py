@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 from db import read_conn, sql_placeholders, transaction
 from logging_config import get_logger
 from models.execution import Execution
+from models.position import ENTRY_METHODS
 from routes import db_path as _db_path
 from routes._params import BadParam, int_arg
 from services.execution_db import load_executions
@@ -48,6 +49,12 @@ def _parse_filter_from_query(args) -> PositionFilter:
     side = args.get("side") or None
     if side is not None and side not in ("Long", "Short"):
         raise ValueError(f"side must be Long or Short, got {side!r}")
+
+    entry_method = args.get("entry_method") or None
+    if entry_method is not None and entry_method not in ENTRY_METHODS:
+        raise ValueError(
+            f"entry_method must be one of: {', '.join(ENTRY_METHODS)}, got {entry_method!r}"
+        )
 
     outcome = args.get("outcome") or None
     if outcome is not None and outcome not in ("winner", "loser", "scratch", "open"):
@@ -106,6 +113,7 @@ def _parse_filter_from_query(args) -> PositionFilter:
         instrument=instrument,
         side=side,
         outcome=outcome,
+        entry_method=entry_method,
         entry_time_min=_int_or_none("entry_time_min"),
         entry_time_max=_int_or_none("entry_time_max"),
         session_date_from=session_date_from,

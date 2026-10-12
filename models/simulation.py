@@ -13,6 +13,7 @@ from typing import Literal, get_args
 from pydantic import Field, model_validator
 
 from models.base import StrictModel
+from models.position import EntryMethod
 from models.statistics import EquityPoint, StatsSummary
 
 Metric = Literal[
@@ -188,6 +189,7 @@ class SimulationRunRequest(StrictModel):
     from_date: date | None = None
     to_date: date | None = None
     side: Literal["Long", "Short"] | None = None
+    entry_method: EntryMethod | None = None
 
 
 class SimulationBlock(StrictModel):

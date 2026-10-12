@@ -143,13 +143,18 @@ def build_simulations_blueprint() -> Blueprint:
                 from_date=_parse_date(body.get("from")),
                 to_date=_parse_date(body.get("to")),
                 side=side,
+                entry_method=body.get("entry_method") or None,
             )
         except ValidationError as e:
             return _validation_response(e)
         except (ValueError, TypeError) as e:
             return jsonify({"error": str(e), "details": []}), 400
         filter_ = StatsFilter(
-            accounts=req.accounts, from_date=req.from_date, to_date=req.to_date, side=req.side
+            accounts=req.accounts,
+            from_date=req.from_date,
+            to_date=req.to_date,
+            side=req.side,
+            entry_method=req.entry_method,
         )
         return jsonify(_service().run(req.rules, filter_).model_dump(mode="json"))
 
