@@ -2,6 +2,7 @@ from datetime import date
 from typing import Literal
 
 from models.base import StrictModel
+from models.position import EntryMethod
 
 
 class StatsFilter(StrictModel):
@@ -9,6 +10,7 @@ class StatsFilter(StrictModel):
     from_date: date | None = None  # inclusive, session date
     to_date: date | None = None  # inclusive, session date
     side: Literal["Long", "Short"] | None = None
+    entry_method: EntryMethod | None = None
 
 
 class StatsSummary(StrictModel):
@@ -79,6 +81,14 @@ class SideStats(StrictModel):
 class SideBreakdown(StrictModel):
     long: SideStats
     short: SideStats
+
+
+class EntryMethodStats(SideStats):
+    entry_method: EntryMethod
+
+
+class EntryMethodBreakdown(StrictModel):
+    rows: list[EntryMethodStats]
 
 
 class EquityPoint(StrictModel):

@@ -12,11 +12,13 @@ from zoneinfo import ZoneInfo
 
 from config import Config
 from models.execution import Execution
-from models.position import Position
+from models.position import ENTRY_METHODS, Position
 from models.statistics import (
     DayOfWeekResponse,
     DistributionResponse,
     EquityCurveResponse,
+    EntryMethodBreakdown,
+    EntryMethodStats,
     EquitySeries,
     HourBucketResponse,
     InstrumentBreakdown,
@@ -93,6 +95,12 @@ def load_closed_positions(config: Config, filter: StatsFilter) -> LoadedPosition
         closed_with_pnl = [p for p in closed_with_pnl if p.side == filter.side]
         closed_missing_mult = [p for p in closed_missing_mult if p.side == filter.side]
         open_positions = [p for p in open_positions if p.side == filter.side]
+
+    if filter.entry_method is not None:
+        method = filter.entry_method
+        closed_with_pnl = [p for p in closed_with_pnl if p.entry_method == method]
+        closed_missing_mult = [p for p in closed_missing_mult if p.entry_method == method]
+        open_positions = [p for p in open_positions if p.entry_method == method]
 
     return LoadedPositions(
         closed_with_pnl=closed_with_pnl,
@@ -176,6 +184,14 @@ class StatisticsService:
             long=_side_stats(longs),
             short=_side_stats(shorts),
         )
+
+    def by_entry_method(self, filter: StatsFilter) -> EntryMethodBreakdown:
+        loaded = self._load_closed_positions(filter)
+        rows = []
+        for method in ENTRY_METHODS:
+            group = [p for p in loaded.closed_with_pnl if p.entry_method == method]
+            rows.append(EntryMethodStats(entry_method=method, **_side_stats(group).model_dump()))
+        return EntryMethodBreakdown(rows=rows)
 
     def equity_curve(self, filter: StatsFilter) -> EquityCurveResponse:
         loaded = self._load_closed_positions(filter)

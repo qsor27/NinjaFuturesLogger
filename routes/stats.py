@@ -2,6 +2,7 @@ from datetime import date
 
 from flask import Blueprint, current_app, jsonify, request
 
+from models.position import ENTRY_METHODS
 from models.statistics import StatsFilter
 from services.statistics import StatisticsService
 
@@ -22,11 +23,16 @@ def _parse_filter(args) -> StatsFilter:
     if raw_side not in (None, "Long", "Short"):
         raise ValueError("side must be 'Long' or 'Short'")
 
+    raw_entry_method = args.get("entry_method") or None
+    if raw_entry_method is not None and raw_entry_method not in ENTRY_METHODS:
+        raise ValueError(f"entry_method must be one of: {', '.join(ENTRY_METHODS)}")
+
     return StatsFilter(
         accounts=accounts,
         from_date=_parse_date("from"),
         to_date=_parse_date("to"),
         side=raw_side,
+        entry_method=raw_entry_method,
     )
 
 
@@ -77,6 +83,10 @@ def build_stats_blueprint() -> Blueprint:
     @bp.get("/api/stats/by-side")
     def by_side():
         return _dispatch("by_side")
+
+    @bp.get("/api/stats/by-entry-method")
+    def by_entry_method():
+        return _dispatch("by_entry_method")
 
     @bp.get("/api/stats/equity-curve")
     def equity_curve():
