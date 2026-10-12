@@ -246,6 +246,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
             {
                 var order = e.Execution != null ? e.Execution.Order : null;
                 if (order == null || order.Instrument == null || order.Account == null) return;
+                if (BreakEvenTrigger.IsFirstTarget(order.Name) && runtime.Settings.IsGated(order.Account.Name))
+                    MoveStopsToBreakEven(order, e.Price);
                 if (IsGateEntry(order))
                 {
                     // Copiers may copy on fill (limit entries can fill minutes later): restart the window.
@@ -267,6 +269,44 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
             catch (Exception ex)
             {
                 runtime.RaiseAlert("Setup gate execution check failed: " + ex.Message);
+            }
+        }
+
+        /// <summary>Spec §8: Target1 filled — move the other stops of this position past entry.</summary>
+        private void MoveStopsToBreakEven(Order target, double fillPrice)
+        {
+            var account = target.Account;
+            string instrument = target.Instrument.FullName;
+            Position position = account.Positions.ToArray()
+                .FirstOrDefault(p => p.Instrument != null && p.Instrument.FullName == instrument);
+            if (position == null || position.MarketPosition == MarketPosition.Flat) return;
+
+            GateSide side = position.MarketPosition == MarketPosition.Long ? GateSide.Long : GateSide.Short;
+            var stopPrice = BreakEven.StopPrice(side, position.AveragePrice, runtime.Settings.BreakEvenTicks,
+                target.Instrument.MasterInstrument.TickSize, fillPrice);
+
+            foreach (Order stop in account.Orders.ToArray())
+            {
+                if (stop.Instrument == null || stop.Instrument.FullName != instrument || !IsLive(stop.OrderState)) continue;
+                if (!BreakEvenTrigger.ShouldMoveStop(stop.Name, stop.Oco, target.Oco)) continue;
+                bool alreadyBetter = side == GateSide.Long ? stop.StopPrice >= stopPrice.Price : stop.StopPrice <= stopPrice.Price;
+                if (alreadyBetter) continue;
+
+                stop.StopPriceChanged = stopPrice.Price;
+                try
+                {
+                    account.Change(new[] { stop });
+                    runtime.Log(instrument, account.Name, GateEvents.BreakEven,
+                        stop.Name + " moved to " + InstrumentGate.FormatPrice(stopPrice.Price)
+                        + (stopPrice.Adjusted ? " (one tick from price — break-even was already through)" : ""));
+                    if (stopPrice.Adjusted)
+                        runtime.RaiseAlert(instrument + ": price was already through break-even; " + stop.Name
+                            + " placed one tick from price at " + InstrumentGate.FormatPrice(stopPrice.Price) + ".");
+                }
+                catch (Exception ex)
+                {
+                    runtime.RaiseAlert("Could not move " + stop.Name + " to break-even on " + instrument + ": " + ex.Message);
+                }
             }
         }
 
