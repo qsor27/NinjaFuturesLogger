@@ -384,8 +384,7 @@ function renderBackToStats() {
   const hasDrilldown =
     params.has("day_of_week") ||
     params.has("hour_of_day") ||
-    params.has("trades_per_day") ||
-    params.has("entry_method");
+    params.has("trades_per_day");
   if (!hasDrilldown) {
     backToStats.hidden = true;
     backToStats.textContent = "";
