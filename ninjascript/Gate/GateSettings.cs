@@ -40,6 +40,31 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 
         public bool IsFollower(string account) => account != null && FollowerAccounts.Contains(account, StringComparer.Ordinal);
 
+        /// <summary>
+        /// Configured gated/follower names that match no NinjaTrader account (ordinal), with a
+        /// case-insensitive suggestion. An unmatched gated account is silently unprotected.
+        /// </summary>
+        public IReadOnlyList<string> UnmatchedAccounts(IEnumerable<string> existingAccounts)
+        {
+            var existing = (existingAccounts ?? new string[0]).Where(a => a != null).ToList();
+            var problems = new List<string>();
+            Report("Gated", GatedAccounts, existing, problems);
+            Report("Follower", FollowerAccounts, existing, problems);
+            return problems;
+        }
+
+        private static void Report(string role, IEnumerable<string> configured, List<string> existing, List<string> problems)
+        {
+            foreach (string name in configured)
+            {
+                if (existing.Contains(name, StringComparer.Ordinal)) continue;
+                string near = existing.FirstOrDefault(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
+                problems.Add(role + " account " + name + " was not found in NinjaTrader"
+                    + (near != null ? " — did you mean " + near + "?" : " — it is NOT being enforced.")
+                    + " Check setup_gate_settings.txt.");
+            }
+        }
+
         public static GateSettings Defaults() =>
             new GateSettings(new string[0], new string[0], DefaultBreakEvenTicks, DefaultFollowerWindowSeconds, DefaultHistoryDays);
 

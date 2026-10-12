@@ -13,6 +13,8 @@ that differs. NinjaTrader times below are your chart times.
 - [ ] A red **Setup Gate — alerts** window says it created `setup_gate_settings.txt` and that no gated accounts are set.
 - [ ] Edit `Documents\NinjaFuturesLogger\setup_gate_settings.txt`: `GatedAccounts=Sim101`. Restart NinjaTrader. No "no gated accounts" alert.
 
+- [ ] Put a deliberate typo in the case of the account name (e.g. `sim101`) and restart: the alert says "Gated account sim101 was not found … did you mean Sim101?". Fix it and restart.
+
 ## 2. Control window and tracking
 - [ ] Control Center → **New → Setup Gate** opens the control window.
 - [ ] Type the front-month contract (e.g. `MNQ 12-26`) → **Track**. Status reads "Confirm the hourly trend first." and the **hourly trend** window opens with ~24 hourly candles.
@@ -32,7 +34,11 @@ that differs. NinjaTrader times below are your chart times.
 
 ## 6. Arm and fire (market)
 - [ ] At "Ready to arm long.": choose Sim101, type your ATM template name exactly (e.g. `4ptSL-20ptTP`), Qty 1 → **ARM MARKET**. Status shows "ARMED MKT · … — fires at the open after the second close."
+- [ ] Arming with a misspelt ATM template name is refused ("ATM template … was not found").
 - [ ] On the second consecutive 1m close above the level, a market buy fills at the next candle's first tick with the ATM's stop and target attached (Stop1/Target1 are **not** cancelled).
+- [ ] The gate's own entry is **not** cancelled: `gate_log.csv` has a `Fire` row and no `Cancel` row for it. (This proves NinjaTrader keeps the order's Id from creation to submission.)
+- [ ] Repeat with Qty 2 using an ATM that has two targets: both stops/targets survive while the fills arrive.
+- [ ] Exit the position outside the ATM (DOM **Close**/Sell Mkt): any ATM bracket still working is cancelled with "Leftover … cancelled when the position went flat".
 - [ ] While long: Chart Trader **Buy Mkt** is cancelled ("Adding to a position isn't allowed."); a **Sell** larger than the position is cancelled; dragging the stop either way is allowed; closing the position is allowed.
 
 ## 7. Strike, re-arm, death
@@ -41,10 +47,13 @@ that differs. NinjaTrader times below are your chart times.
 
 ## 8. Limit entry and the logger tag
 - [ ] Arm a **LIMIT** at your price; on confirmation a Gtc limit order is placed and stays working until you cancel it.
+- [ ] Drag the working gate limit's price: allowed. Restart NinjaTrader while it is still working: it is recognised again (status "Gate entry working"), dragging it is still allowed, and arming a second entry is refused.
 - [ ] After a gate entry fills, the exporter CSV row for the entry has `GateMktNextOpen` or `GateLmtNextOpen` in the Name column, and after import NinjaFuturesLogger's Statistics → By Entry Method shows it.
 
 ## 9. Copier (only if you use one)
 - [ ] Add the follower to `FollowerAccounts=` and restart. A gate entry is copied; a manual entry on the follower alone is cancelled; dragging the follower's copied stop is allowed.
+- [ ] Fire a gate **limit** entry and drag its price after 30 s: the copier's follower order follows and is not cancelled. Note whether your copier copies limit entries on submission or on fill.
+- [ ] With several connections up, disconnect one that does not provide your chart data: entries are **not** blocked.
 
 ## 10. Restart and reconnect
 - [ ] With a level set and price beyond it, restart NinjaTrader: levels come back, the setup state is replayed, the trend is asked again, and any arm is gone.

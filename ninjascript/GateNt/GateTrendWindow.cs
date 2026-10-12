@@ -22,6 +22,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         private const double ChartHeight = 170;
 
         private static GateTrendWindow open;
+
+        /// <summary>Called when the AddOn stops (e.g. F5 recompile) so no window outlives its runtime.</summary>
+        public static void CloseAll()
+        {
+            if (open != null) open.Close();
+        }
         private readonly StackPanel rows = new StackPanel();
         private readonly Dictionary<string, FrameworkElement> rowByInstrument =
             new Dictionary<string, FrameworkElement>(StringComparer.Ordinal);

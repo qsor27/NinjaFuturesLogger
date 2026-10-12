@@ -28,6 +28,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         private readonly Dictionary<string, int> positions = new Dictionary<string, int>(StringComparer.Ordinal);
         private readonly Dictionary<string, HashSet<long>> workingEntries = new Dictionary<string, HashSet<long>>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> lastCancel = new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly Dictionary<Connection, ConnectionStatus> priceStatus = new Dictionary<Connection, ConnectionStatus>();
+        private readonly HashSet<string> reportedAccountProblems = new HashSet<string>(StringComparer.Ordinal);
         private GateStateFile state = new GateStateFile();
         private GateOrderEnforcer enforcer;
 
@@ -45,6 +47,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         public static string StatePath => Path.Combine(Folder, "setup_gate_state.txt");
         public static string SettingsPath => Path.Combine(Folder, "setup_gate_settings.txt");
         public static string LogPath => Path.Combine(Folder, "gate_log.csv");
+        public static string JournalPath => Path.Combine(Folder, "gate_entries.txt");
 
         /// <summary>An instrument's snapshot may have changed. Raised on a NinjaTrader thread.</summary>
         public event Action<string> GateChanged;
@@ -71,9 +74,17 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
             lock (sync) state = load.State;
 
             Current = this;
+            lock (Connection.Connections)
+            {
+                lock (sync)
+                {
+                    foreach (Connection connection in Connection.Connections) priceStatus[connection] = connection.PriceStatus;
+                }
+            }
             enforcer = new GateOrderEnforcer(this);
-            enforcer.SubscribeAll();
             Connection.ConnectionStatusUpdate += OnConnectionStatusUpdate;
+            enforcer.SubscribeAll();
+            CheckAccounts();
 
             List<string> saved;
             lock (sync) saved = state.Instruments.Keys.ToList();
@@ -117,6 +128,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 var gate = new InstrumentGate(name, state.GetOrAdd(name));
                 gate.SetOneMinuteFeed(false); // fail closed until 1m history arrives
                 gate.LeaderPositionQty = LeaderPosition(name);
+                HashSet<long> working;
+                gate.GateEntryWorking = workingEntries.TryGetValue(name, out working) && working.Count > 0;
                 gates[name] = gate;
                 created = Timeframes.Select(tf => new GateBarFeed(this, instrument, tf, Settings.HistoryDays)).ToList();
                 feeds[name] = created;
@@ -170,20 +183,32 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         public GateCommandResult SetExtreme(string instrument, GateSide side, double price) =>
             Command(instrument, g => g.SetExtreme(side, price, Now()));
 
-        public GateCommandResult Arm(string instrument, PendingArm arm) => Command(instrument, g => g.ArmEntry(arm));
+        public GateCommandResult Arm(string instrument, PendingArm arm)
+        {
+            if (arm != null && !AtmTemplateExists(arm.AtmTemplate))
+            {
+                return GateCommandResult.Rejected("ATM template \"" + arm.AtmTemplate
+                    + "\" was not found in Documents\\NinjaTrader 8\\templates\\AtmStrategy — type it exactly as Chart Trader shows it.");
+            }
+            return Command(instrument, g => g.ArmEntry(arm));
+        }
 
         public GateCommandResult Disarm(string instrument) => Command(instrument, g => g.Disarm());
 
         public GateCommandResult AnswerTrend(string instrument, GateTrend trend, long forHourEnd) =>
             Command(instrument, g => g.AnswerTrend(trend, forHourEnd));
 
-        internal void OnBars(string instrument, GateTimeframe tf, IReadOnlyList<GateBar> bars, bool history)
+        /// <summary>
+        /// Feeds call this while holding their own lock (so bars apply in order) and then call
+        /// Carry after releasing it, so no NinjaTrader order call runs under any gate lock.
+        /// </summary>
+        internal IReadOnlyList<GateAction> ApplyBars(string instrument, GateTimeframe tf, IReadOnlyList<GateBar> bars, bool history)
         {
             var actions = new List<GateAction>();
             lock (sync)
             {
                 InstrumentGate gate;
-                if (!gates.TryGetValue(instrument, out gate)) return;
+                if (!gates.TryGetValue(instrument, out gate)) return actions;
                 if (history)
                 {
                     actions.AddRange(gate.LoadHistory(tf, bars));
@@ -194,6 +219,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                     foreach (var bar in bars) actions.AddRange(gate.OnBarClosed(tf, bar));
                 }
             }
+            return actions;
+        }
+
+        internal void Carry(string instrument, IReadOnlyList<GateAction> actions)
+        {
             Execute(instrument, actions);
             Changed(instrument);
         }
@@ -344,7 +374,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                     NinjaTrader.Core.Globals.MaxDate,
                     null);
                 GateEntryNames.Register(order.Id.ToString(CultureInfo.InvariantCulture), arm.Kind);
-                enforcer.MarkGateEntry(order.Id);
+                enforcer.MarkGateEntry(order, arm.Kind, instrumentName, arm.Side == GateSide.Long);
                 NinjaTrader.NinjaScript.AtmStrategy.StartAtmStrategy(arm.AtmTemplate, order);
                 return null;
             }
@@ -369,18 +399,51 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
 
         private void OnConnectionStatusUpdate(object sender, ConnectionStatusEventArgs e)
         {
-            bool nowConnected = e.PriceStatus == ConnectionStatus.Connected;
-            bool wasConnected = e.PreviousPriceStatus == ConnectionStatus.Connected;
-            if (nowConnected && !wasConnected)
+            // Broker accounts appear once their (order or price) connection is up; re-subscribe on
+            // every connect and re-check that every configured account exists.
+            if (e.Status == ConnectionStatus.Connected || e.PriceStatus == ConnectionStatus.Connected)
             {
-                enforcer.SubscribeAll(); // broker accounts appear once their connection is up
+                enforcer.SubscribeAll();
+                CheckAccounts();
+            }
+
+            bool anyBefore;
+            bool anyAfter;
+            lock (sync)
+            {
+                anyBefore = priceStatus.Values.Any(s => s == ConnectionStatus.Connected);
+                if (e.Connection != null) priceStatus[e.Connection] = e.PriceStatus;
+                anyAfter = priceStatus.Values.Any(s => s == ConnectionStatus.Connected);
+            }
+
+            if (e.PriceStatus == ConnectionStatus.Connected && e.PreviousPriceStatus != ConnectionStatus.Connected)
+            {
                 foreach (var feed in AllFeeds()) feed.Restart();
             }
-            else if (!nowConnected && wasConnected)
+            else if (anyBefore && !anyAfter)
             {
+                // Only when no connection is left providing prices: one prop connection dropping
+                // must not block every instrument.
                 foreach (string instrument in TrackedInstruments()) SetOneMinuteFeed(instrument, false);
                 RaiseAlert("Price data connection lost — entries are blocked until bars reload.");
             }
+        }
+
+        private void CheckAccounts()
+        {
+            foreach (string problem in Settings.UnmatchedAccounts(enforcer.AccountNames()))
+            {
+                bool first;
+                lock (sync) first = reportedAccountProblems.Add(problem);
+                if (first) RaiseAlert(problem);
+            }
+        }
+
+        private static bool AtmTemplateExists(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return false;
+            string folder = Path.Combine(NinjaTrader.Core.Globals.UserDataDir, "templates", "AtmStrategy");
+            return File.Exists(Path.Combine(folder, name + ".xml"));
         }
 
         private List<GateBarFeed> AllFeeds()

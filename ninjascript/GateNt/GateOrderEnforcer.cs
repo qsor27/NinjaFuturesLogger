@@ -23,6 +23,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         private readonly HashSet<long> cancelledIds = new HashSet<long>();
         private readonly LeaderEntryLog leaderEntries = new LeaderEntryLog();
         private readonly List<Account> subscribed = new List<Account>();
+        private readonly List<KeyValuePair<Order, EntryKind>> gateEntryOrders = new List<KeyValuePair<Order, EntryKind>>();
+        private readonly Dictionary<long, string> journaledOrderIds = new Dictionary<long, string>();
+        private readonly GateEntryJournal journal = GateEntryJournal.Load(GateRuntime.JournalPath);
 
         public GateOrderEnforcer(GateRuntime runtime)
         {
@@ -55,7 +58,23 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                     if (position.Instrument != null)
                         runtime.UpdatePosition(account.Name, position.Instrument.FullName, Signed(position.MarketPosition, position.Quantity));
                 }
+                // Orders that were already working before the gate subscribed: recognise journaled
+                // gate entries; judge everything else as if it had just been submitted.
+                foreach (Order order in account.Orders.ToArray())
+                {
+                    if (!IsLive(order.OrderState) || order.Instrument == null) continue;
+                    EntryKind kind;
+                    bool known;
+                    lock (sync) known = journal.TryGet(order.OrderId, out kind);
+                    if (known) Recover(order, kind);
+                    Judge(order, order.OrderState, order.Quantity);
+                }
             }
+        }
+
+        public IReadOnlyList<string> AccountNames()
+        {
+            lock (sync) return subscribed.Select(a => a.Name).ToList();
         }
 
         public void Stop()
@@ -74,23 +93,104 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
             }
         }
 
-        public void MarkGateEntry(long orderId)
+        /// <summary>
+        /// Called before StartAtmStrategy submits the gate's entry. Remembers the order by id and by
+        /// reference (in case NinjaTrader assigns the id later) and records the allowed leader entry
+        /// before any copier can react to it.
+        /// </summary>
+        public void MarkGateEntry(Order order, EntryKind kind, string instrument, bool isBuy)
         {
-            lock (sync) gateEntryIds.Add(orderId);
+            lock (sync)
+            {
+                gateEntryIds.Add(order.Id);
+                gateEntryOrders.Add(new KeyValuePair<Order, EntryKind>(order, kind));
+                leaderEntries.Add(new LeaderEntry(instrument, isBuy, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+            }
         }
 
         private void OnOrderUpdate(object sender, OrderEventArgs e)
         {
+            if (e.Order != null) Judge(e.Order, e.OrderState, e.Quantity);
+        }
+
+        private bool IsGateEntry(Order order)
+        {
+            lock (sync)
+            {
+                if (gateEntryIds.Contains(order.Id)) return true;
+                foreach (var pair in gateEntryOrders)
+                {
+                    if (!ReferenceEquals(pair.Key, order)) continue;
+                    gateEntryIds.Add(order.Id); // the id changed after CreateOrder: re-key the exporter tag too
+                    GateEntryNames.Register(order.Id.ToString(CultureInfo.InvariantCulture), pair.Value);
+                    return true;
+                }
+                return false;
+            }
+        }
+
+        private void Recover(Order order, EntryKind kind)
+        {
+            lock (sync)
+            {
+                gateEntryIds.Add(order.Id);
+                gateEntryOrders.Add(new KeyValuePair<Order, EntryKind>(order, kind));
+                journaledOrderIds[order.Id] = order.OrderId;
+            }
+            GateEntryNames.Register(order.Id.ToString(CultureInfo.InvariantCulture), kind);
+        }
+
+        /// <summary>Keeps gate_entries.txt in step with working gate entries (by broker order id).</summary>
+        private void Journal(Order order, bool working)
+        {
+            bool changed = false;
+            lock (sync)
+            {
+                string recorded;
+                journaledOrderIds.TryGetValue(order.Id, out recorded);
+                if (working && !string.IsNullOrEmpty(order.OrderId) && recorded != order.OrderId)
+                {
+                    EntryKind kind = gateEntryOrders.Where(p => ReferenceEquals(p.Key, order)).Select(p => p.Value).FirstOrDefault();
+                    if (recorded != null) journal.Forget(recorded);
+                    journal.Record(order.OrderId, kind);
+                    journaledOrderIds[order.Id] = order.OrderId;
+                    changed = true;
+                }
+                else if (!working && recorded != null)
+                {
+                    journal.Forget(recorded);
+                    journaledOrderIds.Remove(order.Id);
+                    changed = true;
+                }
+                if (changed)
+                {
+                    try
+                    {
+                        GateEntryJournal.Save(GateRuntime.JournalPath, journal);
+                    }
+                    catch (Exception ex)
+                    {
+                        runtime.Log(order.Instrument.FullName, order.Account.Name, GateEvents.Cancel, "gate_entries.txt not saved: " + ex.Message);
+                    }
+                }
+            }
+        }
+
+        private void Judge(Order order, OrderState state, int quantity)
+        {
             try
             {
-                var order = e.Order;
-                if (order == null || order.Account == null || order.Instrument == null) return;
+                if (order.Account == null || order.Instrument == null) return;
                 string account = order.Account.Name;
                 string instrument = order.Instrument.FullName;
 
-                bool isGateEntry;
-                lock (sync) isGateEntry = gateEntryIds.Contains(order.Id);
-                if (isGateEntry) runtime.SetGateEntryWorking(instrument, order.Id, IsWorking(e.OrderState));
+                bool isGateEntry = IsGateEntry(order);
+                if (isGateEntry)
+                {
+                    bool working = IsWorking(state);
+                    runtime.SetGateEntryWorking(instrument, order.Id, working);
+                    Journal(order, working);
+                }
 
                 var settings = runtime.Settings;
                 bool leader = settings.IsGated(account);
@@ -101,7 +201,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 OrderIntent intent;
                 lock (sync)
                 {
-                    intent = tracker.Observe(order.Id, PhaseOf(e.OrderState), isBuy, e.Quantity, isGateEntry,
+                    intent = tracker.Observe(order.Id, PhaseOf(state), isBuy, quantity, isGateEntry,
                         OrderIntentTracker.IsAtmBracket(order.Name));
                 }
                 if (intent == null) return;
@@ -109,20 +209,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 int position = PositionOf(order.Account, instrument);
                 long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 GateDecision decision;
-                if (leader || position != 0 || intent.IsAtmBracket)
+                if (leader)
                 {
                     decision = OrderGate.Decide(intent, position);
-                    if (leader && decision.Allowed && isGateEntry && !intent.IsChange)
-                    {
-                        lock (sync) leaderEntries.Add(new LeaderEntry(instrument, isBuy, now));
-                    }
                 }
                 else
                 {
                     IReadOnlyList<LeaderEntry> recent;
                     lock (sync) recent = leaderEntries.Recent(now, settings.FollowerWindowSeconds);
-                    decision = FollowerGate.Decide(instrument, isBuy, intent.Quantity, position, recent, now,
-                        settings.FollowerWindowSeconds);
+                    decision = FollowerGate.Decide(intent, instrument, position, recent, now, settings.FollowerWindowSeconds);
                 }
                 if (decision.Allowed) return;
 
@@ -151,6 +246,13 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
             {
                 var order = e.Execution != null ? e.Execution.Order : null;
                 if (order == null || order.Instrument == null || order.Account == null) return;
+                if (IsGateEntry(order))
+                {
+                    // Copiers may copy on fill (limit entries can fill minutes later): restart the window.
+                    bool buy = order.OrderAction == OrderAction.Buy || order.OrderAction == OrderAction.BuyToCover;
+                    lock (sync) leaderEntries.Add(new LeaderEntry(order.Instrument.FullName, buy, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
+                    return;
+                }
                 bool slipped;
                 lock (sync) slipped = cancelledIds.Contains(order.Id);
                 if (!slipped) return;
@@ -172,8 +274,43 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         {
             var position = e.Position;
             if (position == null || position.Account == null || position.Instrument == null) return;
-            runtime.UpdatePosition(position.Account.Name, position.Instrument.FullName, Signed(e.MarketPosition, e.Quantity));
+            int signed = Signed(e.MarketPosition, e.Quantity);
+            runtime.UpdatePosition(position.Account.Name, position.Instrument.FullName, signed);
+            if (signed == 0 && runtime.Settings.IsGated(position.Account.Name))
+                CancelLeftovers(position.Account, position.Instrument.FullName);
         }
+
+        /// <summary>
+        /// The gated position went flat: any order still working on it (an ATM bracket orphaned by
+        /// an exit outside the ATM, a leftover exit) would now open an unarmed position. Gate
+        /// entries are kept.
+        /// </summary>
+        private void CancelLeftovers(Account account, string instrument)
+        {
+            foreach (Order order in account.Orders.ToArray())
+            {
+                if (order.Instrument == null || order.Instrument.FullName != instrument) continue;
+                if (!IsLive(order.OrderState) || IsGateEntry(order)) continue;
+                lock (sync) cancelledIds.Add(order.Id);
+                string reason = "Leftover " + order.Name + " " + order.OrderAction
+                    + " cancelled when the position went flat — it would open an unarmed position.";
+                runtime.Log(instrument, account.Name, GateEvents.Cancel, reason);
+                runtime.ReportCancel(instrument, reason);
+                try
+                {
+                    account.Cancel(new[] { order });
+                }
+                catch (Exception ex)
+                {
+                    runtime.RaiseAlert("Could not cancel leftover " + order.Name + " on " + account.Name + ": " + ex.Message);
+                }
+            }
+        }
+
+        private static bool IsLive(OrderState state) =>
+            state == OrderState.Submitted || state == OrderState.Accepted || state == OrderState.Working
+            || state == OrderState.TriggerPending || state == OrderState.AcceptedByRisk
+            || state == OrderState.ChangePending || state == OrderState.ChangeSubmitted || state == OrderState.PartFilled;
 
         private static int PositionOf(Account account, string instrument)
         {
@@ -201,6 +338,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 case OrderState.Working:
                 case OrderState.TriggerPending:
                 case OrderState.AcceptedByRisk:
+                case OrderState.PartFilled: // first seen part-filled: still judge and cancel the rest
                     return OrderPhase.Live;
                 case OrderState.ChangePending:
                 case OrderState.ChangeSubmitted:

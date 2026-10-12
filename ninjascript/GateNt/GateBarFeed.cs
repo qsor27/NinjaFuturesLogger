@@ -11,8 +11,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
     /// <summary>
     /// One BarsRequest per instrument and timeframe. Delivers only closed bars: the last bar of a
     /// request is still forming, so a bar is delivered when the next one appears (its first tick)
-    /// — the "open of the next candle" the spec fires entries on. Bars are handed to the runtime
-    /// while this feed's lock is held so a later bar can never overtake an earlier one.
+    /// — the "open of the next candle" the spec fires entries on. Bars are applied to the gate
+    /// while this feed's lock is held so a later bar can never overtake an earlier one; the
+    /// resulting actions (order submission included) run after the lock is released.
     /// </summary>
     internal sealed class GateBarFeed : IDisposable
     {
@@ -56,41 +57,51 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
             Start();
         }
 
+        /// <summary>Unhooks under the lock but disposes outside it (NinjaTrader may hold its own locks).</summary>
         public void Dispose()
         {
+            BarsRequest old;
             lock (sync)
             {
-                if (request == null) return;
-                request.Update -= OnUpdate;
-                request.Dispose();
+                old = request;
                 request = null;
+                if (old != null) old.Update -= OnUpdate;
             }
+            if (old != null) old.Dispose();
         }
 
         private void OnLoaded(BarsRequest loaded, ErrorCode error, string message)
         {
-            if (error != ErrorCode.NoError)
-            {
-                runtime.OnFeedFailed(instrument.FullName, timeframe, string.IsNullOrEmpty(message) ? error.ToString() : message);
-                return;
-            }
+            IReadOnlyList<GateAction> actions;
             lock (sync)
             {
-                if (loaded != request) return;
-                var bars = TakeClosed(loaded.Bars);
-                historyDelivered = true;
-                runtime.OnBars(instrument.FullName, timeframe, bars, true);
+                if (loaded != request) return; // a late callback from a request Restart already replaced
+                if (error != ErrorCode.NoError)
+                {
+                    actions = null;
+                }
+                else
+                {
+                    actions = runtime.ApplyBars(instrument.FullName, timeframe, TakeClosed(loaded.Bars), true);
+                    historyDelivered = true;
+                }
             }
+            if (actions == null)
+                runtime.OnFeedFailed(instrument.FullName, timeframe, string.IsNullOrEmpty(message) ? error.ToString() : message);
+            else
+                runtime.Carry(instrument.FullName, actions);
         }
 
         private void OnUpdate(object sender, BarsUpdateEventArgs e)
         {
+            IReadOnlyList<GateAction> actions = null;
             lock (sync)
             {
                 if (!historyDelivered || request == null) return;
                 var bars = TakeClosed(request.Bars);
-                if (bars.Count > 0) runtime.OnBars(instrument.FullName, timeframe, bars, false);
+                if (bars.Count > 0) actions = runtime.ApplyBars(instrument.FullName, timeframe, bars, false);
             }
+            if (actions != null) runtime.Carry(instrument.FullName, actions);
         }
 
         private List<GateBar> TakeClosed(Bars bars)

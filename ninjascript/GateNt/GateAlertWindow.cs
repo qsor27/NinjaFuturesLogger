@@ -12,6 +12,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
     internal sealed class GateAlertWindow : Window
     {
         private static GateAlertWindow open;
+
+        /// <summary>Called when the AddOn stops (e.g. F5 recompile) so no window outlives its runtime.</summary>
+        public static void CloseAll()
+        {
+            if (open != null) open.Close();
+        }
         private readonly StackPanel lines = new StackPanel();
 
         public static void Raise(string message)

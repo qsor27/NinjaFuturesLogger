@@ -21,6 +21,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
     {
         private static GateControlWindow open;
 
+        /// <summary>Called when the AddOn stops (e.g. F5 recompile) so no window outlives its runtime.</summary>
+        public static void CloseAll()
+        {
+            if (open != null) open.Close();
+        }
+
         private readonly ComboBox instruments = new ComboBox { Width = 170 };
         private readonly TextBox newInstrument = new TextBox { Width = 120 };
         private readonly ComboBox side = Choices("Long", "Short");
@@ -101,8 +107,10 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
 
         private void OnTrack(object sender, RoutedEventArgs e)
         {
+            var runtime = Runtime();
+            if (runtime == null) return;
             string name = newInstrument.Text.Trim();
-            string error = GateRuntime.Current.Track(name);
+            string error = runtime.Track(name);
             message.Text = error ?? "Tracking " + name + ". Bars are loading.";
             if (error == null) ReloadInstruments(name);
         }
@@ -116,7 +124,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 message.Text = "Type the level price.";
                 return;
             }
-            Show(GateRuntime.Current.SetLevel(Selected, SelectedSide, SelectedTimeframe, p), "Level set.");
+            var runtime = Runtime();
+            if (runtime != null) Show(runtime.SetLevel(Selected, SelectedSide, SelectedTimeframe, p), "Level set.");
         }
 
         private void OnSetExtreme(object sender, RoutedEventArgs e)
@@ -128,7 +137,8 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 message.Text = "Type the low (long) or high (short) price.";
                 return;
             }
-            Show(GateRuntime.Current.SetExtreme(Selected, SelectedSide, p), "Low / high set.");
+            var runtime = Runtime();
+            if (runtime != null) Show(runtime.SetExtreme(Selected, SelectedSide, p), "Low / high set.");
         }
 
         private void OnArmMarket(object sender, RoutedEventArgs e) => Arm(EntryKind.Market, 0);
@@ -160,18 +170,27 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 message.Text = "Choose an account and type the ATM template name exactly as it appears in Chart Trader.";
                 return;
             }
-            Show(GateRuntime.Current.Arm(Selected, new PendingArm(SelectedSide, kind, limit, atm, acct, qty)), "Armed.");
+            var runtime = Runtime();
+            if (runtime != null) Show(runtime.Arm(Selected, new PendingArm(SelectedSide, kind, limit, atm, acct, qty)), "Armed.");
         }
 
         private void OnDisarm(object sender, RoutedEventArgs e)
         {
             if (!HasInstrument()) return;
-            Show(GateRuntime.Current.Disarm(Selected), "Disarmed.");
+            var runtime = Runtime();
+            if (runtime != null) Show(runtime.Disarm(Selected), "Disarmed.");
         }
 
         private void OnTrend(object sender, RoutedEventArgs e)
         {
             if (HasInstrument()) GateTrendWindow.Prompt(Selected);
+        }
+
+        private GateRuntime Runtime()
+        {
+            var runtime = GateRuntime.Current;
+            if (runtime == null) message.Text = "The Setup Gate isn't running — reopen it from Control Center → New → Setup Gate.";
+            return runtime;
         }
 
         private bool HasInstrument()
@@ -189,9 +208,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
 
         private void ReloadInstruments(string select)
         {
+            var runtime = Runtime();
+            if (runtime == null) return;
             string keep = select ?? Selected;
             instruments.Items.Clear();
-            foreach (string name in GateRuntime.Current.TrackedInstruments()) instruments.Items.Add(name);
+            foreach (string name in runtime.TrackedInstruments()) instruments.Items.Add(name);
             string match = instruments.Items.Cast<string>()
                 .FirstOrDefault(n => string.Equals(n, keep, StringComparison.OrdinalIgnoreCase));
             if (match != null) instruments.SelectedItem = match;

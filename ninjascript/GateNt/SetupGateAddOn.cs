@@ -38,6 +38,11 @@ namespace NinjaTrader.NinjaScript.AddOns
             {
                 if (runtime != null) runtime.Stop();
                 runtime = null;
+                OnUi(() =>
+                {
+                    GateControlWindow.CloseAll();
+                    GateTrendWindow.CloseAll();
+                });
             }
         }
 

@@ -66,10 +66,16 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             // reports it; cancelling them would strip a fresh entry's protection.
             if (positionQty == 0)
             {
-                return order.IsAtmBracket
+                // A fresh bracket may race the fill; a bracket *changed* while flat is an orphan
+                // (position closed outside the ATM) and would open an unarmed position.
+                return order.IsAtmBracket && !order.IsChange
                     ? GateDecision.Allow()
                     : GateDecision.Cancel("Entries are only allowed through an armed setup.");
             }
+
+            // ATM sizes its brackets to the fills, which can run ahead of the position snapshot
+            // (partial fills); an opposite-side bracket is protection and is never cancelled.
+            if (order.IsAtmBracket && Reduces(order.IsBuy, positionQty)) return GateDecision.Allow();
 
             // Spec §7: price changes are always allowed and nothing blocks an exit. A stop whose
             // quantity is unchanged (partial fill, manual reduce, lagging position snapshot) or
@@ -113,6 +119,27 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
     /// <summary>Spec §7 "Trade copier": follower accounts mirror allowed leader entries only.</summary>
     public static class FollowerGate
     {
+        /// <summary>
+        /// Full follower rule. In a position (or for an ATM bracket) the leader's rules apply. Flat:
+        /// a copier moving an order it already placed is allowed; any order within the window of
+        /// an allowed leader entry on the instrument is allowed — same direction is the copied
+        /// entry, opposite direction is the copied protection racing the follower's own fill.
+        /// </summary>
+        public static GateDecision Decide(OrderIntent order, string instrument, int followerPositionQty,
+            IEnumerable<LeaderEntry> allowedLeaderEntries, long now, int windowSeconds)
+        {
+            if (order.Quantity <= 0) return GateDecision.Cancel("Order quantity must be positive.");
+            if (followerPositionQty != 0 || order.IsAtmBracket) return OrderGate.Decide(order, followerPositionQty);
+            if (order.IsChange && order.Quantity <= order.PreviousQuantity) return GateDecision.Allow();
+
+            foreach (var e in allowedLeaderEntries)
+            {
+                if (e.Instrument == instrument && Math.Abs(now - e.Time) <= windowSeconds) return GateDecision.Allow();
+            }
+            return GateDecision.Cancel(
+                "No matching leader entry in the last " + windowSeconds + " s — follower order cancelled.");
+        }
+
         public static GateDecision Decide(string instrument, bool isBuy, int quantity, int followerPositionQty,
             IEnumerable<LeaderEntry> allowedLeaderEntries, long now, int windowSeconds)
         {
