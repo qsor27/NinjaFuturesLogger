@@ -22,6 +22,8 @@
     <Reference Include="NinjaTrader.Core"><HintPath>$(NinjaTraderBin)\NinjaTrader.Core.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="NinjaTrader.Gui"><HintPath>$(NinjaTraderBin)\NinjaTrader.Gui.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="NinjaTrader.Custom"><HintPath>$(NinjaTraderCustom)\NinjaTrader.Custom.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="SharpDX"><HintPath>$(NinjaTraderBin)\SharpDX.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="SharpDX.Direct2D1"><HintPath>$(NinjaTraderBin)\SharpDX.Direct2D1.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
     <Reference Include="WindowsBase" />
