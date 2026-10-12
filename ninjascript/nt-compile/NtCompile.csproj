@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Compile-only check of the NinjaScript gate against the installed NinjaTrader 8 assemblies.
+       Never deployed; NinjaTrader compiles the real copies after install-gate.ps1 runs. -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>13.0</LangVersion>
+    <OutputType>Library</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NinjaTraderBin>C:\Program Files\NinjaTrader 8\bin</NinjaTraderBin>
+    <NinjaTraderCustom>$(USERPROFILE)\Documents\NinjaTrader 8\bin\Custom</NinjaTraderCustom>
+    <!-- CS0436: our sources redefine types already compiled into NinjaTrader.Custom.dll. -->
+    <NoWarn>CS0436</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Gate\*.cs" />
+    <Compile Include="..\GateNt\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="NinjaTrader.Core"><HintPath>$(NinjaTraderBin)\NinjaTrader.Core.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="NinjaTrader.Gui"><HintPath>$(NinjaTraderBin)\NinjaTrader.Gui.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="NinjaTrader.Custom"><HintPath>$(NinjaTraderCustom)\NinjaTrader.Custom.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>
