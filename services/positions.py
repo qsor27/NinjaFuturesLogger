@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 from models.execution import Execution
 from models.position import Fill, IntegrityIssue, Position
+from services.entry_method import classify_entry_method
 from services.execution_ordering import order_executions_for_walk
 from services.instruments import get_multiplier
 from services.integrity import cross_check_against_source_position_column
@@ -22,6 +23,7 @@ def _fill_from(ex: Execution) -> Fill:
         price=ex.price,
         commission=ex.commission,
         entry_exit=ex.entry_exit,
+        order_name=ex.order_name,
     )
 
 
@@ -75,6 +77,7 @@ def _make_position(fills: list[Fill], *, is_open: bool) -> Position:
         commission=sum(f.commission for f in fills),
         duration_minutes=duration_minutes,
         execution_ids=[f.execution_id for f in fills],
+        entry_method=classify_entry_method(entry_fills[0].order_name),
     )
 
 
@@ -101,6 +104,7 @@ def synthesize_fill(
         price=ex.price,
         commission=ex.commission * proportion,
         entry_exit="Exit" if id_suffix == "#close" else "Entry",
+        order_name=ex.order_name,
     )
 
 

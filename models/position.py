@@ -1,10 +1,12 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 from models.base import StrictModel
 
 PositionSide = Literal["Long", "Short"]
 Severity = Literal["low", "medium", "high"]
+EntryMethod = Literal["market_next_open", "limit_next_open", "manual", "unknown"]
+ENTRY_METHODS: tuple[str, ...] = get_args(EntryMethod)
 
 
 class Position(StrictModel):
@@ -22,6 +24,7 @@ class Position(StrictModel):
     commission: float
     duration_minutes: float | None
     execution_ids: list[str]
+    entry_method: EntryMethod = "unknown"
 
 
 class IntegrityIssue(StrictModel):
@@ -51,3 +54,4 @@ class Fill:
     price: float
     commission: float
     entry_exit: Literal["Entry", "Exit"]
+    order_name: str | None = None
