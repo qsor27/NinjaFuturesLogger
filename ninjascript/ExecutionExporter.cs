@@ -772,6 +772,16 @@ namespace NinjaTrader.NinjaScript.Indicators
             var orderId = execution.Order?.Id.ToString() ?? "";
             var name = execution.Order?.Name ?? entryExit;
 
+            // Spec §12a: ATM entries must be named "Entry", so the Setup Gate records the entries it
+            // fires; write the gate's name so the logger can tell Market from Limit on next open.
+            string gateEntryName;
+            if (execution.Order != null
+                && NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.GateEntryNames.TryResolve(
+                    execution.Order.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), out gateEntryName))
+            {
+                name = gateEntryName;
+            }
+
             // Handle commission
             var commission = "$" + execution.Commission.ToString("F2");
 
