@@ -153,7 +153,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 {
                     runtime.GateChanged += OnGateChanged;
                     string error = runtime.Track(instrumentName);
-                    if (error != null) messageText.Text = error;
+                    if (error != null) Say(error, true);
                 }
             }
             RefreshSnapshot();
@@ -338,6 +338,7 @@ namespace NinjaTrader.NinjaScript.Indicators
             root.Children.Add(armMarket);
             limitBox = PriceBox();
             limitBox.Width = 80;
+            HookPriceKeys(limitBox, null);
             root.Children.Add(Row(MakeButton("ARM LIMIT @", (s, e) => Arm(EntryKind.Limit)), limitBox));
             root.Children.Add(MakeButton("Disarm", (s, e) => Disarm()));
 
@@ -432,7 +433,15 @@ namespace NinjaTrader.NinjaScript.Indicators
             SetBox(extremeBox, sideSnapshot.Extreme);
             foreach (var tf in sideSnapshot.Timeframes) SetBox(levelBoxes[tf.Timeframe], tf.LevelPrice);
             string cancel = runtime != null ? runtime.LastCancel(instrumentName) : null;
-            statusText.Text = snapshot.StatusLine + (cancel != null ? "\nLast cancel: " + cancel : "");
+            string sideNote = "";
+            var activeSide = SideMath.ActiveSide(snapshot.Trend);
+            if (activeSide.HasValue && activeSide.Value != side)
+            {
+                sideNote = "Trend is " + snapshot.Trend.ToString().ToUpperInvariant() + ": only "
+                    + activeSide.Value.ToString().ToUpperInvariant() + " can be armed this hour. You're editing the "
+                    + side.ToString().ToLowerInvariant() + " side.\n";
+            }
+            statusText.Text = sideNote + snapshot.StatusLine + (cancel != null ? "\nLast cancel: " + cancel : "");
         }
 
         private static void SetBox(TextBox box, double? value)
@@ -447,7 +456,7 @@ namespace NinjaTrader.NinjaScript.Indicators
         private void BeginClick(ClickTarget target, GateTimeframe tf)
         {
             bool started = clickMode.Press(target, SelectedSide(), tf);
-            messageText.Text = started ? clickMode.Prompt + " (Press Set again to cancel.)" : "Placement cancelled.";
+            Say(started ? clickMode.Prompt + " (Press Set again to cancel.)" : "Placement cancelled.", false);
             UpdateSetButtons();
         }
 
@@ -499,24 +508,24 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             if (runtime == null || snapshot == null)
             {
-                messageText.Text = "The Setup Gate isn't running.";
+                Say("The Setup Gate isn't running.", true);
                 return;
             }
             var trader = hostControl != null && hostControl.OwnerChart != null ? hostControl.OwnerChart.ChartTrader : null;
             if (trader == null || trader.Account == null)
             {
-                messageText.Text = "Show Chart Trader on this chart and choose an account.";
+                Say("Show Chart Trader on this chart and choose an account.", true);
                 return;
             }
             if (trader.AtmStrategy == null || string.IsNullOrEmpty(trader.AtmStrategy.Template))
             {
-                messageText.Text = "Choose an ATM strategy in Chart Trader — the entry needs its stop and target.";
+                Say("Choose an ATM strategy in Chart Trader — the entry needs its stop and target.", true);
                 return;
             }
             double limit = 0;
             if (kind == EntryKind.Limit && !TryPrice(limitBox.Text, out limit))
             {
-                messageText.Text = "Type your limit price next to ARM LIMIT.";
+                Say("Type your limit price next to ARM LIMIT.", true);
                 return;
             }
             GateSide side = SideMath.ActiveSide(snapshot.Trend) ?? SelectedSide();
@@ -535,7 +544,7 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         private void Show(GateCommandResult result, string ok)
         {
-            messageText.Text = result.Ok ? ok : result.Error;
+            Say(result.Ok ? ok : result.Error, !result.Ok);
             RefreshSnapshot();
         }
 
@@ -657,7 +666,7 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
             catch (Exception ex)
             {
-                if (messageText != null) messageText.Text = "Setup Gate error: " + ex.Message;
+                if (messageText != null) Say("Setup Gate error: " + ex.Message, true);
                 Print("SetupGate indicator error: " + ex);
             }
         }
@@ -670,6 +679,62 @@ namespace NinjaTrader.NinjaScript.Indicators
         private GateSide SelectedSide() => shortButton != null && shortButton.IsChecked == true ? GateSide.Short : GateSide.Long;
 
         private double Round(double price) => Instrument.MasterInstrument.RoundToTickSize(price);
+
+        private void Say(string text, bool problem)
+        {
+            messageText.Text = text;
+            messageText.Foreground = problem ? Brushes.OrangeRed : new SolidColorBrush(Colors.Khaki);
+            messageText.FontWeight = problem ? FontWeights.Bold : FontWeights.Normal;
+        }
+
+        /// <summary>
+        /// NinjaTrader's chart window swallows keystrokes (its instrument selector), so a price box
+        /// handles every key itself here and marks it handled: digits, ".", Backspace, Delete, arrows,
+        /// Home/End edit the box; Enter saves; Esc reverts; anything else is ignored.
+        /// </summary>
+        private void HookPriceKeys(TextBox box, Action onEnter)
+        {
+            box.PreviewKeyDown += (s, e) => Guard(() =>
+            {
+                if (e.Key == Key.Tab) return;
+                e.Handled = true;
+                if (e.Key == Key.Enter)
+                {
+                    if (onEnter != null) onEnter();
+                    return;
+                }
+                if (e.Key == Key.Escape)
+                {
+                    editedBoxes.Remove(box);
+                    Keyboard.ClearFocus();
+                    UpdatePanel();
+                    return;
+                }
+                var edit = PriceKeyEditor.Apply(box.Text, box.SelectionStart, box.SelectionLength, KeyToken(e.Key));
+                if (edit == null) return;
+                box.Text = edit.Text;
+                box.CaretIndex = edit.Caret;
+            });
+        }
+
+        private static string KeyToken(Key key)
+        {
+            bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) != 0;
+            if (key >= Key.D0 && key <= Key.D9 && !shift) return ((int)(key - Key.D0)).ToString(CultureInfo.InvariantCulture);
+            if (key >= Key.NumPad0 && key <= Key.NumPad9) return ((int)(key - Key.NumPad0)).ToString(CultureInfo.InvariantCulture);
+            switch (key)
+            {
+                case Key.OemPeriod:
+                case Key.Decimal: return ".";
+                case Key.Back: return "Back";
+                case Key.Delete: return "Delete";
+                case Key.Left: return "Left";
+                case Key.Right: return "Right";
+                case Key.Home: return "Home";
+                case Key.End: return "End";
+                default: return null;
+            }
+        }
 
         private static bool TryPrice(string text, out double value)
         {
@@ -702,12 +767,7 @@ namespace NinjaTrader.NinjaScript.Indicators
             grid.Children.Add(caption);
             grid.Children.Add(box);
             grid.Children.Add(set);
-            box.KeyDown += (s, e) =>
-            {
-                if (e.Key != Key.Enter) return;
-                Guard(() => CommitBox(tf, box));
-                e.Handled = true;
-            };
+            HookPriceKeys(box, () => CommitBox(tf, box));
             box.LostFocus += (s, e) => Guard(() => CommitBox(tf, box));
             box.GotKeyboardFocus += (s, e) => editedBoxes.Remove(box);
             box.TextChanged += (s, e) =>
