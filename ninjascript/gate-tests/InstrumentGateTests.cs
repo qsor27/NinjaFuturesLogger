@@ -76,22 +76,39 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void CloseBackBelowCancelsTheArm()
+        public void OneCloseBackBelowKeepsTheArm_TwoInARowCancelIt()
         {
             var g = LongAtOneClose();
             g.ArmEntry(MarketArm());
-            var actions = g.OnBarClosed(GateTimeframe.M1, M1(180, 103, 106, 104));
-            var cancel = actions.Single(a => a.Kind == GateActionKind.CancelArm);
-            Assert.That(cancel.Detail, Does.Contain("Reset"));
+            var first = g.OnBarClosed(GateTimeframe.M1, M1(180, 103, 106, 104));
+            Assert.That(Has(first, GateActionKind.CancelArm), Is.False);
+            Assert.That(g.Arm, Is.Not.Null);
+
+            var second = g.OnBarClosed(GateTimeframe.M1, M1(240, 103, 106, 104));
+            var cancel = second.Single(a => a.Kind == GateActionKind.CancelArm);
+            Assert.That(cancel.Detail, Does.Contain("Dead"));
             Assert.That(g.Arm, Is.Null);
         }
 
         [Test]
-        public void ArmRejectedBeforeTheFirstClose()
+        public void ArmedBeforeTheNewLow_FiresOnTheSecondCloseAbove()
         {
             var g = LongSetup();
-            g.OnBarClosed(GateTimeframe.M1, M1(60, 99, 104, 104));
-            Assert.That(g.ArmEntry(MarketArm()).Error, Does.Contain("Arming opens after"));
+            Assert.That(g.ArmEntry(MarketArm()).Ok, Is.True);
+            Assert.That(g.OnBarClosed(GateTimeframe.M1, M1(60, 99, 104, 104)).Any(a => a.Kind == GateActionKind.FireEntry), Is.False);
+            Assert.That(g.OnBarClosed(GateTimeframe.M1, M1(120, 103, 106, 106)).Any(a => a.Kind == GateActionKind.FireEntry), Is.False);
+            Assert.That(g.Arm, Is.Not.Null);
+            Assert.That(Has(g.OnBarClosed(GateTimeframe.M1, M1(180, 105, 108, 107)), GateActionKind.FireEntry), Is.True);
+            Assert.That(g.Arm, Is.Null);
+        }
+
+        [Test]
+        public void ArmRejectedWithoutALevel()
+        {
+            var g = new InstrumentGate("MNQ 12-26", new InstrumentInputs());
+            g.SetExtreme(GateSide.Long, 100, 0);
+            g.AnswerTrend(GateTrend.Up, g.LatestHourEnd);
+            Assert.That(g.ArmEntry(MarketArm()).Error, Does.Contain("1m level"));
         }
 
         [Test]

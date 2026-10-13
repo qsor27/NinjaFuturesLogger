@@ -28,15 +28,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                 case SetupState.NoLevel:
                     return "Set the " + sideWord + " 1m level.";
                 case SetupState.WaitingForBreak:
-                    return "Waiting for a new " + ExtremeWord(side) + ".";
+                    return "Waiting for a new " + ExtremeWord(side) + ". You can arm now.";
                 case SetupState.Broken:
                 case SetupState.Reset:
-                    return "Waiting for a 1m close back " + (side == GateSide.Long ? "above" : "below") + " the level.";
+                    return "Waiting for a 1m close back " + (side == GateSide.Long ? "above" : "below") + " the level. You can arm now.";
                 case SetupState.OneClose:
                 case SetupState.Strike:
                     return "Ready to arm " + sideWord + ".";
                 case SetupState.Confirmed:
-                    return "Confirmed without an arm — wait for the next setup.";
+                    return "Confirmed without an arm — an arm now fires only after a close back past the level and a regain.";
                 default:
                     return "1m setup is dead — needs a new " + ExtremeWord(side) + " and a new level.";
             }

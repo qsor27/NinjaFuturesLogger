@@ -68,8 +68,11 @@ that differs. Times are your chart times.
 ## 6. Arm and fire (market)
 - [ ] With **no ATM strategy** selected in Chart Trader, press **ARM MARKET**: refused ("Choose an ATM
       strategy in Chart Trader…").
-- [ ] Select account Sim101, your ATM template and quantity 1 in Chart Trader. At "Ready to arm long."
-      press **ARM MARKET**: the message says "Armed LONG on Sim101." and the strip's LONG row and the
+- [ ] Make sure the hourly trend matches your side (trend UP for a long). With the trend DOWN and the
+      panel on Long, the status says "Trend is DOWN: only SHORT can be armed this hour" and ARM is
+      refused in red.
+- [ ] Select account Sim101, your ATM template and quantity 1 in Chart Trader. Press **ARM MARKET** any
+      time after setting the 1m level (even before the new low — status says "You can arm now"): the message says "Armed LONG on Sim101." and the strip's LONG row and the
       panel show "ARMED MKT · <template> · 1 ct".
 - [ ] On the second consecutive 1m close above the level, a market buy fills at the next candle's first
       tick with the ATM's stop and target attached (Stop1/Target1 are **not** cancelled).
@@ -83,7 +86,8 @@ that differs. Times are your chart times.
       cancelled with "Leftover … cancelled when the position went flat".
 
 ## 7. Strike, re-arm, death
-- [ ] Arm, then let a 1m candle close back below the level → the arm is cancelled ("1m setup moved to …").
+- [ ] Armed after one close above, let one 1m candle close back below: the arm stays (still ARMED).
+      A second close below in a row → the arm is cancelled ("1m setup moved to Dead").
 - [ ] Two consecutive closes below after a close above → the 1m icon shows a red ✕ and the status says
       "1m setup is dead — needs a new low and a new level."; arming is refused.
 

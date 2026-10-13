@@ -30,15 +30,20 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             Assert.That(Can(side: GateSide.Short, trend: GateTrend.Up), Does.Contain("trend"));
         }
 
-        [TestCase(SetupState.NoLevel)]
         [TestCase(SetupState.WaitingForBreak)]
         [TestCase(SetupState.Broken)]
         [TestCase(SetupState.Reset)]
         [TestCase(SetupState.Confirmed)]
-        [TestCase(SetupState.Dead)]
-        public void RejectsOtherStates(SetupState state)
+        public void AllowsArmingAnyTimeALevelIsSet(SetupState state)
         {
-            Assert.That(Can(state: state), Is.Not.Null);
+            Assert.That(Can(state: state), Is.Null);
+        }
+
+        [Test]
+        public void RejectsWithoutALevelOrOnADeadSetup()
+        {
+            Assert.That(Can(state: SetupState.NoLevel), Does.Contain("1m level"));
+            Assert.That(Can(state: SetupState.Dead), Does.Contain("dead"));
         }
 
         [Test]
@@ -58,9 +63,22 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void OnClose_OtherChangeCancels()
+        public void OnClose_KeepsWaitingThroughTheSetup()
         {
+            Assert.That(ArmRules.OnClose(SetupState.WaitingForBreak, new SetupEvaluation(SetupState.Broken, false, 0)),
+                Is.EqualTo(ArmAction.Keep));
+            Assert.That(ArmRules.OnClose(SetupState.Broken, new SetupEvaluation(SetupState.OneClose, false, 0)),
+                Is.EqualTo(ArmAction.Keep));
             Assert.That(ArmRules.OnClose(SetupState.OneClose, new SetupEvaluation(SetupState.Reset, false, 0)),
+                Is.EqualTo(ArmAction.Keep));
+            Assert.That(ArmRules.OnClose(SetupState.Confirmed, new SetupEvaluation(SetupState.Strike, false, 0)),
+                Is.EqualTo(ArmAction.Keep));
+        }
+
+        [Test]
+        public void OnClose_DeathCancels()
+        {
+            Assert.That(ArmRules.OnClose(SetupState.Reset, new SetupEvaluation(SetupState.Dead, false, 60)),
                 Is.EqualTo(ArmAction.Cancel));
             Assert.That(ArmRules.OnClose(SetupState.Strike, new SetupEvaluation(SetupState.Dead, false, 60)),
                 Is.EqualTo(ArmAction.Cancel));

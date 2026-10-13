@@ -268,7 +268,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             if (Arm != null && Arm.Side == side)
             {
                 var state = Evaluate(side, GateTimeframe.M1).State;
-                if (state != SetupState.OneClose && state != SetupState.Strike)
+                if (state == SetupState.Dead || state == SetupState.NoLevel)
                 {
                     actions.Add(GateAction.CancelArmed(Arm, "1m setup moved to " + state + " — re-arm to trade."));
                     Arm = null;

@@ -26,7 +26,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         [Test]
         public void StatusWaitsForANewLow()
         {
-            Assert.That(LongSetup().StatusLine(), Is.EqualTo("Waiting for a new low."));
+            Assert.That(LongSetup().StatusLine(), Is.EqualTo("Waiting for a new low. You can arm now."));
         }
 
         [Test]
@@ -34,7 +34,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         {
             var g = LongSetup();
             g.OnBarClosed(GateTimeframe.M1, M1(60, 99, 104, 104));
-            Assert.That(g.StatusLine(), Is.EqualTo("Waiting for a 1m close back above the level."));
+            Assert.That(g.StatusLine(), Is.EqualTo("Waiting for a 1m close back above the level. You can arm now."));
         }
 
         [Test]
@@ -104,7 +104,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             Assert.That(s.Instrument, Is.EqualTo("MNQ 12-26"));
             Assert.That(s.Trend, Is.EqualTo(GateTrend.Up));
             Assert.That(s.NeedsTrendAnswer, Is.False);
-            Assert.That(s.StatusLine, Is.EqualTo("Waiting for a new low."));
+            Assert.That(s.StatusLine, Is.EqualTo("Waiting for a new low. You can arm now."));
 
             Assert.That(s.Long.IsActive, Is.True);
             Assert.That(s.Long.Extreme, Is.EqualTo(100.0));
