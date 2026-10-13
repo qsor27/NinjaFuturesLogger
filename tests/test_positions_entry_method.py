@@ -1,7 +1,7 @@
 import pytest
 
 from models.position import ENTRY_METHODS
-from services.entry_method import classify_entry_method
+from services.entry_method import classify_entry_method, is_counter_trend
 from services.positions import build_positions
 from tests.conftest import make_execution
 
@@ -11,6 +11,9 @@ from tests.conftest import make_execution
     [
         ("GateMktNextOpen", "market_next_open"),
         ("GateLmtNextOpen", "limit_next_open"),
+        ("GateMktNextOpenCT", "market_next_open"),
+        ("GateLmtNextOpenCT", "limit_next_open"),
+        ("GateMktNextOpenXY", "manual"),
         ("Entry", "manual"),
         ("Buy", "manual"),
         (None, "unknown"),
@@ -83,3 +86,17 @@ def test_reversal_open_side_inherits_order_name():
     positions, _ = build_positions(execs)
     assert [p.entry_method for p in positions] == ["manual", "market_next_open"]
     assert positions[1].entry_execution_id == "r#open"
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("GateMktNextOpenCT", True),
+        ("GateLmtNextOpenCT", True),
+        ("GateMktNextOpen", False),
+        ("Entry", False),
+        (None, False),
+    ],
+)
+def test_is_counter_trend(name, expected):
+    assert is_counter_trend(name) is expected

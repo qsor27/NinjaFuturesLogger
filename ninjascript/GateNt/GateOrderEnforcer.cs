@@ -23,7 +23,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         private readonly HashSet<long> cancelledIds = new HashSet<long>();
         private readonly LeaderEntryLog leaderEntries = new LeaderEntryLog();
         private readonly List<Account> subscribed = new List<Account>();
-        private readonly List<KeyValuePair<Order, EntryKind>> gateEntryOrders = new List<KeyValuePair<Order, EntryKind>>();
+        private readonly List<KeyValuePair<Order, string>> gateEntryOrders = new List<KeyValuePair<Order, string>>();
         private readonly Dictionary<long, string> journaledOrderIds = new Dictionary<long, string>();
         private readonly GateEntryJournal journal = GateEntryJournal.Load(GateRuntime.JournalPath);
 
@@ -63,10 +63,10 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 foreach (Order order in account.Orders.ToArray())
                 {
                     if (!IsLive(order.OrderState) || order.Instrument == null) continue;
-                    EntryKind kind;
+                    string gateName;
                     bool known;
-                    lock (sync) known = journal.TryGet(order.OrderId, out kind);
-                    if (known) Recover(order, kind);
+                    lock (sync) known = journal.TryGet(order.OrderId, out gateName);
+                    if (known) Recover(order, gateName);
                     Judge(order, order.OrderState, order.Quantity);
                 }
             }
@@ -98,12 +98,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
         /// reference (in case NinjaTrader assigns the id later) and records the allowed leader entry
         /// before any copier can react to it.
         /// </summary>
-        public void MarkGateEntry(Order order, EntryKind kind, string instrument, bool isBuy)
+        public void MarkGateEntry(Order order, string gateName, string instrument, bool isBuy)
         {
             lock (sync)
             {
                 gateEntryIds.Add(order.Id);
-                gateEntryOrders.Add(new KeyValuePair<Order, EntryKind>(order, kind));
+                gateEntryOrders.Add(new KeyValuePair<Order, string>(order, gateName));
                 leaderEntries.Add(new LeaderEntry(instrument, isBuy, DateTimeOffset.UtcNow.ToUnixTimeSeconds()));
             }
         }
@@ -122,22 +122,22 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 {
                     if (!ReferenceEquals(pair.Key, order)) continue;
                     gateEntryIds.Add(order.Id); // the id changed after CreateOrder: re-key the exporter tag too
-                    GateEntryNames.Register(order.Id.ToString(CultureInfo.InvariantCulture), pair.Value);
+                    GateEntryNames.RegisterName(order.Id.ToString(CultureInfo.InvariantCulture), pair.Value);
                     return true;
                 }
                 return false;
             }
         }
 
-        private void Recover(Order order, EntryKind kind)
+        private void Recover(Order order, string gateName)
         {
             lock (sync)
             {
                 gateEntryIds.Add(order.Id);
-                gateEntryOrders.Add(new KeyValuePair<Order, EntryKind>(order, kind));
+                gateEntryOrders.Add(new KeyValuePair<Order, string>(order, gateName));
                 journaledOrderIds[order.Id] = order.OrderId;
             }
-            GateEntryNames.Register(order.Id.ToString(CultureInfo.InvariantCulture), kind);
+            GateEntryNames.RegisterName(order.Id.ToString(CultureInfo.InvariantCulture), gateName);
         }
 
         /// <summary>Keeps gate_entries.txt in step with working gate entries (by broker order id).</summary>
@@ -150,9 +150,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                 journaledOrderIds.TryGetValue(order.Id, out recorded);
                 if (working && !string.IsNullOrEmpty(order.OrderId) && recorded != order.OrderId)
                 {
-                    EntryKind kind = gateEntryOrders.Where(p => ReferenceEquals(p.Key, order)).Select(p => p.Value).FirstOrDefault();
+                    string gateName = gateEntryOrders.Where(p => ReferenceEquals(p.Key, order)).Select(p => p.Value).FirstOrDefault();
                     if (recorded != null) journal.Forget(recorded);
-                    journal.Record(order.OrderId, kind);
+                    journal.Record(order.OrderId, gateName);
                     journaledOrderIds[order.Id] = order.OrderId;
                     changed = true;
                 }

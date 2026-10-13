@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 {
@@ -108,15 +109,27 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public const string MarketNextOpen = "GateMktNextOpen";
         public const string LimitNextOpen = "GateLmtNextOpen";
 
+        /// <summary>Appended for an arm the trader confirmed against the hourly trend (CSV Name column).</summary>
+        public const string CounterTrendSuffix = "CT";
+
+        private static readonly Regex GateName = new Regex(@"^Gate(Mkt|Lmt)NextOpen(CT)?$");
+
         private static readonly object Sync = new object();
         private static readonly Dictionary<string, string> Names = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        public static string NameFor(EntryKind kind) => kind == EntryKind.Market ? MarketNextOpen : LimitNextOpen;
+        public static string NameFor(EntryKind kind, bool counterTrend = false) =>
+            (kind == EntryKind.Market ? MarketNextOpen : LimitNextOpen) + (counterTrend ? CounterTrendSuffix : "");
 
-        public static void Register(string orderKey, EntryKind kind)
+        public static bool IsGateName(string name) => name != null && GateName.IsMatch(name);
+
+        public static void Register(string orderKey, EntryKind kind, bool counterTrend = false) =>
+            RegisterName(orderKey, NameFor(kind, counterTrend));
+
+        public static void RegisterName(string orderKey, string name)
         {
             if (string.IsNullOrEmpty(orderKey)) throw new ArgumentException("An order key is required.", nameof(orderKey));
-            lock (Sync) Names[orderKey] = NameFor(kind);
+            if (!IsGateName(name)) throw new ArgumentException("Not a gate entry name: " + name, nameof(name));
+            lock (Sync) Names[orderKey] = name;
         }
 
         public static bool TryResolve(string orderKey, out string name)

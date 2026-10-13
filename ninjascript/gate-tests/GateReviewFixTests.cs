@@ -86,16 +86,16 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             try
             {
                 var journal = new GateEntryJournal();
-                journal.Record("B123", EntryKind.Limit);
-                journal.Record("B124", EntryKind.Market);
+                journal.Record("B123", "GateLmtNextOpenCT");
+                journal.Record("B124", "GateMktNextOpen");
                 journal.Forget("B124");
                 GateEntryJournal.Save(path, journal);
 
                 var loaded = GateEntryJournal.Load(path);
-                EntryKind kind;
-                Assert.That(loaded.TryGet("B123", out kind), Is.True);
-                Assert.That(kind, Is.EqualTo(EntryKind.Limit));
-                Assert.That(loaded.TryGet("B124", out kind), Is.False);
+                string name;
+                Assert.That(loaded.TryGet("B123", out name), Is.True);
+                Assert.That(name, Is.EqualTo("GateLmtNextOpenCT"));
+                Assert.That(loaded.TryGet("B124", out name), Is.False);
                 Assert.That(loaded.Count, Is.EqualTo(1));
             }
             finally
@@ -113,11 +113,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             {
                 Assert.That(GateEntryJournal.Load(path).Count, Is.EqualTo(0));
                 Directory.CreateDirectory(dir);
-                File.WriteAllText(path, "garbage\nB9|Sideways\nB10|Market\n");
+                // Old journals stored the kind ("Market"/"Limit"); they still load as gate names.
+                File.WriteAllText(path, "garbage\nB9|Sideways\nB10|Market\nB11|GateLmtNextOpenCT\n");
                 var loaded = GateEntryJournal.Load(path);
-                Assert.That(loaded.Count, Is.EqualTo(1));
-                EntryKind kind;
-                Assert.That(loaded.TryGet("B10", out kind), Is.True);
+                Assert.That(loaded.Count, Is.EqualTo(2));
+                string name;
+                Assert.That(loaded.TryGet("B10", out name), Is.True);
+                Assert.That(name, Is.EqualTo("GateMktNextOpen"));
+                Assert.That(loaded.TryGet("B11", out name), Is.True);
+                Assert.That(name, Is.EqualTo("GateLmtNextOpenCT"));
             }
             finally
             {
@@ -129,8 +133,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         public void JournalRejectsEmptyOrderIds()
         {
             var journal = new GateEntryJournal();
-            journal.Record("", EntryKind.Market);
-            journal.Record(null, EntryKind.Market);
+            journal.Record("", "GateMktNextOpen");
+            journal.Record(null, "GateMktNextOpen");
+            journal.Record("B1", "Entry");
             Assert.That(journal.Count, Is.EqualTo(0));
         }
     }

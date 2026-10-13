@@ -1,22 +1,35 @@
 """Entry-method classification (Setup Gate spec §12a).
 
-The NinjaTrader Setup Gate names its entry orders with the constants below, and
-ExecutionExporter writes the order name into the CSV `Name` column. These
-strings must stay in sync with the NinjaScript gate.
+The NinjaTrader Setup Gate tags its entry fills in the CSV `Name` column:
+`GateMktNextOpen` / `GateLmtNextOpen`, with a `CT` suffix when the trader confirmed the
+arm against the hourly trend (e.g. `GateLmtNextOpenCT`). These strings must stay in sync
+with `ninjascript/Gate/GateRuntimeTypes.cs` (`GateEntryNames`).
 """
+
+import re
 
 from models.position import EntryMethod
 
 GATE_MARKET_ORDER_NAME = "GateMktNextOpen"
 GATE_LIMIT_ORDER_NAME = "GateLmtNextOpen"
+COUNTER_TREND_SUFFIX = "CT"
+
+_GATE_NAME = re.compile(r"^Gate(?P<kind>Mkt|Lmt)NextOpen(?P<ct>CT)?$")
 
 
 def classify_entry_method(order_name: str | None) -> EntryMethod:
     """Map an entry fill's order name to how the position was entered."""
     if not order_name:
         return "unknown"
-    if order_name == GATE_MARKET_ORDER_NAME:
-        return "market_next_open"
-    if order_name == GATE_LIMIT_ORDER_NAME:
-        return "limit_next_open"
-    return "manual"
+    match = _GATE_NAME.match(order_name)
+    if match is None:
+        return "manual"
+    return "market_next_open" if match.group("kind") == "Mkt" else "limit_next_open"
+
+
+def is_counter_trend(order_name: str | None) -> bool:
+    """True when the gate entry was armed against the hourly trend (CT-tagged name)."""
+    if not order_name:
+        return False
+    match = _GATE_NAME.match(order_name)
+    return match is not None and match.group("ct") is not None

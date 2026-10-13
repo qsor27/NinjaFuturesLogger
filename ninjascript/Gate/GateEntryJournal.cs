@@ -12,14 +12,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
     /// </summary>
     public sealed class GateEntryJournal
     {
-        private readonly Dictionary<string, EntryKind> entries = new Dictionary<string, EntryKind>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> entries = new Dictionary<string, string>(StringComparer.Ordinal);
 
         public int Count => entries.Count;
 
-        public void Record(string orderId, EntryKind kind)
+        /// <summary>Records a working gate entry's CSV tag (e.g. GateLmtNextOpenCT) by broker order id.</summary>
+        public void Record(string orderId, string gateName)
         {
-            if (string.IsNullOrEmpty(orderId)) return;
-            entries[orderId] = kind;
+            if (string.IsNullOrEmpty(orderId) || !GateEntryNames.IsGateName(gateName)) return;
+            entries[orderId] = gateName;
         }
 
         public void Forget(string orderId)
@@ -27,10 +28,10 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             if (!string.IsNullOrEmpty(orderId)) entries.Remove(orderId);
         }
 
-        public bool TryGet(string orderId, out EntryKind kind)
+        public bool TryGet(string orderId, out string gateName)
         {
-            kind = EntryKind.Market;
-            return !string.IsNullOrEmpty(orderId) && entries.TryGetValue(orderId, out kind);
+            gateName = null;
+            return !string.IsNullOrEmpty(orderId) && entries.TryGetValue(orderId, out gateName);
         }
 
         public static void Save(string path, GateEntryJournal journal)
@@ -59,9 +60,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             foreach (string line in lines)
             {
                 string[] f = line.Split('|');
-                EntryKind kind;
-                if (f.Length == 2 && f[0].Length > 0 && Enum.TryParse(f[1], false, out kind) && Enum.IsDefined(typeof(EntryKind), kind))
-                    journal.entries[f[0]] = kind;
+                if (f.Length != 2 || f[0].Length == 0) continue;
+                EntryKind legacyKind;
+                if (GateEntryNames.IsGateName(f[1]))
+                    journal.entries[f[0]] = f[1];
+                else if (Enum.TryParse(f[1], false, out legacyKind) && Enum.IsDefined(typeof(EntryKind), legacyKind))
+                    journal.entries[f[0]] = GateEntryNames.NameFor(legacyKind); // journals written before the CT tag
             }
             return journal;
         }

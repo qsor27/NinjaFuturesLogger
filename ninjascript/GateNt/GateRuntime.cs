@@ -373,8 +373,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
                     "Entry",
                     NinjaTrader.Core.Globals.MaxDate,
                     null);
-                GateEntryNames.Register(order.Id.ToString(CultureInfo.InvariantCulture), arm.Kind);
-                enforcer.MarkGateEntry(order, arm.Kind, instrumentName, arm.Side == GateSide.Long);
+                string gateName = GateEntryNames.NameFor(arm.Kind, arm.CounterTrend);
+                GateEntryNames.RegisterName(order.Id.ToString(CultureInfo.InvariantCulture), gateName);
+                enforcer.MarkGateEntry(order, gateName, instrumentName, arm.Side == GateSide.Long);
                 NinjaTrader.NinjaScript.AtmStrategy.StartAtmStrategy(arm.AtmTemplate, order);
                 return null;
             }

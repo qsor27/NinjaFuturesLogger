@@ -25,6 +25,26 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void CounterTrendEntriesCarryACtSuffix()
+        {
+            Assert.That(GateEntryNames.NameFor(EntryKind.Market, true), Is.EqualTo("GateMktNextOpenCT"));
+            Assert.That(GateEntryNames.NameFor(EntryKind.Limit, true), Is.EqualTo("GateLmtNextOpenCT"));
+            GateEntryNames.Register("order-ct", EntryKind.Market, true);
+            string name;
+            Assert.That(GateEntryNames.TryResolve("order-ct", out name), Is.True);
+            Assert.That(name, Is.EqualTo("GateMktNextOpenCT"));
+        }
+
+        [Test]
+        public void RecognisesGateNames()
+        {
+            Assert.That(GateEntryNames.IsGateName("GateMktNextOpen"), Is.True);
+            Assert.That(GateEntryNames.IsGateName("GateLmtNextOpenCT"), Is.True);
+            Assert.That(GateEntryNames.IsGateName("Entry"), Is.False);
+            Assert.That(GateEntryNames.IsGateName(null), Is.False);
+        }
+
+        [Test]
         public void UnknownOrderDoesNotResolve()
         {
             string name;
