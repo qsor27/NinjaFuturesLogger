@@ -229,7 +229,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             SetupEvaluation previousEvaluation = previous == null
                 ? null
                 : SetupEngine.Evaluate(side, previous, track, bars[tf]);
+            long removedRequirement;
+            if (previous == null && inputs.RemovedRequirements.TryGetValue(tf, out removedRequirement))
+                previous = new LevelInput(price, now, removedRequirement); // carries a removed level's requirement
             inputs.Levels[tf] = LevelInput.Replace(previous, previousEvaluation, price, now);
+            inputs.RemovedRequirements.Remove(tf);
             InputsChanged = true;
 
             var actions = new List<GateAction>
@@ -239,6 +243,64 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             if (Arm != null && Arm.Side == side && tf == GateTimeframe.M1)
             {
                 actions.Add(GateAction.CancelArmed(Arm, "The 1m level changed — re-arm to trade."));
+                Arm = null;
+            }
+            Rebaseline();
+            return GateCommandResult.Done(actions);
+        }
+
+        /// <summary>
+        /// Deletes one timeframe's level. Its "new extreme after death" requirement is kept for the
+        /// next level on that timeframe. Removing the armed side's 1m level cancels the arm.
+        /// </summary>
+        public GateCommandResult RemoveLevel(GateSide side, GateTimeframe tf, long now)
+        {
+            var inputs = Inputs.For(side);
+            LevelInput level;
+            if (!inputs.Levels.TryGetValue(tf, out level))
+                return GateCommandResult.Rejected("There's no " + Label(tf) + " level to remove.");
+
+            var evaluation = SetupEngine.Evaluate(side, level, TrackExtreme(side), bars[tf]);
+            long requirement = level.RequireBreakAfter;
+            if (evaluation.State == SetupState.Dead)
+                requirement = Math.Max(requirement, evaluation.DeadAt > 0 ? evaluation.DeadAt : now);
+            inputs.Levels.Remove(tf);
+            if (requirement > 0) inputs.RemovedRequirements[tf] = requirement;
+            else inputs.RemovedRequirements.Remove(tf);
+            InputsChanged = true;
+
+            var actions = new List<GateAction>
+            {
+                GateAction.LogEvent(GateEvents.LevelRemoved, Describe(side, tf) + " level " + FormatPrice(level.Price) + " removed"),
+            };
+            if (Arm != null && Arm.Side == side && tf == GateTimeframe.M1)
+            {
+                actions.Add(GateAction.CancelArmed(Arm, "The 1m level was removed — the arm was cancelled."));
+                Arm = null;
+            }
+            Rebaseline();
+            return GateCommandResult.Done(actions);
+        }
+
+        /// <summary>Deletes the side's low/high together with its levels (levels need an extreme).</summary>
+        public GateCommandResult RemoveExtreme(GateSide side, long now)
+        {
+            var inputs = Inputs.For(side);
+            if (inputs.Extreme == null)
+                return GateCommandResult.Rejected("There's no " + ExtremeWord(side) + " to remove.");
+
+            inputs.ClearExtreme();
+            inputs.Levels.Clear();
+            inputs.RemovedRequirements.Clear();
+            InputsChanged = true;
+
+            var actions = new List<GateAction>
+            {
+                GateAction.LogEvent(GateEvents.LevelRemoved, side + " " + ExtremeWord(side) + " and its levels removed"),
+            };
+            if (Arm != null && Arm.Side == side)
+            {
+                actions.Add(GateAction.CancelArmed(Arm, "The " + ExtremeWord(side) + " was removed — the arm was cancelled."));
                 Arm = null;
             }
             Rebaseline();

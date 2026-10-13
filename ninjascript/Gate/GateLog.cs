@@ -15,6 +15,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public const string SlipThrough = "SlipThrough";
         public const string TrendAnswer = "TrendAnswer";
         public const string LevelSet = "LevelSet";
+        public const string LevelRemoved = "LevelRemoved";
         public const string ExtremeSet = "ExtremeSet";
         public const string Transition = "Transition";
         public const string BreakEven = "BreakEven";

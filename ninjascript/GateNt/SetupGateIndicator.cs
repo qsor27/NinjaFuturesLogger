@@ -316,11 +316,12 @@ namespace NinjaTrader.NinjaScript.Indicators
             longButton.Checked += (s, e) => OnSideChanged();
             shortButton.Checked += (s, e) => OnSideChanged();
             root.Children.Add(Row(longButton, shortButton));
-            root.Children.Add(Text("Set: click the chart.  Or type a price + Enter.", 10, Colors.Gray, false));
+            root.Children.Add(Text("Set: click the chart. Or type a price + Enter. ✕ removes.", 10, Colors.Gray, false));
 
             var prices = new Grid { Margin = new Thickness(0, 4, 0, 4) };
             prices.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
             prices.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            prices.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             prices.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             extremeCaption = Text("Low", 11, Colors.Gainsboro, false);
             extremeBox = PriceBox();
@@ -483,12 +484,19 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
         }
 
-        private void CommitBox(GateTimeframe? tf, TextBox box)
+        private void CommitBox(GateTimeframe? tf, TextBox box, bool pressedEnter)
         {
             // Only save what the trader actually typed: a focused box can hold a stale value while the
             // extreme auto-tracks or a line is dragged, and leaving it must not write that back.
             if (!editedBoxes.Remove(box)) return;
             if (runtime == null || snapshot == null) return;
+            if (string.IsNullOrWhiteSpace(box.Text))
+            {
+                // An emptied box removes the line only on Enter; just leaving the box restores it.
+                if (pressedEnter) Remove(tf);
+                else UpdatePanel();
+                return;
+            }
             double price;
             if (!TryPrice(box.Text, out price)) return;
             price = Round(price);
@@ -501,6 +509,32 @@ namespace NinjaTrader.NinjaScript.Indicators
             Show(tf.HasValue
                 ? runtime.SetLevel(instrumentName, side, tf.Value, price)
                 : runtime.SetExtreme(instrumentName, side, price), "Saved.");
+        }
+
+        /// <summary>Deletes the row's level, or (Low/High row) the side's extreme and all its levels after a confirmation.</summary>
+        private void Remove(GateTimeframe? tf)
+        {
+            if (runtime == null || snapshot == null) return;
+            var side = SelectedSide();
+            if (tf.HasValue)
+            {
+                Show(runtime.RemoveLevel(instrumentName, side, tf.Value), InstrumentGate.Label(tf.Value) + " level removed.");
+                return;
+            }
+            var sideSnapshot = side == GateSide.Long ? snapshot.Long : snapshot.Short;
+            if (sideSnapshot.Timeframes.Any(t => t.LevelPrice.HasValue))
+            {
+                var answer = MessageBox.Show(
+                    "Remove the " + InstrumentGate.ExtremeWord(side) + " and every " + side.ToString().ToLowerInvariant()
+                        + " level on " + instrumentName + "?",
+                    "Setup Gate — remove", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+                if (answer != MessageBoxResult.Yes)
+                {
+                    UpdatePanel();
+                    return;
+                }
+            }
+            Show(runtime.RemoveExtreme(instrumentName, side), InstrumentGate.ExtremeWord(side) + " removed.");
         }
 
         private void Arm(EntryKind kind)
@@ -779,12 +813,19 @@ namespace NinjaTrader.NinjaScript.Indicators
             Grid.SetColumn(box, 1);
             Grid.SetRow(set, row);
             Grid.SetColumn(set, 2);
+            var remove = MakeButton("✕", (s, e) => Guard(() => Remove(tf)));
+            remove.Margin = new Thickness(2, 1, 0, 1);
+            remove.Padding = new Thickness(4, 0, 4, 0);
+            remove.ToolTip = tf.HasValue ? "Remove this level" : "Remove the low/high and this side's levels";
+            Grid.SetRow(remove, row);
+            Grid.SetColumn(remove, 3);
             caption.VerticalAlignment = VerticalAlignment.Center;
             grid.Children.Add(caption);
             grid.Children.Add(box);
             grid.Children.Add(set);
-            HookPriceKeys(box, () => CommitBox(tf, box));
-            box.LostFocus += (s, e) => Guard(() => CommitBox(tf, box));
+            grid.Children.Add(remove);
+            HookPriceKeys(box, () => CommitBox(tf, box, true));
+            box.LostFocus += (s, e) => Guard(() => CommitBox(tf, box, false));
             box.GotKeyboardFocus += (s, e) => editedBoxes.Remove(box);
             box.TextChanged += (s, e) =>
             {

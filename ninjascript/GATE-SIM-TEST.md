@@ -57,6 +57,13 @@ that differs. Times are your chart times.
       without typing: the low stays **auto** (nothing is saved unless you typed).
 - [ ] Type a price into the 3m box and press Enter: a purple `▲ 3m LVL` line appears. Put a 1h level at
       the same price as the 1m level: both labels show, stacked.
+- [ ] Press **✕** on the 1h row: the 1h line disappears and `gate_log.csv` has a LevelRemoved row. Clear
+      the 3m box and press **Enter**: the 3m line is removed (clearing a box and just clicking away
+      restores it instead).
+- [ ] Let the 1m setup die (two closes below in a row), press **✕** on the 1m row, then **Set** a new 1m
+      level: its icon waits for a **new low** (removing a dead level doesn't skip that rule).
+- [ ] Press **✕** on the Low row: a Yes/No box asks to remove the low and every long level; **Yes**
+      clears the long side.
 - [ ] Untick **Lines**: lines disappear; tick it: they return. Press a row's **Set** then **Esc** (or
       press the same **Set** again, or switch Long/Short): the prompt says "Placement cancelled." and the
       next click is an ordinary chart click.

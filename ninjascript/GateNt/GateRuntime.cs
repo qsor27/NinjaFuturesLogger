@@ -195,6 +195,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
 
         public GateCommandResult Disarm(string instrument) => Command(instrument, g => g.Disarm());
 
+        public GateCommandResult RemoveLevel(string instrument, GateSide side, GateTimeframe tf) =>
+            Command(instrument, g => g.RemoveLevel(side, tf, Now()));
+
+        public GateCommandResult RemoveExtreme(string instrument, GateSide side) =>
+            Command(instrument, g => g.RemoveExtreme(side, Now()));
+
         public GateCommandResult AnswerTrend(string instrument, GateTrend trend, long forHourEnd) =>
             Command(instrument, g => g.AnswerTrend(trend, forHourEnd));
 

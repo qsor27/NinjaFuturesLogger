@@ -28,6 +28,15 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         }
 
         public Dictionary<GateTimeframe, LevelInput> Levels { get; } = new Dictionary<GateTimeframe, LevelInput>();
+
+        /// <summary>
+        /// RequireBreakAfter of levels the trader removed, per timeframe. The next level set on that
+        /// timeframe inherits it, so removing a dead level never skips "new extreme after death".
+        /// </summary>
+        public Dictionary<GateTimeframe, long> RemovedRequirements { get; } = new Dictionary<GateTimeframe, long>();
+
+        /// <summary>Removes every extreme edit (the trader deleted the low/high).</summary>
+        public void ClearExtreme() => extremeEdits.Clear();
     }
 
     public sealed class InstrumentInputs
@@ -94,6 +103,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                         sb.Append("E|").Append(pair.Key).Append('|').Append(side).Append('|')
                           .Append(edit.Price.ToString("R", Inv)).Append('|')
                           .Append(edit.SetAt.ToString(Inv)).AppendLine();
+                    }
+                    foreach (var removed in inputs.RemovedRequirements)
+                    {
+                        sb.Append("C|").Append(pair.Key).Append('|').Append(side).Append('|')
+                          .Append(removed.Key).Append('|').Append(removed.Value.ToString(Inv)).AppendLine();
                     }
                     foreach (var level in inputs.Levels)
                     {
@@ -183,6 +197,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                     {
                         throw new FormatException("bad line " + (i + 1) + ": " + e.Message);
                     }
+                }
+                else if (f[0] == "C" && f.Length == 5)
+                {
+                    state.GetOrAdd(f[1]).For(ParseEnum<GateSide>(f[2])).RemovedRequirements[ParseEnum<GateTimeframe>(f[3])] =
+                        ParseLong(f[4]);
                 }
                 else if (f[0] == "L" && f.Length == 7)
                 {
