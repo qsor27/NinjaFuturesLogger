@@ -76,7 +76,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void OneCloseBackBelowKeepsTheArm_TwoInARowCancelIt()
+        public void OneCloseBackBelowKeepsTheArm_TwoInARowPauseAndCancelIt()
         {
             var g = LongAtOneClose();
             g.ArmEntry(MarketArm());
@@ -86,8 +86,14 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
 
             var second = g.OnBarClosed(GateTimeframe.M1, M1(240, 103, 106, 104));
             var cancel = second.Single(a => a.Kind == GateActionKind.CancelArm);
-            Assert.That(cancel.Detail, Does.Contain("Dead"));
+            Assert.That(cancel.Detail, Does.Contain("paused"));
             Assert.That(g.Arm, Is.Null);
+            Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.Broken));
+
+            // Paused, not dead: re-arm straight away and the next two closes above fire it.
+            Assert.That(g.ArmEntry(MarketArm()).Ok, Is.True);
+            g.OnBarClosed(GateTimeframe.M1, M1(300, 103, 107, 106));
+            Assert.That(Has(g.OnBarClosed(GateTimeframe.M1, M1(360, 105, 108, 107)), GateActionKind.FireEntry), Is.True);
         }
 
         [Test]
@@ -297,19 +303,17 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void ReplacingADeadLevelNeedsANewLow()
+        public void MovingTheLevelOfAPausedSetupKeepsWaitingForARegain()
         {
             var g = LongSetup();
             g.OnBarClosed(GateTimeframe.M1, M1(60, 99, 104, 104));
             g.OnBarClosed(GateTimeframe.M1, M1(120, 103, 106, 106));
             g.OnBarClosed(GateTimeframe.M1, M1(180, 103, 106, 104));
             g.OnBarClosed(GateTimeframe.M1, M1(240, 103, 106, 104));
-            Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.Dead));
+            Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.Broken));
 
             g.SetLevel(GateSide.Long, GateTimeframe.M1, 106, 300);
-            Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.WaitingForBreak));
-
-            g.OnBarClosed(GateTimeframe.M1, M1(360, 98, 104, 104));
+            Assert.That(g.Inputs.Long.Levels[GateTimeframe.M1].RequireBreakAfter, Is.EqualTo(0));
             Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.Broken));
         }
 

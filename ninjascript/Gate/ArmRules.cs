@@ -37,11 +37,14 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             return null;
         }
 
-        /// <summary>Applied after every 1m close while an arm exists: fire on the trigger, cancel on death, else wait.</summary>
+        /// <summary>Applied after every 1m close while an arm exists: fire on the trigger, cancel on a pause, else wait.</summary>
         public static ArmAction OnClose(SetupState before, SetupEvaluation after)
         {
             if (after.TriggeredOnLastClose) return ArmAction.Fire;
             if (after.State == SetupState.Dead || after.State == SetupState.NoLevel) return ArmAction.Cancel;
+            // Two closes back past the level pause the setup: cancel, the trader re-arms for the regain.
+            if (after.State == SetupState.Broken && (before == SetupState.Reset || before == SetupState.Strike))
+                return ArmAction.Cancel;
             return ArmAction.Keep;
         }
     }

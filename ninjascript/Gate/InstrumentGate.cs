@@ -151,8 +151,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                         Arm = null;
                         break;
                     case ArmAction.Cancel:
-                        actions.Add(GateAction.CancelArmed(Arm,
-                            "1m setup moved to " + armedAfter.State + " — re-arm to trade."));
+                        actions.Add(GateAction.CancelArmed(Arm, armedAfter.State == SetupState.Broken
+                            ? "Two 1m closes back past the level — setup paused. Re-arm to trade the regain."
+                            : "1m setup moved to " + armedAfter.State + " — re-arm to trade."));
                         Arm = null;
                         break;
                 }

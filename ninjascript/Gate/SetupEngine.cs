@@ -76,9 +76,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             {
                 case SetupState.Broken: return regained ? SetupState.OneClose : SetupState.Broken;
                 case SetupState.OneClose: return regained ? SetupState.Confirmed : SetupState.Reset;
-                case SetupState.Reset: return regained ? SetupState.OneClose : SetupState.Dead;
+                case SetupState.Reset: return regained ? SetupState.OneClose : SetupState.Broken;
                 case SetupState.Confirmed: return regained ? SetupState.Confirmed : SetupState.Strike;
-                case SetupState.Strike: return regained ? SetupState.Confirmed : SetupState.Dead;
+                case SetupState.Strike: return regained ? SetupState.Confirmed : SetupState.Broken; // paused, not dead
                 default: return state; // NoLevel, WaitingForBreak and Dead ignore closes.
             }
         }

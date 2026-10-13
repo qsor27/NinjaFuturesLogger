@@ -78,12 +78,16 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void OnClose_DeathCancels()
+        public void OnClose_PauseCancels()
         {
-            Assert.That(ArmRules.OnClose(SetupState.Reset, new SetupEvaluation(SetupState.Dead, false, 60)),
+            // Two closes back past the level after a regain pause the setup (back to Broken): the arm
+            // is cancelled and the trader re-arms for the next regain.
+            Assert.That(ArmRules.OnClose(SetupState.Reset, new SetupEvaluation(SetupState.Broken, false, 0)),
                 Is.EqualTo(ArmAction.Cancel));
-            Assert.That(ArmRules.OnClose(SetupState.Strike, new SetupEvaluation(SetupState.Dead, false, 60)),
+            Assert.That(ArmRules.OnClose(SetupState.Strike, new SetupEvaluation(SetupState.Broken, false, 0)),
                 Is.EqualTo(ArmAction.Cancel));
+            Assert.That(ArmRules.OnClose(SetupState.WaitingForBreak, new SetupEvaluation(SetupState.Broken, false, 0)),
+                Is.EqualTo(ArmAction.Keep));
         }
 
         [Test]

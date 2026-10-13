@@ -87,14 +87,14 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void StatusDead()
+        public void StatusPausedAfterTwoClosesBack()
         {
             var g = LongSetup();
             g.OnBarClosed(GateTimeframe.M1, M1(60, 99, 104, 104));
             g.OnBarClosed(GateTimeframe.M1, M1(120, 103, 106, 106));
             g.OnBarClosed(GateTimeframe.M1, M1(180, 103, 106, 104));
             g.OnBarClosed(GateTimeframe.M1, M1(240, 103, 106, 104));
-            Assert.That(g.StatusLine(), Is.EqualTo("1m setup is dead — needs a new low and a new level."));
+            Assert.That(g.StatusLine(), Is.EqualTo("Waiting for a 1m close back above the level. You can arm now."));
         }
 
         [Test]

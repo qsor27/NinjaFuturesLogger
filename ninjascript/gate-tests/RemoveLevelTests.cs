@@ -39,14 +39,12 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void RemovingADeadLevelKeepsItsNewLowRequirement()
+        public void RemovingALevelKeepsItsNewLowRequirement()
         {
             var g = LongSetup();
             g.OnBarClosed(GateTimeframe.M1, M1(60, 99, 104, 104));
-            g.OnBarClosed(GateTimeframe.M1, M1(120, 103, 106, 106));
-            g.OnBarClosed(GateTimeframe.M1, M1(180, 103, 106, 104));
-            g.OnBarClosed(GateTimeframe.M1, M1(240, 103, 106, 104));
-            Assert.That(g.Evaluate(GateSide.Long, GateTimeframe.M1).State, Is.EqualTo(SetupState.Dead));
+            // A level that already carries a requirement (e.g. a replacement): removing it keeps it.
+            g.Inputs.Long.Levels[GateTimeframe.M1] = new LevelInput(105.0, 200, 240);
 
             g.RemoveLevel(GateSide.Long, GateTimeframe.M1, 250);
             g.SetLevel(GateSide.Long, GateTimeframe.M1, 106, 300);

@@ -97,11 +97,11 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void CBB_IsDead()
+        public void CBB_PausesBackToWaitingForARegain()
         {
             var e = RunLong(Level(), Break60, Bar(120, 103, 106, 106), Bar(180, 103, 106, 104), Bar(240, 103, 106, 104));
-            Assert.That(e.State, Is.EqualTo(SetupState.Dead));
-            Assert.That(e.DeadAt, Is.EqualTo(240));
+            Assert.That(e.State, Is.EqualTo(SetupState.Broken));
+            Assert.That(e.DeadAt, Is.EqualTo(0));
         }
 
         [Test]
@@ -129,20 +129,20 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void StrikeThenBelow_IsDead()
+        public void StrikeThenBelow_PausesBackToWaitingForARegain()
         {
             var e = RunLong(Level(), Break60, Bar(120, 103, 106, 106), Bar(180, 105, 108, 107),
                 Bar(240, 103, 107, 104), Bar(300, 103, 107, 104));
-            Assert.That(e.State, Is.EqualTo(SetupState.Dead));
-            Assert.That(e.DeadAt, Is.EqualTo(300));
+            Assert.That(e.State, Is.EqualTo(SetupState.Broken));
         }
 
         [Test]
-        public void DeadIgnoresLaterClosesAndNewLows()
+        public void PausedSetupConfirmsAgainOnTwoClosesAbove_NoNewLowNeeded()
         {
             var e = RunLong(Level(), Break60, Bar(120, 103, 106, 106), Bar(180, 103, 106, 104), Bar(240, 103, 106, 104),
-                Bar(300, 97, 104, 98), Bar(360, 98, 107, 106), Bar(420, 105, 108, 107));
-            Assert.That(e.State, Is.EqualTo(SetupState.Dead));
+                Bar(300, 103, 107, 106), Bar(360, 105, 108, 107));
+            Assert.That(e.State, Is.EqualTo(SetupState.Confirmed));
+            Assert.That(e.TriggeredOnLastClose, Is.True);
         }
 
         [Test]
@@ -195,18 +195,6 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void EditingTheLowNeverRevivesADeadLevel()
-        {
-            var bars = new List<GateBar> { Break60, Bar(120, 103, 106, 106), Bar(180, 103, 106, 104), Bar(240, 103, 106, 104),
-                Bar(360, 96, 104, 104), Bar(420, 103, 107, 106), Bar(480, 105, 108, 107) };
-            var edits = new List<ExtremeInput> { new ExtremeInput(100.0, 0), new ExtremeInput(97.0, 290) };
-            var track = ExtremeTracker.Track(GateSide.Long, edits, bars);
-            var e = SetupEngine.Evaluate(GateSide.Long, Level(), track, bars);
-            Assert.That(e.State, Is.EqualTo(SetupState.Dead));
-            Assert.That(e.DeadAt, Is.EqualTo(240));
-        }
-
-        [Test]
         public void EditingTheLowKeepsALiveSetup()
         {
             var bars = new List<GateBar> { Break60, Bar(120, 103, 106, 106), Bar(180, 105, 108, 107) };
@@ -223,25 +211,6 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             var e = RunLong(Level(), Break60, Bar(120, 103, 106, 106), Bar(120, 103, 106, 106));
             Assert.That(e.State, Is.EqualTo(SetupState.OneClose));
             Assert.That(e.TriggeredOnLastClose, Is.False);
-        }
-
-        [Test]
-        public void ReplacingAReplacementLevelKeepsTheDeathRequirement()
-        {
-            var bars = new List<GateBar> { Break60, Bar(120, 103, 106, 106), Bar(180, 103, 106, 104), Bar(240, 103, 106, 104),
-                Bar(390, 103, 107, 106), Bar(450, 104, 108, 107) };
-            var track = ExtremeTracker.Track(GateSide.Long, new ExtremeInput(100.0, 0), bars);
-            var l1 = Level();
-            var e1 = SetupEngine.Evaluate(GateSide.Long, l1, track, bars);
-            Assert.That(e1.DeadAt, Is.EqualTo(240));
-
-            var l2 = LevelInput.Replace(l1, e1, 106.0, 300);
-            Assert.That(l2.RequireBreakAfter, Is.EqualTo(240));
-            var e2 = SetupEngine.Evaluate(GateSide.Long, l2, track, bars);
-
-            var l3 = LevelInput.Replace(l2, e2, 105.5, 330);
-            Assert.That(l3.RequireBreakAfter, Is.EqualTo(240));
-            Assert.That(SetupEngine.Evaluate(GateSide.Long, l3, track, bars).State, Is.EqualTo(SetupState.WaitingForBreak));
         }
 
         [Test]

@@ -60,8 +60,6 @@ that differs. Times are your chart times.
 - [ ] Press **✕** on the 1h row: the 1h line disappears and `gate_log.csv` has a LevelRemoved row. Clear
       the 3m box and press **Enter**: the 3m line is removed (clearing a box and just clicking away
       restores it instead).
-- [ ] Let the 1m setup die (two closes below in a row), press **✕** on the 1m row, then **Set** a new 1m
-      level: its icon waits for a **new low** (removing a dead level doesn't skip that rule).
 - [ ] Press **✕** on the Low row: a Yes/No box asks to remove the low and every long level; **Yes**
       clears the long side.
 - [ ] Untick **Lines**: lines disappear; tick it: they return. Press a row's **Set** then **Esc** (or
@@ -93,11 +91,12 @@ that differs. Times are your chart times.
 - [ ] Exit the position outside the ATM (DOM **Close** / Sell Mkt): any ATM bracket still working is
       cancelled with "Leftover … cancelled when the position went flat".
 
-## 7. Strike, re-arm, death
+## 7. Strike, pause, re-arm
 - [ ] Armed after one close above, let one 1m candle close back below: the arm stays (still ARMED).
-      A second close below in a row → the arm is cancelled ("1m setup moved to Dead").
-- [ ] Two consecutive closes below after a close above → the 1m icon shows a red ✕ and the status says
-      "1m setup is dead — needs a new low and a new level."; arming is refused.
+      A second close below in a row → the arm is cancelled ("Two 1m closes back past the level — setup
+      paused. Re-arm to trade the regain.").
+- [ ] The status now says "Waiting for a 1m close back above the level. You can arm now." Press ARM
+      again: it is accepted (no new low needed). Two closes back above the level fire the entry.
 
 ## 8. Limit entry and the logger tag
 - [ ] Type your price next to **ARM LIMIT @** in the panel and press it; on confirmation a Gtc limit
