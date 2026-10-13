@@ -2,7 +2,7 @@ from datetime import date
 from typing import Literal
 
 from models.base import StrictModel
-from models.position import EntryMethod
+from models.position import EntryMethod, TrendAlignment
 
 
 class StatsFilter(StrictModel):
@@ -11,6 +11,7 @@ class StatsFilter(StrictModel):
     to_date: date | None = None  # inclusive, session date
     side: Literal["Long", "Short"] | None = None
     entry_method: EntryMethod | None = None
+    trend_alignment: TrendAlignment | None = None
 
 
 class StatsSummary(StrictModel):
@@ -89,6 +90,14 @@ class EntryMethodStats(SideStats):
 
 class EntryMethodBreakdown(StrictModel):
     rows: list[EntryMethodStats]
+
+
+class TrendAlignmentStats(SideStats):
+    trend_alignment: TrendAlignment
+
+
+class TrendAlignmentBreakdown(StrictModel):
+    rows: list[TrendAlignmentStats]
 
 
 class EquityPoint(StrictModel):

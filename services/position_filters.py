@@ -15,6 +15,7 @@ class PositionFilter:
     side: str | None = None  # "Long" | "Short"
     outcome: Outcome | None = None  # "winner" | "loser" | "scratch" | "open"
     entry_method: str | None = None  # one of models.position.ENTRY_METHODS
+    trend_alignment: str | None = None  # one of models.position.TREND_ALIGNMENTS
     entry_time_min: int | None = None
     entry_time_max: int | None = None
     session_date_from: date | None = None
@@ -42,6 +43,8 @@ def apply_filters(
         if filter_.outcome is not None and classify_outcome(p) != filter_.outcome:
             return False
         if filter_.entry_method is not None and p.entry_method != filter_.entry_method:
+            return False
+        if filter_.trend_alignment is not None and p.trend_alignment != filter_.trend_alignment:
             return False
         if filter_.entry_time_min is not None and p.entry_time < filter_.entry_time_min:
             return False

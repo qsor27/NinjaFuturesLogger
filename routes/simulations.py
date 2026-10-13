@@ -144,6 +144,7 @@ def build_simulations_blueprint() -> Blueprint:
                 to_date=_parse_date(body.get("to")),
                 side=side,
                 entry_method=body.get("entry_method") or None,
+                trend_alignment=body.get("trend_alignment") or None,
             )
         except ValidationError as e:
             return _validation_response(e)
@@ -155,6 +156,7 @@ def build_simulations_blueprint() -> Blueprint:
             to_date=req.to_date,
             side=req.side,
             entry_method=req.entry_method,
+            trend_alignment=req.trend_alignment,
         )
         return jsonify(_service().run(req.rules, filter_).model_dump(mode="json"))
 

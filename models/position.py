@@ -7,6 +7,8 @@ PositionSide = Literal["Long", "Short"]
 Severity = Literal["low", "medium", "high"]
 EntryMethod = Literal["market_next_open", "limit_next_open", "manual", "unknown"]
 ENTRY_METHODS: tuple[str, ...] = get_args(EntryMethod)
+TrendAlignment = Literal["with_trend", "counter_trend", "not_gated"]
+TREND_ALIGNMENTS: tuple[str, ...] = get_args(TrendAlignment)
 
 
 class Position(StrictModel):
@@ -25,6 +27,7 @@ class Position(StrictModel):
     duration_minutes: float | None
     execution_ids: list[str]
     entry_method: EntryMethod = "unknown"
+    trend_alignment: TrendAlignment = "not_gated"
 
 
 class IntegrityIssue(StrictModel):

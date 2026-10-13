@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 from config import Config
 from models.execution import Execution
-from models.position import ENTRY_METHODS, Position
+from models.position import ENTRY_METHODS, TREND_ALIGNMENTS, Position
 from models.statistics import (
     DayOfWeekResponse,
     DistributionResponse,
@@ -28,6 +28,8 @@ from models.statistics import (
     StatsSummary,
     TimeBucketResponse,
     TradesPerDayResponse,
+    TrendAlignmentBreakdown,
+    TrendAlignmentStats,
 )
 from services.execution_db import load_executions
 from services.positions import build_positions
@@ -101,6 +103,12 @@ def load_closed_positions(config: Config, filter: StatsFilter) -> LoadedPosition
         closed_with_pnl = [p for p in closed_with_pnl if p.entry_method == method]
         closed_missing_mult = [p for p in closed_missing_mult if p.entry_method == method]
         open_positions = [p for p in open_positions if p.entry_method == method]
+
+    if filter.trend_alignment is not None:
+        alignment = filter.trend_alignment
+        closed_with_pnl = [p for p in closed_with_pnl if p.trend_alignment == alignment]
+        closed_missing_mult = [p for p in closed_missing_mult if p.trend_alignment == alignment]
+        open_positions = [p for p in open_positions if p.trend_alignment == alignment]
 
     return LoadedPositions(
         closed_with_pnl=closed_with_pnl,
@@ -192,6 +200,16 @@ class StatisticsService:
             group = [p for p in loaded.closed_with_pnl if p.entry_method == method]
             rows.append(EntryMethodStats(entry_method=method, **_side_stats(group).model_dump()))
         return EntryMethodBreakdown(rows=rows)
+
+    def by_trend_alignment(self, filter: StatsFilter) -> TrendAlignmentBreakdown:
+        loaded = self._load_closed_positions(filter)
+        rows = []
+        for alignment in TREND_ALIGNMENTS:
+            group = [p for p in loaded.closed_with_pnl if p.trend_alignment == alignment]
+            rows.append(
+                TrendAlignmentStats(trend_alignment=alignment, **_side_stats(group).model_dump())
+            )
+        return TrendAlignmentBreakdown(rows=rows)
 
     def equity_curve(self, filter: StatsFilter) -> EquityCurveResponse:
         loaded = self._load_closed_positions(filter)

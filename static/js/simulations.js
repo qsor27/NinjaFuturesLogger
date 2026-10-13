@@ -287,6 +287,7 @@ async function run() {
       to: state.filter.to,
       side: state.filter.side,
       entry_method: state.filter.entry_method,
+      trend_alignment: state.filter.trend_alignment,
     };
     const result = await postJSON("/api/simulations/run", body);
     renderResults(result);

@@ -20,7 +20,7 @@ const PAGE_SIZE = 50;
 const backToStats = document.getElementById("back-to-stats");
 
 const FILTER_NAMES = [
-  "instrument", "side", "entry_method", "outcome",
+  "instrument", "side", "entry_method", "trend_alignment", "outcome",
   "session_date_from", "session_date_to",
   "day_of_week", "hour_of_day", "hour_tz", "trades_per_day",
 ];
@@ -164,6 +164,7 @@ const POSITIONS_URL_KEYS = [
   "instrument",
   "side",
   "entry_method",
+  "trend_alignment",
   "outcome",
   "session_date_from",
   "session_date_to",

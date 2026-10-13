@@ -18,7 +18,8 @@ export function parseFilterFromUrl() {
   const to = url.searchParams.get("to") || null;
   const side = url.searchParams.get("side") || null;
   const entry_method = url.searchParams.get("entry_method") || null;
-  return { accounts, from, to, side, entry_method };
+  const trend_alignment = url.searchParams.get("trend_alignment") || null;
+  return { accounts, from, to, side, entry_method, trend_alignment };
 }
 
 export function writeFilterToUrl(filter) {
@@ -27,7 +28,7 @@ export function writeFilterToUrl(filter) {
   for (const a of filter.accounts || []) {
     url.searchParams.append("account", a);
   }
-  for (const k of ["from", "to", "side", "entry_method"]) {
+  for (const k of ["from", "to", "side", "entry_method", "trend_alignment"]) {
     if (filter[k]) url.searchParams.set(k, filter[k]);
     else url.searchParams.delete(k);
   }
@@ -43,6 +44,7 @@ export function filterToQueryString(filter, extras = {}) {
     to: filter.to,
     side: filter.side,
     entry_method: filter.entry_method,
+    trend_alignment: filter.trend_alignment,
     ...extras,
   });
 }
@@ -52,7 +54,12 @@ export function isAnyFilterActive(filter, totalAccountCount) {
   const accountsActive =
     n > 0 && (totalAccountCount == null || n < totalAccountCount);
   return Boolean(
-    accountsActive || filter.from || filter.to || filter.side || filter.entry_method,
+    accountsActive ||
+      filter.from ||
+      filter.to ||
+      filter.side ||
+      filter.entry_method ||
+      filter.trend_alignment,
   );
 }
 
@@ -65,7 +72,7 @@ export async function fetchAccountOptions() {
   }
 }
 
-const STATS_URL_KEYS = ["account", "side", "entry_method", "from", "to"];
+const STATS_URL_KEYS = ["account", "side", "entry_method", "trend_alignment", "from", "to"];
 
 // Stats-filter key → /positions query param. The single source of truth for
 // the stats↔positions drilldown round-trip: statistics.js positionsUrl writes
@@ -74,6 +81,7 @@ const STATS_URL_KEYS = ["account", "side", "entry_method", "from", "to"];
 export const STATS_TO_POSITIONS_PARAMS = {
   side: "side",
   entry_method: "entry_method",
+  trend_alignment: "trend_alignment",
   from: "session_date_from",
   to: "session_date_to",
 };
@@ -100,6 +108,14 @@ export function renderFilterBar(container, filter, onApply) {
         <option value="unknown">Unknown</option>
       </select>
     </label>
+    <label>Trend
+      <select id="filter-trend-alignment">
+        <option value="">All</option>
+        <option value="with_trend">With trend</option>
+        <option value="counter_trend">Counter-trend</option>
+        <option value="not_gated">Not gated</option>
+      </select>
+    </label>
     <label>Preset
       <select id="filter-date-preset"></select>
     </label>
@@ -117,6 +133,7 @@ export function renderFilterBar(container, filter, onApply) {
   const accountHost = container.querySelector("#filter-account-host");
   const sideSelect = container.querySelector("#filter-side");
   const entrySelect = container.querySelector("#filter-entry-method");
+  const trendSelect = container.querySelector("#filter-trend-alignment");
   const presetSelect = container.querySelector("#filter-date-preset");
   const fromInput = container.querySelector("#filter-from");
   const toInput = container.querySelector("#filter-to");
@@ -128,6 +145,7 @@ export function renderFilterBar(container, filter, onApply) {
   if (filter.to) toInput.value = filter.to;
   if (filter.side) sideSelect.value = filter.side;
   if (filter.entry_method) entrySelect.value = filter.entry_method;
+  if (filter.trend_alignment) trendSelect.value = filter.trend_alignment;
 
   let currentAccounts = [...(filter.accounts || [])];
   let totalAccountCount = null;
@@ -142,6 +160,7 @@ export function renderFilterBar(container, filter, onApply) {
       accounts: [...currentAccounts],
       side: sideSelect.value || null,
       entry_method: entrySelect.value || null,
+      trend_alignment: trendSelect.value || null,
       from: fromInput.value || null,
       to: toInput.value || null,
     };
@@ -203,6 +222,7 @@ export function renderFilterBar(container, filter, onApply) {
 
   sideSelect.addEventListener("change", doApply);
   entrySelect.addEventListener("change", doApply);
+  trendSelect.addEventListener("change", doApply);
   fromInput.addEventListener("change", doApply);
   toInput.addEventListener("change", doApply);
 
@@ -213,10 +233,18 @@ export function renderFilterBar(container, filter, onApply) {
     currentAccounts = [];
     sideSelect.value = "";
     entrySelect.value = "";
+    trendSelect.value = "";
     fromInput.value = "";
     toInput.value = "";
     presetSelect.value = "";
-    const cleared = { accounts: [], side: null, entry_method: null, from: null, to: null };
+    const cleared = {
+      accounts: [],
+      side: null,
+      entry_method: null,
+      trend_alignment: null,
+      from: null,
+      to: null,
+    };
     writeFilterToUrl(cleared);
     onApply(cleared);
   };
@@ -251,6 +279,7 @@ export function renderFilterBar(container, filter, onApply) {
     currentAccounts = multi.getSelected();
     sideSelect.value = reread.side || "";
     entrySelect.value = reread.entry_method || "";
+    trendSelect.value = reread.trend_alignment || "";
     fromInput.value = reread.from || "";
     toInput.value = reread.to || "";
     presetSelect.value = "";

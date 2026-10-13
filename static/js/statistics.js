@@ -12,6 +12,7 @@ const ENDPOINTS = [
   "summary",
   "by-side",
   "by-entry-method",
+  "by-trend-alignment",
   "equity-curve",
   "by-instrument",
   "by-day",             // drives summary avg win-day / avg loss-day
@@ -180,6 +181,37 @@ const ENTRY_METHOD_LABELS = {
   manual: "Manual",
   unknown: "Unknown",
 };
+
+const TREND_ALIGNMENT_LABELS = {
+  with_trend: "With trend",
+  counter_trend: "Counter-trend",
+  not_gated: "Not gated",
+};
+
+function renderByTrendAlignment(container, breakdown, filter) {
+  const rowsHtml = breakdown.rows
+    .map((r) => {
+      const href = positionsUrl(filter, { trend_alignment: r.trend_alignment });
+      const label = TREND_ALIGNMENT_LABELS[r.trend_alignment] || r.trend_alignment;
+      return `
+      <tr data-drilldown data-href="${escHtml(href)}">
+        <td><a href="${escHtml(href)}">${escHtml(label)}</a></td>
+        <td>${r.position_count}</td>
+        <td class="${pnlClass(r.total_pnl)}">${fmtMoney(r.total_pnl)}</td>
+        <td>${fmtPercent(r.win_rate)}</td>
+        <td>${fmtNum(r.profit_factor, 2)}</td>
+      </tr>`;
+    })
+    .join("");
+  container.innerHTML = `
+    <p class="section-label">By Trend Alignment</p>
+    <table class="instrument-table">
+      <thead><tr><th>Trend</th><th>Trades</th><th>Total P&amp;L</th><th>Win Rate</th><th>PF</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+  wireDrilldownClicks(container);
+}
 
 function renderByEntryMethod(container, breakdown, filter) {
   const rowsHtml = breakdown.rows
@@ -350,6 +382,11 @@ async function refresh(filter) {
     renderByEntryMethod(
       document.getElementById("stats-by-entry-method"),
       data["by-entry-method"],
+      filter,
+    );
+    renderByTrendAlignment(
+      document.getElementById("stats-by-trend-alignment"),
+      data["by-trend-alignment"],
       filter,
     );
     renderInstrumentTable(document.getElementById("stats-by-instrument"), data["by-instrument"]);

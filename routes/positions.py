@@ -5,7 +5,7 @@ from flask import Blueprint, jsonify, request
 from db import read_conn, sql_placeholders, transaction
 from logging_config import get_logger
 from models.execution import Execution
-from models.position import ENTRY_METHODS
+from models.position import ENTRY_METHODS, TREND_ALIGNMENTS
 from routes import db_path as _db_path
 from routes._params import BadParam, int_arg
 from services.execution_db import load_executions
@@ -54,6 +54,12 @@ def _parse_filter_from_query(args) -> PositionFilter:
     if entry_method is not None and entry_method not in ENTRY_METHODS:
         raise ValueError(
             f"entry_method must be one of: {', '.join(ENTRY_METHODS)}, got {entry_method!r}"
+        )
+
+    trend_alignment = args.get("trend_alignment") or None
+    if trend_alignment is not None and trend_alignment not in TREND_ALIGNMENTS:
+        raise ValueError(
+            f"trend_alignment must be one of: {', '.join(TREND_ALIGNMENTS)}, got {trend_alignment!r}"
         )
 
     outcome = args.get("outcome") or None
@@ -114,6 +120,7 @@ def _parse_filter_from_query(args) -> PositionFilter:
         side=side,
         outcome=outcome,
         entry_method=entry_method,
+        trend_alignment=trend_alignment,
         entry_time_min=_int_or_none("entry_time_min"),
         entry_time_max=_int_or_none("entry_time_max"),
         session_date_from=session_date_from,

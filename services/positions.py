@@ -2,7 +2,7 @@ from collections.abc import Sequence
 
 from models.execution import Execution
 from models.position import Fill, IntegrityIssue, Position
-from services.entry_method import classify_entry_method
+from services.entry_method import classify_entry_method, classify_trend_alignment
 from services.execution_ordering import order_executions_for_walk
 from services.instruments import get_multiplier
 from services.integrity import cross_check_against_source_position_column
@@ -78,6 +78,7 @@ def _make_position(fills: list[Fill], *, is_open: bool) -> Position:
         duration_minutes=duration_minutes,
         execution_ids=[f.execution_id for f in fills],
         entry_method=classify_entry_method(entry_fills[0].order_name),
+        trend_alignment=classify_trend_alignment(entry_fills[0].order_name),
     )
 
 

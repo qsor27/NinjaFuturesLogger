@@ -2,7 +2,7 @@ from datetime import date
 
 from flask import Blueprint, current_app, jsonify, request
 
-from models.position import ENTRY_METHODS
+from models.position import ENTRY_METHODS, TREND_ALIGNMENTS
 from models.statistics import StatsFilter
 from services.statistics import StatisticsService
 
@@ -27,12 +27,17 @@ def _parse_filter(args) -> StatsFilter:
     if raw_entry_method is not None and raw_entry_method not in ENTRY_METHODS:
         raise ValueError(f"entry_method must be one of: {', '.join(ENTRY_METHODS)}")
 
+    raw_trend_alignment = args.get("trend_alignment") or None
+    if raw_trend_alignment is not None and raw_trend_alignment not in TREND_ALIGNMENTS:
+        raise ValueError(f"trend_alignment must be one of: {', '.join(TREND_ALIGNMENTS)}")
+
     return StatsFilter(
         accounts=accounts,
         from_date=_parse_date("from"),
         to_date=_parse_date("to"),
         side=raw_side,
         entry_method=raw_entry_method,
+        trend_alignment=raw_trend_alignment,
     )
 
 
@@ -87,6 +92,10 @@ def build_stats_blueprint() -> Blueprint:
     @bp.get("/api/stats/by-entry-method")
     def by_entry_method():
         return _dispatch("by_entry_method")
+
+    @bp.get("/api/stats/by-trend-alignment")
+    def by_trend_alignment():
+        return _dispatch("by_trend_alignment")
 
     @bp.get("/api/stats/equity-curve")
     def equity_curve():

@@ -8,7 +8,7 @@ with `ninjascript/Gate/GateRuntimeTypes.cs` (`GateEntryNames`).
 
 import re
 
-from models.position import EntryMethod
+from models.position import EntryMethod, TrendAlignment
 
 GATE_MARKET_ORDER_NAME = "GateMktNextOpen"
 GATE_LIMIT_ORDER_NAME = "GateLmtNextOpen"
@@ -33,3 +33,10 @@ def is_counter_trend(order_name: str | None) -> bool:
         return False
     match = _GATE_NAME.match(order_name)
     return match is not None and match.group("ct") is not None
+
+
+def classify_trend_alignment(order_name: str | None) -> TrendAlignment:
+    """Gate entries are with or against the hourly trend; anything else wasn't gated."""
+    if not order_name or _GATE_NAME.match(order_name) is None:
+        return "not_gated"
+    return "counter_trend" if is_counter_trend(order_name) else "with_trend"
