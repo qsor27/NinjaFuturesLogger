@@ -191,6 +191,66 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
             return canvas;
         }
 
+        /// <summary>
+        /// ARM pressed while the current hour is unanswered: ask Up/Down right there (same 1h
+        /// mini-chart), modal. Returns the answer and the hour it was shown for, or null if the
+        /// trader closed the box. UI thread only.
+        /// </summary>
+        public static GateTrend? AskModal(GateRuntime runtime, string instrument, Window owner, out long hourEnd)
+        {
+            hourEnd = runtime.LatestHourEnd(instrument);
+            var snapshot = runtime.Snapshot(instrument);
+            GateTrend? choice = null;
+
+            var dialog = new Window
+            {
+                Title = "Setup Gate — answer the hourly trend to arm",
+                SizeToContent = SizeToContent.WidthAndHeight,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = owner != null ? WindowStartupLocation.CenterOwner : WindowStartupLocation.CenterScreen,
+                Owner = owner,
+                Topmost = true,
+                Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)),
+            };
+            var panel = new StackPanel { Margin = new Thickness(12) };
+            panel.Children.Add(Caption(instrument + " — this hour's trend hasn't been answered yet.", 14, Colors.White, true));
+            panel.Children.Add(MiniChart(runtime.RecentHourlyBars(instrument, 24), snapshot));
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+            foreach (var trend in new[] { GateTrend.Up, GateTrend.Down })
+            {
+                var button = new Button
+                {
+                    Content = trend == GateTrend.Up ? "▲  Up" : "▼  Down",
+                    Width = 120,
+                    Height = 32,
+                    Margin = new Thickness(0, 0, 10, 0),
+                    FontSize = 14,
+                };
+                var picked = trend;
+                button.Click += (s, e) =>
+                {
+                    choice = picked;
+                    dialog.Close();
+                };
+                buttons.Children.Add(button);
+            }
+            panel.Children.Add(buttons);
+            dialog.Content = panel;
+            dialog.ShowDialog();
+            return choice;
+        }
+
+        /// <summary>Removes an instrument's row once its hour was answered elsewhere (e.g. from ARM).</summary>
+        public static void Dismiss(string instrument)
+        {
+            if (open == null) return;
+            FrameworkElement row;
+            if (!open.rowByInstrument.TryGetValue(instrument, out row)) return;
+            open.rows.Children.Remove(row);
+            open.rowByInstrument.Remove(instrument);
+            if (open.rows.Children.Count == 0) open.Close();
+        }
+
         private static TextBlock Caption(string text, double size, Color color, bool bold) =>
             new TextBlock
             {

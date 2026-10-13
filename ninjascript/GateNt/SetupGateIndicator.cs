@@ -334,13 +334,13 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
             root.Children.Add(prices);
 
-            var armMarket = MakeButton("ARM MARKET", (s, e) => Arm(EntryKind.Market));
+            var armMarket = MakeButton("ARM MARKET", (s, e) => Guard(() => Arm(EntryKind.Market)));
             armMarket.HorizontalAlignment = HorizontalAlignment.Stretch;
             root.Children.Add(armMarket);
             limitBox = PriceBox();
             limitBox.Width = 80;
             HookPriceKeys(limitBox, null);
-            root.Children.Add(Row(MakeButton("ARM LIMIT @", (s, e) => Arm(EntryKind.Limit)), limitBox));
+            root.Children.Add(Row(MakeButton("ARM LIMIT @", (s, e) => Guard(() => Arm(EntryKind.Limit))), limitBox));
             root.Children.Add(MakeButton("Disarm", (s, e) => Disarm()));
 
             statusText = Text("", 11, Colors.White, true);
@@ -537,29 +537,56 @@ namespace NinjaTrader.NinjaScript.Indicators
             Show(runtime.RemoveExtreme(instrumentName, side), InstrumentGate.ExtremeWord(side) + " removed.");
         }
 
+        /// <summary>A refused ARM is never silent: panel message, popup, and an ArmRefused log row.</summary>
+        private void RefuseArm(string reason)
+        {
+            Say(reason, true);
+            if (runtime != null) runtime.Log(instrumentName, null, GateEvents.ArmRefused, reason);
+            MessageBox.Show(reason, "Setup Gate — not armed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
         private void Arm(EntryKind kind)
         {
             if (runtime == null || snapshot == null)
             {
-                Say("The Setup Gate isn't running.", true);
+                RefuseArm("The Setup Gate isn't running.");
                 return;
             }
             var trader = hostControl != null && hostControl.OwnerChart != null ? hostControl.OwnerChart.ChartTrader : null;
             if (trader == null || trader.Account == null)
             {
-                Say("Show Chart Trader on this chart and choose an account.", true);
+                RefuseArm("Show Chart Trader on this chart and choose an account.");
                 return;
             }
             if (trader.AtmStrategy == null || string.IsNullOrEmpty(trader.AtmStrategy.Template))
             {
-                Say("Choose an ATM strategy in Chart Trader — the entry needs its stop and target.", true);
+                RefuseArm("Choose an ATM strategy in Chart Trader — the entry needs its stop and target.");
                 return;
             }
             double limit = 0;
             if (kind == EntryKind.Limit && !TryPrice(limitBox.Text, out limit))
             {
-                Say("Type your limit price next to ARM LIMIT.", true);
+                RefuseArm("Type your limit price next to ARM LIMIT.");
                 return;
+            }
+            // This hour unanswered: ask right here, then carry on arming (never a dead end).
+            if (snapshot.NeedsTrendAnswer)
+            {
+                long hourEnd;
+                var answer = GateTrendWindow.AskModal(runtime, instrumentName, Window.GetWindow(hostControl), out hourEnd);
+                if (!answer.HasValue)
+                {
+                    RefuseArm("Not armed — answer this hour's trend to arm.");
+                    return;
+                }
+                var answered = runtime.AnswerTrend(instrumentName, answer.Value, hourEnd);
+                if (!answered.Ok)
+                {
+                    RefuseArm(answered.Error);
+                    return;
+                }
+                GateTrendWindow.Dismiss(instrumentName);
+                RefreshSnapshot();
             }
             // Arm the side the trader is looking at. Against the hourly trend, ask once (Yes/No) —
             // counter-trend trades are a quick confirmation, not a block.
