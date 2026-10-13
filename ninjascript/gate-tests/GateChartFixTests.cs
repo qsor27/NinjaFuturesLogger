@@ -47,8 +47,32 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
             var mode = new ChartClickMode();
             Assert.That(mode.Press(ClickTarget.Level, GateSide.Long, GateTimeframe.M1), Is.True);
             Assert.That(mode.Target, Is.EqualTo(ClickTarget.Level));
-            Assert.That(mode.Press(ClickTarget.Level, GateSide.Long, GateTimeframe.M3), Is.False);
+            Assert.That(mode.Press(ClickTarget.Level, GateSide.Long, GateTimeframe.M1), Is.False);
             Assert.That(mode.Target, Is.EqualTo(ClickTarget.None));
+        }
+
+        [Test]
+        public void PressingAnotherTimeframesSetButtonSwitchesToIt()
+        {
+            var mode = new ChartClickMode();
+            mode.Press(ClickTarget.Level, GateSide.Long, GateTimeframe.M1);
+            Assert.That(mode.Press(ClickTarget.Level, GateSide.Long, GateTimeframe.H1), Is.True);
+            Assert.That(mode.Target, Is.EqualTo(ClickTarget.Level));
+            Assert.That(mode.Timeframe, Is.EqualTo(GateTimeframe.H1));
+            Assert.That(mode.Press(ClickTarget.Level, GateSide.Long, GateTimeframe.H1), Is.False);
+            Assert.That(mode.Target, Is.EqualTo(ClickTarget.None));
+        }
+
+        [Test]
+        public void IsPendingIdentifiesTheRowWaitingForAClick()
+        {
+            var mode = new ChartClickMode();
+            mode.Press(ClickTarget.Level, GateSide.Short, GateTimeframe.M3);
+            Assert.That(mode.IsPending(ClickTarget.Level, GateSide.Short, GateTimeframe.M3), Is.True);
+            Assert.That(mode.IsPending(ClickTarget.Level, GateSide.Short, GateTimeframe.M1), Is.False);
+            Assert.That(mode.IsPending(ClickTarget.Extreme, GateSide.Short, GateTimeframe.M3), Is.False);
+            mode.Press(ClickTarget.Extreme, GateSide.Short, GateTimeframe.M1);
+            Assert.That(mode.IsPending(ClickTarget.Extreme, GateSide.Short, GateTimeframe.H4), Is.True);
         }
 
         [Test]

@@ -27,7 +27,7 @@ namespace NinjaTrader.NinjaScript.Indicators
             { GateTimeframe.M1, GateTimeframe.M3, GateTimeframe.H1, GateTimeframe.H4 };
 
         private readonly ChartClickMode clickMode = new ChartClickMode();
-        private readonly Dictionary<GateTimeframe, RadioButton> timeframeButtons = new Dictionary<GateTimeframe, RadioButton>();
+        private readonly List<KeyValuePair<GateTimeframe?, Button>> setButtons = new List<KeyValuePair<GateTimeframe?, Button>>();
         private readonly Dictionary<GateTimeframe, TextBox> levelBoxes = new Dictionary<GateTimeframe, TextBox>();
         private readonly List<RowDefinition> traderRows = new List<RowDefinition>();
         private readonly List<LabelBox> labelBoxes = new List<LabelBox>();
@@ -313,26 +313,15 @@ namespace NinjaTrader.NinjaScript.Indicators
 
             longButton = Radio("Long", group + "side", true);
             shortButton = Radio("Short", group + "side", false);
-            longButton.Checked += (s, e) => UpdatePanel();
-            shortButton.Checked += (s, e) => UpdatePanel();
+            longButton.Checked += (s, e) => OnSideChanged();
+            shortButton.Checked += (s, e) => OnSideChanged();
             root.Children.Add(Row(longButton, shortButton));
-
-            var timeframeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
-            foreach (var tf in AllTimeframes)
-            {
-                var button = Radio(InstrumentGate.Label(tf), group + "tf", tf == GateTimeframe.M1);
-                timeframeButtons[tf] = button;
-                timeframeRow.Children.Add(button);
-            }
-            root.Children.Add(timeframeRow);
-
-            root.Children.Add(Row(
-                MakeButton("Set Level", (s, e) => BeginClick(ClickTarget.Level)),
-                MakeButton("Set Low/High", (s, e) => BeginClick(ClickTarget.Extreme))));
+            root.Children.Add(Text("Set: click the chart.  Or type a price + Enter.", 10, Colors.Gray, false));
 
             var prices = new Grid { Margin = new Thickness(0, 4, 0, 4) };
-            prices.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(42) });
+            prices.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
             prices.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            prices.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             extremeCaption = Text("Low", 11, Colors.Gainsboro, false);
             extremeBox = PriceBox();
             AddPriceRow(prices, extremeCaption, extremeBox, null);
@@ -454,10 +443,36 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         // ---------------- commands ----------------
 
-        private void BeginClick(ClickTarget target)
+        /// <summary>A row's Set button: that row's line is placed by the next chart click; pressing it again cancels.</summary>
+        private void BeginClick(ClickTarget target, GateTimeframe tf)
         {
-            bool started = clickMode.Press(target, SelectedSide(), SelectedTimeframe());
-            messageText.Text = started ? clickMode.Prompt + " (Press the button again to cancel.)" : "Placement cancelled.";
+            bool started = clickMode.Press(target, SelectedSide(), tf);
+            messageText.Text = started ? clickMode.Prompt + " (Press Set again to cancel.)" : "Placement cancelled.";
+            UpdateSetButtons();
+        }
+
+        private void OnSideChanged()
+        {
+            if (clickMode.Target != ClickTarget.None)
+            {
+                clickMode.Cancel();
+                messageText.Text = "Placement cancelled.";
+            }
+            UpdateSetButtons();
+            UpdatePanel();
+        }
+
+        private void UpdateSetButtons()
+        {
+            GateSide side = SelectedSide();
+            foreach (var pair in setButtons)
+            {
+                bool pending = pair.Key.HasValue
+                    ? clickMode.IsPending(ClickTarget.Level, side, pair.Key.Value)
+                    : clickMode.IsPending(ClickTarget.Extreme, side, GateTimeframe.M1);
+                pair.Value.Content = pending ? "Click chart" : "Set";
+                pair.Value.FontWeight = pending ? FontWeights.Bold : FontWeights.Normal;
+            }
         }
 
         private void CommitBox(GateTimeframe? tf, TextBox box)
@@ -542,6 +557,7 @@ namespace NinjaTrader.NinjaScript.Indicators
                 var side = clickMode.Side;
                 var tf = clickMode.Timeframe;
                 clickMode.Cancel();
+                UpdateSetButtons();
                 Show(target == ClickTarget.Level
                     ? runtime.SetLevel(instrumentName, side, tf, price)
                     : runtime.SetExtreme(instrumentName, side, price), "Placed at " + InstrumentGate.FormatPrice(price) + ".");
@@ -624,7 +640,8 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             if (e.Key != Key.Escape || clickMode.Target == ClickTarget.None) return;
             clickMode.Cancel();
-            messageText.Text = "";
+            messageText.Text = "Placement cancelled.";
+            UpdateSetButtons();
             e.Handled = true;
         }
 
@@ -652,15 +669,6 @@ namespace NinjaTrader.NinjaScript.Indicators
 
         private GateSide SelectedSide() => shortButton != null && shortButton.IsChecked == true ? GateSide.Short : GateSide.Long;
 
-        private GateTimeframe SelectedTimeframe()
-        {
-            foreach (var pair in timeframeButtons)
-            {
-                if (pair.Value.IsChecked == true) return pair.Key;
-            }
-            return GateTimeframe.M1;
-        }
-
         private double Round(double price) => Instrument.MasterInstrument.RoundToTickSize(price);
 
         private static bool TryPrice(string text, out double value)
@@ -680,12 +688,20 @@ namespace NinjaTrader.NinjaScript.Indicators
         {
             int row = grid.RowDefinitions.Count;
             grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var set = MakeButton("Set", (s, e) => Guard(() =>
+                BeginClick(tf.HasValue ? ClickTarget.Level : ClickTarget.Extreme, tf ?? GateTimeframe.M1)));
+            set.Margin = new Thickness(4, 1, 0, 1);
+            set.Padding = new Thickness(4, 0, 4, 0);
+            setButtons.Add(new KeyValuePair<GateTimeframe?, Button>(tf, set));
             Grid.SetRow(caption, row);
             Grid.SetRow(box, row);
             Grid.SetColumn(box, 1);
+            Grid.SetRow(set, row);
+            Grid.SetColumn(set, 2);
             caption.VerticalAlignment = VerticalAlignment.Center;
             grid.Children.Add(caption);
             grid.Children.Add(box);
+            grid.Children.Add(set);
             box.KeyDown += (s, e) =>
             {
                 if (e.Key != Key.Enter) return;

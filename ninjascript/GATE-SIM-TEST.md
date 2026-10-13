@@ -41,10 +41,13 @@ that differs. Times are your chart times.
       the alert window shows **SLIP-THROUGH** — note it; the gate does not flatten.
 
 ## 5. Levels on the chart
-- [ ] In the panel choose **Long**, press **Set Low/High**, click the chart at the swing low: a grey
-      `▲ LOW … pinned` line appears where you clicked.
-- [ ] Choose **1m**, press **Set Level**, click above the low: a blue `▲ 1m LVL …` line appears. A level
-      clicked below the low is refused with the reason in the panel.
+- [ ] In the panel choose **Long**, press **Set** on the **Low** row (it changes to "Click chart"),
+      click the chart at the swing low: a grey `▲ LOW … pinned` line appears where you clicked.
+- [ ] Press **Set** on the **1m** row and click above the low: a blue `▲ 1m LVL …` line appears. Do the
+      same on the **3m**, **1h** and **4h** rows: purple, gold and orange lines appear, each labelled
+      with its own timeframe. A level clicked below the low is refused with the reason in the panel.
+- [ ] Press **Set** on the 1h row, then **Set** on the 4h row: the 4h row is now the one waiting
+      ("Click chart"); your click places the 4h line.
 - [ ] Drag the 1m line **by its label** (right side) up a few ticks: it follows the mouse and stays at
       the new price; the panel's 1m box shows it. Clicking the line away from its label does nothing
       (NinjaTrader handles that click as usual).
@@ -54,9 +57,9 @@ that differs. Times are your chart times.
       without typing: the low stays **auto** (nothing is saved unless you typed).
 - [ ] Type a price into the 3m box and press Enter: a purple `▲ 3m LVL` line appears. Put a 1h level at
       the same price as the 1m level: both labels show, stacked.
-- [ ] Untick **Lines**: lines disappear; tick it: they return. Press **Set Level** then **Esc** (or
-      press **Set Level** again): the prompt says "Placement cancelled." and the next click is an
-      ordinary chart click.
+- [ ] Untick **Lines**: lines disappear; tick it: they return. Press a row's **Set** then **Esc** (or
+      press the same **Set** again, or switch Long/Short): the prompt says "Placement cancelled." and the
+      next click is an ordinary chart click.
 - [ ] In click mode, clicking a lower panel (e.g. Volume) or the price axis does nothing.
 - [ ] Watch the 1m icon as candles close: red → green outline after one close above → solid green after
       two; the panel status line explains each step ("Waiting for a new low." → "Waiting for a 1m close

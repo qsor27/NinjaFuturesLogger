@@ -181,6 +181,13 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
 
         public void Cancel() => Target = ClickTarget.None;
 
+        /// <summary>True when this exact row (the side's low/high, or one timeframe's level) is waiting for a click.</summary>
+        public bool IsPending(ClickTarget target, GateSide side, GateTimeframe tf)
+        {
+            if (Target != target || Side != side) return false;
+            return target == ClickTarget.Extreme || Timeframe == tf;
+        }
+
         /// <summary>
         /// A Set Level / Set Low press: starts click mode, or cancels it when the same button is
         /// pressed again (Esc may not reach the chart while Chart Trader has focus). Returns true
@@ -188,7 +195,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         /// </summary>
         public bool Press(ClickTarget target, GateSide side, GateTimeframe tf)
         {
-            if (Target == target)
+            if (IsPending(target, side, tf))
             {
                 Cancel();
                 return false;
