@@ -585,6 +585,11 @@ namespace NinjaTrader.NinjaScript.Indicators
             }
             Show(result, "Armed " + side.ToString().ToUpperInvariant() + " on " + trader.Account.Name
                 + (counterTrend ? " (counter-trend)." : "."));
+            if (!result.Ok)
+            {
+                // A refusal must never look like "nothing happened".
+                MessageBox.Show(result.Error, "Setup Gate — not armed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         private void Disarm()

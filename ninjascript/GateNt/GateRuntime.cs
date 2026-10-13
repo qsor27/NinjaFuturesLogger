@@ -185,12 +185,23 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.GateNt
 
         public GateCommandResult Arm(string instrument, PendingArm arm)
         {
+            GateCommandResult result;
             if (arm != null && !AtmTemplateExists(arm.AtmTemplate))
             {
-                return GateCommandResult.Rejected("ATM template \"" + arm.AtmTemplate
+                result = GateCommandResult.Rejected("ATM template \"" + arm.AtmTemplate
                     + "\" was not found in Documents\\NinjaTrader 8\\templates\\AtmStrategy — type it exactly as Chart Trader shows it.");
             }
-            return Command(instrument, g => g.ArmEntry(arm));
+            else
+            {
+                result = Command(instrument, g => g.ArmEntry(arm));
+            }
+            // Every refusal is logged with its reason so "ARM did nothing" is always explainable.
+            if (!result.Ok)
+            {
+                Log(instrument, arm != null ? arm.Account : null, GateEvents.ArmRefused,
+                    (arm != null ? arm.Side + " " + arm.Kind + ": " : "") + result.Error);
+            }
+            return result;
         }
 
         public GateCommandResult Disarm(string instrument) => Command(instrument, g => g.Disarm());

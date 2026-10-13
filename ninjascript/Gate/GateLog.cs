@@ -9,6 +9,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
     public static class GateEvents
     {
         public const string Arm = "Arm";
+        public const string ArmRefused = "ArmRefused";
         public const string Disarm = "Disarm";
         public const string Fire = "Fire";
         public const string Cancel = "Cancel";
