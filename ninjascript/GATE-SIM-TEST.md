@@ -68,9 +68,10 @@ that differs. Times are your chart times.
 ## 6. Arm and fire (market)
 - [ ] With **no ATM strategy** selected in Chart Trader, press **ARM MARKET**: refused ("Choose an ATM
       strategy in Chart Trader…").
-- [ ] Make sure the hourly trend matches your side (trend UP for a long). With the trend DOWN and the
-      panel on Long, the status says "Trend is DOWN: only SHORT can be armed this hour" and ARM is
-      refused in red.
+- [ ] Counter-trend: with the trend DOWN and the panel on Long, the status says "Trend is DOWN: arming
+      LONG is counter-trend and asks for confirmation". Press ARM: a Yes/No box asks to arm against
+      the hourly trend. **No** → "Not armed". **Yes** → armed, description ends "· counter-trend", and
+      `gate_log.csv` has an Arm row saying counter-trend. Answering the next hour's trend doesn't cancel it.
 - [ ] Select account Sim101, your ATM template and quantity 1 in Chart Trader. Press **ARM MARKET** any
       time after setting the 1m level (even before the new low — status says "You can arm now"): the message says "Armed LONG on Sim101." and the strip's LONG row and the
       panel show "ARMED MKT · <template> · 1 ct".

@@ -169,7 +169,7 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
             if (!OneMinuteFeedHealthy) return GateCommandResult.Rejected("1m data is down — entries are blocked.");
 
             string reason = ArmRules.CanArm(arm.Side, Trend.Trend, Trend.IsConfirmed(latestHourEnd),
-                Evaluate(arm.Side, GateTimeframe.M1).State, LeaderPositionQty, GateEntryWorking);
+                Evaluate(arm.Side, GateTimeframe.M1).State, LeaderPositionQty, GateEntryWorking, arm.CounterTrend);
             if (reason != null) return GateCommandResult.Rejected(reason);
 
             Arm = arm;
@@ -201,7 +201,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
                 GateAction.LogEvent(GateEvents.TrendAnswer,
                     trend + " for the hour ending " + latestHourEnd.ToString(CultureInfo.InvariantCulture)),
             };
-            if (Arm != null && SideMath.ActiveSide(trend) != Arm.Side)
+            // A with-trend arm that the new answer makes counter-trend is cancelled (re-arming asks
+            // for confirmation); an arm already confirmed as counter-trend stays.
+            if (Arm != null && SideMath.ActiveSide(trend) != Arm.Side && !Arm.CounterTrend)
             {
                 actions.Add(GateAction.CancelArmed(Arm,
                     "Hourly trend is now " + trend + " — the " + Arm.Side + " arm was cancelled."));

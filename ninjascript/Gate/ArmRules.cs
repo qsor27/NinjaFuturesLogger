@@ -11,14 +11,21 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
     /// </summary>
     public static class ArmRules
     {
+        /// <summary>
+        /// Returned when the side is against the hourly trend and the trader hasn't confirmed it.
+        /// The chart shows a confirmation box and re-arms with counterTrendConfirmed (revised
+        /// 2026-10-12: counter-trend trades are a quick confirmation, not a block).
+        /// </summary>
+        public const string CounterTrendNeedsConfirmation = "Against the hourly trend — confirm to arm.";
+
         /// <summary>Null when arming is allowed; otherwise the reason shown in the panel.</summary>
         public static string CanArm(GateSide side, GateTrend trend, bool trendConfirmedThisHour,
-            SetupState oneMinuteState, int leaderPositionQty, bool gateEntryWorking)
+            SetupState oneMinuteState, int leaderPositionQty, bool gateEntryWorking, bool counterTrendConfirmed = false)
         {
             if (trend == GateTrend.Unconfirmed || !trendConfirmedThisHour)
                 return "Confirm the hourly trend first.";
-            if (SideMath.ActiveSide(trend) != side)
-                return "Only the side of the hourly trend can be armed.";
+            if (SideMath.ActiveSide(trend) != side && !counterTrendConfirmed)
+                return CounterTrendNeedsConfirmation;
             if (oneMinuteState == SetupState.NoLevel)
                 return "Set the 1m level first.";
             if (oneMinuteState == SetupState.Dead)

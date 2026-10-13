@@ -123,10 +123,30 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void ArmRejectedAgainstTheTrend()
+        public void CounterTrendArmNeedsConfirmation()
         {
             var g = LongAtOneClose();
-            Assert.That(g.ArmEntry(MarketArm(GateSide.Short)).Error, Does.Contain("side of the hourly trend"));
+            g.SetExtreme(GateSide.Short, 120, 0);
+            g.SetLevel(GateSide.Short, GateTimeframe.M1, 110, 0);
+            Assert.That(g.ArmEntry(MarketArm(GateSide.Short)).Error, Is.EqualTo(ArmRules.CounterTrendNeedsConfirmation));
+
+            var confirmed = new PendingArm(GateSide.Short, EntryKind.Market, 0, "4ptSL-20ptTP", "Sim101", 1, true);
+            var r = g.ArmEntry(confirmed);
+            Assert.That(r.Ok, Is.True);
+            Assert.That(r.Actions.Single().Detail, Does.Contain("counter-trend"));
+        }
+
+        [Test]
+        public void ConfirmedCounterTrendArmSurvivesTheNextHourlyAnswer()
+        {
+            var g = LongSetup();
+            g.SetExtreme(GateSide.Short, 120, 0);
+            g.SetLevel(GateSide.Short, GateTimeframe.M1, 110, 0);
+            g.ArmEntry(new PendingArm(GateSide.Short, EntryKind.Market, 0, "4ptSL-20ptTP", "Sim101", 1, true));
+            g.OnBarClosed(GateTimeframe.H1, H1(3600));
+            var r = g.AnswerTrend(GateTrend.Up, g.LatestHourEnd);
+            Assert.That(Has(r.Actions, GateActionKind.CancelArm), Is.False);
+            Assert.That(g.Arm, Is.Not.Null);
         }
 
         [Test]

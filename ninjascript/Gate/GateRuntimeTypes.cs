@@ -9,8 +9,10 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
     /// <summary>An entry the trader armed (spec §6): Chart Trader's selections snapshotted at click time.</summary>
     public sealed class PendingArm
     {
-        public PendingArm(GateSide side, EntryKind kind, double limitPrice, string atmTemplate, string account, int quantity)
+        public PendingArm(GateSide side, EntryKind kind, double limitPrice, string atmTemplate, string account, int quantity,
+            bool counterTrend = false)
         {
+            CounterTrend = counterTrend;
             Side = side;
             Kind = kind;
             LimitPrice = limitPrice;
@@ -26,13 +28,17 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate
         public string Account { get; }
         public int Quantity { get; }
 
+        /// <summary>The trader confirmed arming against the hourly trend.</summary>
+        public bool CounterTrend { get; }
+
         /// <summary>Spec §9 panel echo, e.g. "ARMED MKT · 4ptSL-20ptTP · 1 ct".</summary>
         public string Describe()
         {
             string head = Kind == EntryKind.Market
                 ? "ARMED MKT"
                 : "ARMED LMT @ " + LimitPrice.ToString("0.00##", CultureInfo.InvariantCulture);
-            return head + " · " + AtmTemplate + " · " + Quantity.ToString(CultureInfo.InvariantCulture) + " ct";
+            return head + " · " + AtmTemplate + " · " + Quantity.ToString(CultureInfo.InvariantCulture) + " ct"
+                + (CounterTrend ? " · counter-trend" : "");
         }
     }
 

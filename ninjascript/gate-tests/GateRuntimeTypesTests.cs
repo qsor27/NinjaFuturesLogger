@@ -47,6 +47,14 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
+        public void DescribesCounterTrendArm()
+        {
+            var arm = new PendingArm(GateSide.Long, EntryKind.Market, 0, "4ptSL-20ptTP", "Sim101", 1, true);
+            Assert.That(arm.CounterTrend, Is.True);
+            Assert.That(arm.Describe(), Is.EqualTo("ARMED MKT · 4ptSL-20ptTP · 1 ct · counter-trend"));
+        }
+
+        [Test]
         public void DescribesLimitArm()
         {
             var arm = new PendingArm(GateSide.Short, EntryKind.Limit, 30880.25, "4ptSL-20ptTP", "Sim101", 2);

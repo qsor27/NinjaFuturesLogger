@@ -6,8 +6,9 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
     public class ArmRulesTests
     {
         private static string Can(GateSide side = GateSide.Long, GateTrend trend = GateTrend.Up,
-            bool confirmed = true, SetupState state = SetupState.OneClose, int pos = 0, bool working = false) =>
-            ArmRules.CanArm(side, trend, confirmed, state, pos, working);
+            bool confirmed = true, SetupState state = SetupState.OneClose, int pos = 0, bool working = false,
+            bool counterTrendConfirmed = false) =>
+            ArmRules.CanArm(side, trend, confirmed, state, pos, working, counterTrendConfirmed);
 
         [Test]
         public void AllowsArmAtOneCloseOrStrike()
@@ -25,9 +26,10 @@ namespace NinjaTrader.NinjaScript.NinjaFuturesLogger.Gate.Tests
         }
 
         [Test]
-        public void RejectsCounterTrendSide()
+        public void CounterTrendNeedsTheTradersConfirmation()
         {
-            Assert.That(Can(side: GateSide.Short, trend: GateTrend.Up), Does.Contain("trend"));
+            Assert.That(Can(side: GateSide.Short, trend: GateTrend.Up), Is.EqualTo(ArmRules.CounterTrendNeedsConfirmation));
+            Assert.That(Can(side: GateSide.Short, trend: GateTrend.Up, counterTrendConfirmed: true), Is.Null);
         }
 
         [TestCase(SetupState.WaitingForBreak)]

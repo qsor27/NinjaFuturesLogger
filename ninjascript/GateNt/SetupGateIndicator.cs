@@ -437,9 +437,8 @@ namespace NinjaTrader.NinjaScript.Indicators
             var activeSide = SideMath.ActiveSide(snapshot.Trend);
             if (activeSide.HasValue && activeSide.Value != side)
             {
-                sideNote = "Trend is " + snapshot.Trend.ToString().ToUpperInvariant() + ": only "
-                    + activeSide.Value.ToString().ToUpperInvariant() + " can be armed this hour. You're editing the "
-                    + side.ToString().ToLowerInvariant() + " side.\n";
+                sideNote = "Trend is " + snapshot.Trend.ToString().ToUpperInvariant() + ": arming "
+                    + side.ToString().ToUpperInvariant() + " is counter-trend and asks for confirmation.\n";
             }
             statusText.Text = sideNote + snapshot.StatusLine + (cancel != null ? "\nLast cancel: " + cancel : "");
         }
@@ -528,13 +527,30 @@ namespace NinjaTrader.NinjaScript.Indicators
                 Say("Type your limit price next to ARM LIMIT.", true);
                 return;
             }
-            GateSide side = SideMath.ActiveSide(snapshot.Trend) ?? SelectedSide();
-            var arm = new PendingArm(side, kind, kind == EntryKind.Limit ? Round(limit) : 0,
-                trader.AtmStrategy.Template, trader.Account.Name, trader.Quantity);
-            string armed = "Armed " + side.ToString().ToUpperInvariant() + " on " + trader.Account.Name + ".";
-            if (side != SelectedSide())
-                armed += " The hourly trend is " + snapshot.Trend + ", so the " + side.ToString().ToLowerInvariant() + " side was armed.";
-            Show(runtime.Arm(instrumentName, arm), armed);
+            // Arm the side the trader is looking at. Against the hourly trend, ask once (Yes/No) —
+            // counter-trend trades are a quick confirmation, not a block.
+            GateSide side = SelectedSide();
+            double limitPrice = kind == EntryKind.Limit ? Round(limit) : 0;
+            var arm = new PendingArm(side, kind, limitPrice, trader.AtmStrategy.Template, trader.Account.Name, trader.Quantity);
+            var result = runtime.Arm(instrumentName, arm);
+            bool counterTrend = false;
+            if (!result.Ok && result.Error == ArmRules.CounterTrendNeedsConfirmation)
+            {
+                var answer = MessageBox.Show(
+                    "The hourly trend is " + snapshot.Trend.ToString().ToUpperInvariant() + ".\n\nArm "
+                        + side.ToString().ToUpperInvariant() + " on " + trader.Account.Name + " against the hourly trend?",
+                    "Setup Gate — counter-trend", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+                if (answer != MessageBoxResult.Yes)
+                {
+                    Say("Not armed — counter-trend arm declined.", false);
+                    return;
+                }
+                counterTrend = true;
+                result = runtime.Arm(instrumentName, new PendingArm(side, kind, limitPrice,
+                    trader.AtmStrategy.Template, trader.Account.Name, trader.Quantity, true));
+            }
+            Show(result, "Armed " + side.ToString().ToUpperInvariant() + " on " + trader.Account.Name
+                + (counterTrend ? " (counter-trend)." : "."));
         }
 
         private void Disarm()
