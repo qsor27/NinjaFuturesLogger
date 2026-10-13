@@ -368,10 +368,17 @@ function renderTradesPerDay(container, tpdData, filter) {
   wireDrilldownClicks(container);
 }
 
+// Each refresh takes a sequence number; only the newest one may draw. Without this, a slow
+// response for an older filter (e.g. the first page load) can land last and overwrite the
+// results for the filter the trader just chose.
+let refreshSeq = 0;
+
 async function refresh(filter) {
+  const seq = ++refreshSeq;
   document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "0.5"));
   try {
     const data = await fetchAll(filter);
+    if (seq !== refreshSeq) return;
 
     renderSummary(
       document.getElementById("stats-summary"),
@@ -404,7 +411,9 @@ async function refresh(filter) {
     equityCard.appendChild(equityHost);
     mountLineChart(equityHost, data["equity-curve"].series);
   } finally {
-    document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "1"));
+    if (seq === refreshSeq) {
+      document.querySelectorAll(".bento-cell").forEach((c) => (c.style.opacity = "1"));
+    }
   }
 }
 

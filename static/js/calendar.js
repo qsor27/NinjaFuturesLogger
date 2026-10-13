@@ -29,8 +29,14 @@ function isoWeekToDate(bucket) {
   return monday.toISOString().slice(0, 10);
 }
 
+// Only the newest refresh may draw (see statistics.js): a slow response for an older filter
+// must not overwrite the current one.
+let refreshSeq = 0;
+
 async function refresh(filter) {
+  const seq = ++refreshSeq;
   const data = await fetchAll(filter);
+  if (seq !== refreshSeq) return;
 
   mountCalendarHeatmap(document.getElementById("calendar-heatmap"), data["by-day"].buckets, {
     title: "Daily P&L Calendar",
