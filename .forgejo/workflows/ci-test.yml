@@ -1,0 +1,18 @@
+# Managed by repo-kit. Edit the kit, then run Sync-RepoKit.ps1 - local edits get overwritten.
+# Every PR and every push to main runs the repo's test entrypoint in a disposable Proxmox sandbox
+# (.ci/test.sh in an LXC clone for linux repos, .ci/test.ps1 in the rolled-back Windows VM for windows repos).
+name: ci-test
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+jobs:
+  test:
+    runs-on: devbox
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test in PVE sandbox
+        run: ./.ci/kit/remote-test.sh
