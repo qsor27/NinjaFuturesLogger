@@ -1,0 +1,4 @@
+# repo-kit:start - managed by repo-kit; edit the kit, not this block
+.ci/** text eol=lf
+*.sh text eol=lf
+# repo-kit:end
