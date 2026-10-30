@@ -14,6 +14,38 @@
 # node's NIC MAC, in the caller's environment - not in the repo), an unreachable gate is woken
 # with Wake-on-LAN and the run waits for it (PVE_GATE_WAKE_WAIT seconds, default 420).
 set -euo pipefail
+usage() {
+  cat <<'EOF_USAGE'
+Usage: remote-test.sh [--long] [-h|--help]
+
+Runs this repo's test entrypoint in a disposable Proxmox sandbox. Exit code = test result.
+
+  (no argument)   attached run on fast local storage (CI, iteration)
+  --long          linux only: copy onto the NAS and run DETACHED for days/weeks;
+                  prints a CT id for the gate commands below
+  -h, --help      print this help and exit 0
+
+Environment:
+  PVE_GATE             ssh alias of the gate (default: pve-gate)
+  PVE_GATE_WAKE_MAC    MAC of the sandbox node's NIC; if set, an unreachable gate is woken
+                       with Wake-on-LAN (default: unset = no wake)
+  PVE_GATE_WAKE_BCAST  broadcast address for the Wake-on-LAN packet (default: 255.255.255.255)
+  PVE_GATE_WAKE_WAIT   seconds to wait for the woken gate (default: 420)
+
+Exit codes:
+  <test result>   the exit code of the sandbox test run
+  64              usage error
+  76              node was about to power off; handled internally by retrying
+
+Follow-up gate commands for --long runs:
+  ssh pve-gate logs <ct-id>     show the run's log
+  ssh pve-gate result <ct-id>   show the result of the run
+  ssh pve-gate stop <ct-id>     stop the run
+EOF_USAGE
+}
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
 # kit.env next to this script, not the one in the tree: build.sh runs a trusted copy of the kit.
 # shellcheck source=/dev/null
 . "$(dirname "$0")/kit.env"
@@ -24,7 +56,7 @@ MODE=""
 case "${1:-}" in
   "") ;;
   --long) [[ "$PLATFORM" == linux ]] || { echo "--long is only available for linux repos" >&2; exit 64; }; MODE=long ;;
-  *) echo "usage: $0 [--long]" >&2; exit 64 ;;
+  *) echo "usage: $0 [--long] [-h|--help]">&2; exit 64 ;;
 esac
 
 gate_up() { ssh -o BatchMode=yes -o ConnectTimeout=5 "$GATE" ping >/dev/null 2>&1; }
