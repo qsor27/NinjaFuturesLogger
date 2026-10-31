@@ -7,12 +7,20 @@
   "session": {
     "exchange_timezone": "America/Chicago",
     "trade_date_rollover": "16:00",
-    "archive_job_time": "18:00"
+    "archive_job_time": "18:00",
+    "source_timezone": "America/Los_Angeles"
   },
   "thread_pool": {
     "max_workers": 4
   },
   "scheduler": {
     "heartbeat_seconds": 60
+  },
+  "display_timezone": "America/Los_Angeles",
+  "filter_defaults": {
+    "accounts": [],
+    "stats": {
+      "side": ""
+    }
   }
 }

@@ -39,3 +39,7 @@ windows/launcher/resource.syso
 windows/launcher/launcher
 windows/launcher/launcher.exe
 windows/launcher/versioninfo.build.json
+
+# runtime inbox (trade exports) and tool artifacts
+inbox/
+.playwright-mcp/

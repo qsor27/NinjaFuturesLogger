@@ -21,12 +21,14 @@ markerSize = switch markerSizeStr
 
 boxExtend = stopOnClose ? extend.none : extend.right
 
-// ---------- Palette ----------
-// Each zone + its marker share a color; the shared counter cycles hue so
-// adjacent levels stay distinct. Long zones sit above their low marker (⌃),
-// short zones below their high marker (⌄).
-var array<color> palette = array.from(color.orange, color.aqua, color.fuchsia, color.lime, color.yellow, color.red)
-var int colorIdx = 0
+// ---------- Palettes ----------
+// Direction is readable by color temperature: longs cycle COLD hues, shorts
+// cycle WARM hues. Each side has its own counter so adjacent levels stay
+// distinct. Zone and its marker share the chosen color.
+var array<color> longPalette  = array.from(color.lime, color.green, color.aqua, color.teal, color.blue)
+var array<color> shortPalette = array.from(color.orange, color.red, color.yellow, color.fuchsia, color.maroon)
+var int lColorIdx = 0
+var int sColorIdx = 0
 
 // =====================================================================
 // LONG side: a rejection HIGH (peak of a failed bounce) before a new LOW
@@ -71,8 +73,8 @@ if lFire
             topH   := high[i]
             topOff := i
     if not na(topOff) and topH > lSwing
-        baseCol  = array.get(palette, colorIdx % array.size(palette))
-        colorIdx += 1
+        baseCol   = array.get(longPalette, lColorIdx % array.size(longPalette))
+        lColorIdx += 1
         rTop = topH                              // wick high (top of zone)
         rBot = math.max(open[topOff], close[topOff])   // body top (bottom of zone)
         rBar = bar_index - topOff
@@ -135,8 +137,8 @@ if sFire
             botL   := low[i]
             botOff := i
     if not na(botOff) and botL < sSwing
-        baseCol  = array.get(palette, colorIdx % array.size(palette))
-        colorIdx += 1
+        baseCol   = array.get(shortPalette, sColorIdx % array.size(shortPalette))
+        sColorIdx += 1
         rTop = math.min(open[botOff], close[botOff])   // body bottom (top of zone)
         rBot = botL                              // wick low (bottom of zone)
         rBar = bar_index - botOff

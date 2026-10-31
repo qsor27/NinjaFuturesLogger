@@ -1,0 +1,19 @@
+# Local development override: builds from source, port 8001, data in ./data.
+# Usage: docker compose -f docker-compose.dev.yml up --build
+name: ninjafutureslogger-dev
+
+services:
+  web:
+    build: .
+    container_name: ninjafutureslogger-dev
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
