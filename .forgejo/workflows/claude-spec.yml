@@ -1,0 +1,33 @@
+# Managed by repo-kit. Edit the kit, then run Sync-RepoKit.ps1 - local edits get overwritten.
+# Trigger: issue opened with, or labeled, `idea` / `customer-request`.
+# Result:  branch issue-<n> with docs/specs/issue-<n>.md, spec posted as a comment, label `spec-ready`.
+# Forgejo sends label changes as "label_updated" without a `label` object, so the condition
+# reads the issue's current labels (same rules as should_spec in .ci/kit/triggers.sh).
+name: claude-spec
+on:
+  issues:
+    types: [opened, labeled]
+jobs:
+  spec:
+    if: >-
+      (contains(github.event.issue.labels.*.name, 'idea') || contains(github.event.issue.labels.*.name, 'customer-request'))
+      && !contains(github.event.issue.labels.*.name, 'spec-ready')
+      && !contains(github.event.issue.labels.*.name, 'ready')
+      && !contains(github.event.issue.labels.*.name, 'in-progress')
+      && !contains(github.event.issue.labels.*.name, 'needs-human')
+    runs-on: devbox
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Write spec
+        # Run a copy of the kit so nothing in the working tree is executed after branch switches.
+        run: |
+          rm -rf "$RUNNER_TEMP/kit" && cp -r .ci/kit "$RUNNER_TEMP/kit"
+          "$RUNNER_TEMP/kit/spec.sh"
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FJ_BOT_TOKEN: ${{ secrets.FJ_BOT_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}

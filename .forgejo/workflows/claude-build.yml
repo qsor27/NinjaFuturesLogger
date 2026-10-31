@@ -1,0 +1,31 @@
+# Managed by repo-kit. Edit the kit, then run Sync-RepoKit.ps1 - local edits get overwritten.
+# Trigger: you apply `ready` (the human approval gate). build.sh consumes it, so re-apply
+#          `ready` to run again; remove `needs-human` first after a failure.
+# Result:  Claude implements the spec on issue-<n>, tests pass in a PVE sandbox, PR opened "Closes #<n>".
+# The condition reads current labels (same rules as should_build in .ci/kit/triggers.sh).
+name: claude-build
+on:
+  issues:
+    types: [labeled]
+jobs:
+  build:
+    if: >-
+      contains(github.event.issue.labels.*.name, 'ready')
+      && !contains(github.event.issue.labels.*.name, 'in-progress')
+      && !contains(github.event.issue.labels.*.name, 'needs-human')
+    runs-on: devbox
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Implement spec
+        # Run a copy of the kit: build.sh switches the checkout to issue-<n>, which Claude edits.
+        run: |
+          rm -rf "$RUNNER_TEMP/kit" && cp -r .ci/kit "$RUNNER_TEMP/kit"
+          "$RUNNER_TEMP/kit/build.sh"
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          FJ_BOT_TOKEN: ${{ secrets.FJ_BOT_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
