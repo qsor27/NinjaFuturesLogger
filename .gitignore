@@ -43,3 +43,7 @@ windows/launcher/versioninfo.build.json
 # runtime inbox (trade exports) and tool artifacts
 inbox/
 .playwright-mcp/
+
+# repo-kit:start - managed by repo-kit; edit the kit, not this block
+.worktrees/
+# repo-kit:end
