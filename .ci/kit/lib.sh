@@ -50,8 +50,33 @@ take_label() {
   fj DELETE "/repos/$REPO/issues/$ISSUE/labels/$id" >/dev/null 2>&1
 }
 git_auth() { git -c "http.extraHeader=Authorization: token $FJ_BOT_TOKEN" "$@"; }
+
+# spec.sh / build.sh run `claude -p ... --output-format json > "$CLAUDE_OUT"`. Only the final
+# result text is ever surfaced (log + failure comment) - never tool output or file contents.
+CLAUDE_OUT="$TMPD/claude-out.json"; rm -f "$CLAUDE_OUT"
+CLAUDE_MSG_MAX=6000
+claude_summary() { # "subtype, N turns" or nothing
+  [[ -s "$CLAUDE_OUT" ]] || return 0
+  jq -r 'select(type=="object") | "\(.subtype // "unknown"), \(.num_turns // "?") turns"' "$CLAUDE_OUT" 2>/dev/null | head -n1 || true
+}
+claude_last_message() { # Claude's final text, truncated; empty if there is none
+  [[ -s "$CLAUDE_OUT" ]] || return 0
+  # </details> is escaped so Claude's text can't close the comment's <details> block early.
+  jq -r --argjson n "$CLAUDE_MSG_MAX" 'select(type=="object") | (.result // "" | gsub("</details>"; "&lt;/details&gt;")) as $r
+      | if ($r | length) > $n then $r[0:$n] + "\n\n[... truncated]" else $r end' "$CLAUDE_OUT" 2>/dev/null || true
+}
+log_claude() { # echo Claude's outcome into the run log (json output no longer streams there)
+  local s m; s="$(claude_summary)"; m="$(claude_last_message)"
+  [[ -n "$s$m" ]] || return 0
+  echo "== Claude finished ($s)"; [[ -n "$m" ]] && printf '%s\n' "$m"; return 0
+}
 fail() {
-  comment "Automation stopped: $1"$'\n\n'"Run log: ${SERVER%/}/$REPO/actions"
+  local body="Automation stopped: $1" s m
+  s="$(claude_summary)"; m="$(claude_last_message)"
+  if [[ -n "$s$m" ]]; then
+    body+=$'\n\n'"<details><summary>Claude's last message (${s:-no result})</summary>"$'\n\n'"${m:-_(Claude returned no final message.)_}"$'\n\n'"</details>"
+  fi
+  comment "$body"$'\n\n'"Run log: ${SERVER%/}/$REPO/actions"
   add_label needs-human; remove_label in-progress; exit 1
 }
 

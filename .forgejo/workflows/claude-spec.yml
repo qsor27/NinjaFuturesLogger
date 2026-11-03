@@ -4,6 +4,7 @@
 # Forgejo sends label changes as "label_updated" without a `label` object, so the condition
 # reads the issue's current labels (same rules as should_spec in .ci/kit/triggers.sh).
 name: claude-spec
+run-name: "spec #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
 on:
   issues:
     types: [opened, labeled]

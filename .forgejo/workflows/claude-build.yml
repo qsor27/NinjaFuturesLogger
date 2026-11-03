@@ -4,6 +4,7 @@
 # Result:  Claude implements the spec on issue-<n>, tests pass in a PVE sandbox, PR opened "Closes #<n>".
 # The condition reads current labels (same rules as should_build in .ci/kit/triggers.sh).
 name: claude-build
+run-name: "build #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
 on:
   issues:
     types: [labeled]

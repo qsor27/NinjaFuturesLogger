@@ -1,6 +1,6 @@
 # NinjaFuturesLogger
 
-<!-- repo-kit:start - managed by repo-kit 1.3.0; edit the kit, not this block -->
+<!-- repo-kit:start - managed by repo-kit 1.4.0; edit the kit, not this block -->
 ## Pipeline (repo-kit)
 - Platform: **linux**
 - Work arrives as Forgejo issues. Specs live at `docs/specs/issue-<n>.md` on branch `issue-<n>`.

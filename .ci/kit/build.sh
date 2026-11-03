@@ -16,9 +16,13 @@ add_label in-progress
 
 # Keep the sandbox node from idling off while Claude works between test runs. Only holds a node
 # that is already up; remote-test.sh wakes it when a test actually needs it.
-( while sleep 240; do ssh -o BatchMode=yes -o ConnectTimeout=5 "${PVE_GATE:-pve-gate}" hold >/dev/null 2>&1 || true; done ) &
+# Its stdio is detached from the step's log pipe, and the EXIT trap kills its children (the
+# in-flight sleep/ssh) before the loop itself: an orphaned `sleep 240` holding stdout open kept a
+# failed job running for minutes after `fail`.
+( while sleep 240; do ssh -o BatchMode=yes -o ConnectTimeout=5 "${PVE_GATE:-pve-gate}" hold >/dev/null 2>&1 || true; done ) \
+  </dev/null >/dev/null 2>&1 &
 HOLD_PID=$!
-trap 'kill "$HOLD_PID" 2>/dev/null || true' EXIT
+trap 'pkill -P "$HOLD_PID" 2>/dev/null; kill "$HOLD_PID" 2>/dev/null; true' EXIT
 
 git_auth fetch -q origin "$BRANCH" || fail "Branch $BRANCH not found. Label the issue \`idea\` first so a spec gets written."
 git switch -C "$BRANCH" "origin/$BRANCH"
@@ -41,14 +45,21 @@ Rules:
 - You may edit .ci/test.sh / .ci/test.ps1 if the spec's test plan needs it. Never touch .ci/kit/,
   .forgejo/ or .git/ - those are managed by repo-kit and changes there fail the run.
 - Commit in small logical commits; messages reference #$ISSUE. Do not push.
+- You run unattended: nobody can answer questions or approve extra tools, and you cannot reach other
+  repositories or the network. If you cannot proceed (something the spec needs is missing from this
+  checkout, or the spec and the comments conflict in a way you can't resolve), stop and end with a
+  short explanation of what blocked you and what a human must decide - it is posted to the issue.
 EOF
 )
 
 PROTECTED_DENY="Edit(./.ci/kit/**),Write(./.ci/kit/**),Edit(./.forgejo/**),Write(./.forgejo/**),Edit(./.git/**),Write(./.git/**)"
-claude -p "$PROMPT" --permission-mode acceptEdits --max-turns 80 --add-dir "$INPUT_DIR" \
+CLAUDE_RC=0
+claude -p "$PROMPT" --permission-mode acceptEdits --max-turns 80 --add-dir "$INPUT_DIR" --output-format json \
   --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(./.ci/kit/remote-test.sh)" \
   --disallowedTools "$PROTECTED_DENY" \
-  || fail "Claude exited non-zero while implementing."
+  > "$CLAUDE_OUT" || CLAUDE_RC=$?
+log_claude
+[[ $CLAUDE_RC -eq 0 ]] || fail "Claude exited non-zero while implementing."
 
 # Commit anything Claude left uncommitted, then verify independently of Claude's own claim.
 if [[ -n "$(git status --porcelain)" ]]; then git add -A && git commit -qm "chore: remaining changes for #$ISSUE"; fi
